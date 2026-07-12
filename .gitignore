@@ -11,9 +11,12 @@ logs/
 # saída por vaga (PDFs, receipts, snapshots)
 output/
 
-# fontes do perfil (PDFs pessoais) e dados sensíveis
+# fontes do perfil (PDFs pessoais) e dados sensíveis — NUNCA para o repo público
 profile/sources/
 profile/candidate-facts.yaml
+profile/master-profile.yaml
+profile/tracks.yaml
+profile/linkedin-pack.md
 .env
 .env.local
 
