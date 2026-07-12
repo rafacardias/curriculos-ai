@@ -93,3 +93,18 @@ for (const spec of specs) {
   }
 }
 console.log(`\ntotal de vagas novas: ${totalNew}`);
+
+if (values.auto) {
+  // fim do ciclo automático: painel atualizado + notificação macOS
+  const { buildDashboard } = await import("../dashboard/build.js");
+  buildDashboard();
+  try {
+    const { execFileSync } = await import("node:child_process");
+    execFileSync("osascript", [
+      "-e",
+      `display notification "${totalNew} vagas novas — abra o Claude Code e rode /status" with title "Curriculos"`,
+    ]);
+  } catch {
+    /* notificação é best-effort */
+  }
+}

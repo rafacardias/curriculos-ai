@@ -1,7 +1,7 @@
 # Curriculos — configuração do operador
 # Edite à vontade; tudo aqui é lido a cada execução (sem cache).
 
-auto_search: off          # on|off — busca automática diária via launchd (/agendar)
+auto_search: off
 auto_search_hour: 9       # hora local do dia para a busca automática
 
 # Buscas rodadas pelo /buscar (e pelo modo automático)
