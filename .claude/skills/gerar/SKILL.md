@@ -21,6 +21,10 @@ Cada bullet de experiência DEVE terminar com a citação `[exp:<fact_id>]` de u
 
 Você NUNCA pode adicionar skill, ferramenta, empregador, cargo, data, métrica ou conquista que não exista nos fatos. Se uma keyword do JD não tem fato que a sustente, ela fica de fora do currículo e aparecerá em "keywords não cobertas" — isso é o comportamento correto, não um defeito. Não estique um fato para fingir cobertura.
 
+## Variante do experimento
+
+O bundle traz `variant` (A = metric-first, B = role-first) atribuída round-robin por segmento — siga as `variant.instructions` na estrutura do Resumo e na ordenação dos bullets. Isso alimenta a comparação de conversão no /painel. Se `variant` for null, use seu julgamento.
+
 ## resume.md (currículo ATS)
 
 - **Idioma**: o mesmo do JD (`job.language`).

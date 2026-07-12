@@ -61,6 +61,13 @@ export function buildDashboard(): string {
     FROM applications a JOIN resume_versions rv ON rv.application_id=a.id
     WHERE a.status != 'kit_ready' GROUP BY seg ORDER BY seg DESC`);
 
+  const byVariant = q(`SELECT COALESCE(json_extract(rv.variant,'$.id'),'—') AS seg,
+      COUNT(DISTINCT a.id) AS apps,
+      SUM(CASE WHEN a.status IN ('screening','interview','offer') THEN 1 ELSE 0 END) AS resp,
+      SUM(CASE WHEN a.status IN ('interview','offer') THEN 1 ELSE 0 END) AS interviews
+    FROM applications a JOIN resume_versions rv ON rv.application_id=a.id
+    WHERE a.status != 'kit_ready' GROUP BY seg ORDER BY apps DESC`);
+
   const weekly = q(`SELECT strftime('%Y-W%W', applied_at) AS seg, COUNT(*) AS apps
     FROM applications WHERE applied_at IS NOT NULL GROUP BY seg ORDER BY seg DESC LIMIT 8`);
 
@@ -155,6 +162,7 @@ ${rateTable("Por fonte", bySource)}
 ${rateTable("Por trilha", byTrack)}
 ${rateTable("Por modo de submissão", byMode, "review_first × approve_batch × full_auto — convertem diferente?")}
 ${rateTable("Por faixa de cobertura de keywords", byCoverage, "Cobertura do coverage report na versão do currículo enviada.")}
+${rateTable("Por variante de currículo (experimento)", byVariant, "A = metric-first · B = role-first. Sinal direcional — não é teste estatístico com n pequeno.")}
 ${rateTable("Empresas com melhor taxa de resposta", topCompanies)}
 
 <section>

@@ -19,6 +19,7 @@ import { extractKeywords } from "../core/keywords.js";
 import { truthcheck, stripCitations } from "../core/truthcheck.js";
 import { coverageReport, renderCoverageMd } from "../core/coverage.js";
 import { decidePolicy } from "../core/policy.js";
+import { assignVariant } from "../core/experiments.js";
 import { normalize } from "../core/dedup.js";
 import { wrapAtsHtml } from "../render/template.js";
 import { htmlToPdf } from "../render/pdf.js";
@@ -58,8 +59,11 @@ if (cmd === "prepare") {
     .prepare("SELECT question_text, answer, language FROM answer_bank ORDER BY times_used DESC LIMIT 20")
     .all();
 
+  const variant = config.experiments.enabled ? assignVariant(job.track_hint, job.source) : null;
+
   const bundle = {
     kit_dir: kitDir,
+    variant,
     job: {
       id: job.id,
       title: job.title,
@@ -121,7 +125,11 @@ if (cmd === "prepare") {
   const policy = decidePolicy(config, job, job.score ?? 0, job.track_hint);
   let app = getApplicationByJob(jobId);
   if (!app) app = createApplication(jobId, job.track_hint, kitDir, policy.submissionMode);
-  insertResumeVersion(app.id, { md: resumePath, pdf: resumePdf }, report, tc);
+  const bundlePath = join(kitDir, "bundle.json");
+  const variant = existsSync(bundlePath)
+    ? (JSON.parse(readFileSync(bundlePath, "utf-8")).variant ?? null)
+    : null;
+  insertResumeVersion(app.id, { md: resumePath, pdf: resumePdf }, report, tc, variant);
 
   console.log(`kit finalizado: ${kitDir}`);
   console.log(`application: ${app.id} (kit_ready · modo ${policy.submissionMode ?? "manual"})`);
