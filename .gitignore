@@ -13,6 +13,7 @@ output/
 
 # fontes do perfil (PDFs pessoais) e dados sensíveis
 profile/sources/
+profile/candidate-facts.yaml
 .env
 .env.local
 

@@ -1,0 +1,38 @@
+# PERFIL MESTRE — fonte única da verdade de todo conteúdo gerado.
+# Preenchido pelo /perfil a partir dos PDFs em profile/sources/ + entrevista.
+# Cada fato tem um id estável — os currículos citam [exp:<fact_id>] e o
+# truthcheck falha se a citação não existir aqui.
+#
+# Exemplo de estrutura (substituído pela ingestão real):
+#
+# experiences:
+#   - id: exp-acme-growth
+#     company: Acme Inc
+#     role: Growth Manager
+#     start: 2021-03
+#     end: 2023-08
+#     track_tags: [marketing]
+#     facts:
+#       - id: exp-acme-growth.f1
+#         text: "Aumentou o ROAS de mídia paga de 1.8 para 3.2 em 6 meses"
+#         skills: [paid-media, meta-ads, analytics]
+
+identity:
+  name: "Rafael Cardias"
+  email: ""
+  phone: ""
+  location: ""
+  linkedin: ""
+  github: ""
+  languages: []
+
+experiences: []
+
+education: []
+
+certifications: []
+
+skills:
+  hard: []
+  soft: []
+  tools: []

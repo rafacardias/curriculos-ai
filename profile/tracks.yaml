@@ -1,0 +1,12 @@
+# TRILHAS DE PERFIL — como o Rafael se posiciona em cada área.
+# Cada trilha tem um léxico de keywords usado pelo scoring (roda sem Claude).
+# Criado/refinado pelo /perfil; sincronizado com o DB via ingest-profile.ts sync.
+#
+# Exemplo:
+# tracks:
+#   - id: marketing
+#     name: Marketing & Growth
+#     summary: "Growth manager com foco em aquisição paga e analytics"
+#     keywords: [growth, paid media, meta ads, google ads, analytics, crm, funil]
+
+tracks: []
