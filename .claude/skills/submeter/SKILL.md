@@ -17,5 +17,6 @@ description: Submete kits prontos via automação de browser (Greenhouse/Lever) 
 ## Regras
 
 - A submissão marca `applied` e atualiza a company memory automaticamente (modos com submit).
-- Vaga sem adapter (ats_platform ≠ greenhouse/lever por enquanto): oriente aplicar manualmente — o `/aplicar <job_id>` abre a URL e registra.
+- Vaga sem adapter (ats_platform ≠ greenhouse/lever/workday): oriente aplicar manualmente — o `/aplicar <job_id>` abre a URL e registra.
+- **Workday** tem cobertura parcial por design (conta por empresa, fluxo variável): se aparecer parede de login, o usuário loga na própria janela aberta e roda /submeter de novo; se o preenchimento não avançar, caia para aplicação manual sem fricção.
 - Se o preenchimento falhar em um site (formulário mudou), registre a falha e sugira aplicar manualmente — falha de adapter é esperada ocasionalmente, não é bug do usuário.
