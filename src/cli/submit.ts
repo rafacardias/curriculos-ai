@@ -71,6 +71,28 @@ async function submitOne(jobId: string, modeOverride?: string): Promise<void> {
   );
 
   console.log(`submetendo: ${job.title} @ ${job.company_name} (${job.ats_platform}, modo ${effectiveMode})`);
+
+  if (job.ats_platform === "linkedin") {
+    const { runEasyApply } = await import("../submit/linkedin-easyapply.js");
+    const autoSubmit = effectiveMode !== "review_first" && config.submission.i_accept_ban_risk;
+    if (effectiveMode !== "review_first" && !config.submission.i_accept_ban_risk) {
+      console.log("Easy Apply automático exige i_accept_ban_risk: true no config — rodando como review_first.");
+    }
+    const { context, outcome, submitted } = await runEasyApply(kit, job.url, autoSubmit);
+    console.log(`campos preenchidos: ${outcome.filled.length}`);
+    if (outcome.unknown.length) console.log(`sem resposta: ${outcome.unknown.join(" | ")}`);
+    if (submitted) {
+      console.log("candidatura Easy Apply ENVIADA.");
+      await context.close();
+    } else {
+      console.log("parado antes do envio — revise no browser e clique você mesmo (janela fica aberta).");
+      // mantém o browser aberto até o usuário fechar
+      await context.waitForEvent("close", { timeout: 30 * 60_000 }).catch(() => {});
+      await context.close().catch(() => {});
+    }
+    return;
+  }
+
   const result = await runSubmission(kit, job.url, effectiveMode, job.company_id);
   console.log(`resultado: ${result.status}`);
   if (result.status === "awaiting_user") {

@@ -61,7 +61,7 @@ if (values.url) {
 }
 
 const specs = values.query
-  ? [{ query: values.query, sources: ["remotive", "remoteok", "wwr", "gupy"], location: undefined, remote_only: false }]
+  ? [{ query: values.query, sources: ["remotive", "remoteok", "wwr", "gupy", "linkedin"], location: undefined, remote_only: false }]
   : config.searches.filter((s) => s.query.trim().length > 0);
 
 if (!specs.length) {
