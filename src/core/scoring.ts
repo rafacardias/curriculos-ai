@@ -121,3 +121,10 @@ export function scoreNewJobs(config: AppConfig, jobIds: string[]): ScoredJob[] {
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+/** Decaimento dos pesos aprendidos — chamado uma vez por execução de busca. */
+export function decayPreferenceWeights(config: AppConfig): void {
+  const db = getDb();
+  db.prepare("UPDATE preference_weights SET weight = weight * ?").run(config.preferences.decay);
+  db.prepare("DELETE FROM preference_weights WHERE ABS(weight) < 0.05").run();
+}

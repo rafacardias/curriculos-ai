@@ -12,7 +12,7 @@ import { runSearch } from "../core/pipeline.js";
 import { resolveAdapters } from "../adapters/index.js";
 import { fetchManualUrl } from "../adapters/manual-url.js";
 import { insertJob } from "../db/repo/jobs.js";
-import { scoreNewJobs } from "../core/scoring.js";
+import { scoreNewJobs, decayPreferenceWeights } from "../core/scoring.js";
 
 const { values } = parseArgs({
   options: {
@@ -68,6 +68,8 @@ if (!specs.length) {
   console.error("nenhuma busca configurada — preencha config.yaml (searches[].query) ou use --query.");
   process.exit(1);
 }
+
+decayPreferenceWeights(config);
 
 let totalNew = 0;
 for (const spec of specs) {
