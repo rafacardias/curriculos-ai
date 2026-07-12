@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLACKBIRD COMMAND — Curriculos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<style>
+  :root {
+    --ink: #0d0b08;         /* preto-tinta aquecido */
+    --ink-2: #171410;
+    --ink-3: #221e18;
+    --line: #3a342b;
+    --bone: #ece5d6;        /* osso */
+    --bone-dim: #a89f8d;
+    --signal: #ff5c1f;      /* laranja-sinal */
+    --signal-soft: #ff5c1f22;
+    --ok: #7fb069;
+    --mono: "IBM Plex Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { background: var(--ink); }
+  body {
+    font-family: "Archivo", sans-serif;
+    font-variation-settings: "wdth" 100;
+    color: var(--bone);
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    background:
+      radial-gradient(1200px 500px at 85% -10%, #ff5c1f0d, transparent 60%),
+      repeating-linear-gradient(0deg, transparent 0 39px, #ffffff05 39px 40px),
+      var(--ink);
+  }
+
+  /* ── rail ─────────────────────────────── */
+  nav {
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 18px 0; gap: 6px; position: sticky; top: 0; height: 100vh;
+  }
+  .bird { font-size: 26px; margin-bottom: 18px; transform: scaleX(-1); cursor: default; }
+  nav button {
+    all: unset; cursor: pointer; width: 52px; padding: 12px 0;
+    text-align: center; color: var(--bone-dim);
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em;
+    border-left: 2px solid transparent; transition: color .15s, border-color .15s;
+    writing-mode: vertical-rl; text-orientation: mixed; text-transform: uppercase;
+  }
+  nav button:hover { color: var(--bone); }
+  nav button.on { color: var(--signal); border-color: var(--signal); }
+
+  /* ── header ───────────────────────────── */
+  main { padding: 28px 36px 80px; max-width: 1180px; }
+  header { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+  h1 {
+    font-variation-settings: "wdth" 125, "wght" 850;
+    font-size: clamp(28px, 4vw, 44px); letter-spacing: -.02em; text-transform: uppercase;
+    line-height: .95;
+  }
+  h1 em { font-style: normal; color: var(--signal); }
+  .sub { font-family: var(--mono); font-size: 11px; color: var(--bone-dim); letter-spacing: .06em; }
+
+  .strip {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    margin: 26px 0 30px;
+  }
+  .stat { background: var(--ink-2); padding: 14px 16px 12px; position: relative; overflow: hidden; }
+  .stat b { display: block; font-family: var(--mono); font-size: 30px; font-weight: 600; line-height: 1; }
+  .stat span { font-family: var(--mono); font-size: 9.5px; color: var(--bone-dim); letter-spacing: .1em; text-transform: uppercase; }
+  .stat.hot b { color: var(--signal); }
+
+  /* ── busca ────────────────────────────── */
+  .searchbar { display: flex; gap: 10px; margin-bottom: 30px; }
+  .searchbar input {
+    flex: 1; background: var(--ink-2); border: 1px solid var(--line); color: var(--bone);
+    font-family: var(--mono); font-size: 13px; padding: 12px 14px; outline: none;
+  }
+  .searchbar input:focus { border-color: var(--signal); }
+  .btn {
+    all: unset; cursor: pointer; font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; padding: 12px 22px; border: 1px solid var(--line);
+    color: var(--bone); transition: all .12s; text-align: center; user-select: none;
+  }
+  .btn:hover { border-color: var(--signal); color: var(--signal); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--signal); border-color: var(--signal); color: var(--ink); font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.1); color: var(--ink); }
+  .btn.ghost { border-color: transparent; color: var(--bone-dim); padding: 12px 10px; }
+  .btn.ghost:hover { color: var(--bone); }
+  .searchnote { font-family: var(--mono); font-size: 11px; color: var(--bone-dim); margin: -20px 0 24px; min-height: 14px; }
+  .searchnote.run::before { content: "▮"; color: var(--signal); animation: blink .8s infinite; margin-right: 6px; }
+  @keyframes blink { 50% { opacity: .2; } }
+
+  /* ── cards da fila ────────────────────── */
+  .card {
+    border: 1px solid var(--line); background: var(--ink-2); margin-bottom: 14px;
+    display: grid; grid-template-columns: 92px 1fr auto; overflow: hidden;
+    animation: land .35s cubic-bezier(.2,.7,.3,1) both;
+  }
+  @keyframes land { from { opacity: 0; transform: translateY(10px); } }
+  .card:nth-child(2) { animation-delay: .04s } .card:nth-child(3) { animation-delay: .08s }
+  .card:nth-child(4) { animation-delay: .12s } .card:nth-child(5) { animation-delay: .16s }
+  .score {
+    background: var(--ink-3); display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: var(--mono); border-right: 1px solid var(--line); padding: 14px 8px; gap: 6px;
+  }
+  .score b { font-size: 26px; font-weight: 600; color: var(--signal); }
+  .score .bars { display: flex; gap: 2px; align-items: flex-end; height: 16px; }
+  .score .bars i { width: 5px; background: var(--bone-dim); opacity: .7; }
+  .body { padding: 14px 18px; min-width: 0; }
+  .body h3 { font-size: 16px; font-variation-settings: "wght" 700; margin-bottom: 2px; }
+  .body h3 a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--line); }
+  .body h3 a:hover { border-color: var(--signal); }
+  .meta { font-family: var(--mono); font-size: 10.5px; color: var(--bone-dim); letter-spacing: .04em; display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+  .tag { display: inline-block; padding: 1px 7px; border: 1px solid var(--line); }
+  .tag.act { border-color: var(--signal); color: var(--signal); }
+  .acts { display: flex; flex-direction: column; border-left: 1px solid var(--line); }
+  .acts .btn { border: none; border-bottom: 1px solid var(--line); flex: 1; padding: 8px 18px; font-size: 10px; }
+  .acts .btn:last-child { border-bottom: none; }
+  .empty { font-family: var(--mono); font-size: 12px; color: var(--bone-dim); padding: 40px 0; text-align: center; border: 1px dashed var(--line); }
+
+  /* ── board de aplicações ──────────────── */
+  .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: start; }
+  .col h4 { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--bone-dim); border-bottom: 2px solid var(--line); padding-bottom: 6px; margin-bottom: 10px; }
+  .col h4 b { color: var(--signal); }
+  .app { border: 1px solid var(--line); background: var(--ink-2); padding: 10px 12px; margin-bottom: 10px; font-size: 13px; }
+  .app .c { font-family: var(--mono); font-size: 10px; color: var(--bone-dim); margin: 2px 0 8px; }
+  .app select {
+    width: 100%; background: var(--ink-3); color: var(--bone); border: 1px solid var(--line);
+    font-family: var(--mono); font-size: 10px; padding: 5px;
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  thead th { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--bone-dim); }
+  iframe { width: 100%; height: calc(100vh - 220px); border: 1px solid var(--line); background: #fff; }
+  .toast {
+    position: fixed; bottom: 22px; right: 22px; background: var(--signal); color: var(--ink);
+    font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 12px 18px;
+    transform: translateY(80px); transition: transform .25s; z-index: 10;
+  }
+  .toast.show { transform: none; }
+  section { display: none; } section.on { display: block; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="bird" title="Blackbird">𓅨</div>
+  <button data-tab="fila" class="on">Fila</button>
+  <button data-tab="apps">Aplicações</button>
+  <button data-tab="empresas">Empresas</button>
+  <button data-tab="painel">Painel</button>
+  <button data-tab="claude">Claude</button>
+</nav>
+
+<main>
+  <header>
+    <h1>Blackbird <em>Command</em></h1>
+    <span class="sub" id="clock"></span>
+  </header>
+
+  <div class="strip" id="strip"></div>
+
+  <div class="searchbar">
+    <input id="q" placeholder="buscar vagas — ex.: qa junior, product manager, ai automation (vazio = buscas do config)" />
+    <button class="btn primary" id="go">Buscar</button>
+  </div>
+  <div class="searchnote" id="searchnote"></div>
+
+  <section id="fila" class="on"><div id="queue"></div></section>
+
+  <section id="apps"><div class="board" id="board"></div></section>
+
+  <section id="empresas">
+    <table id="companies"><thead><tr><th>Empresa</th><th>Aplicações</th><th>Respostas</th><th>Entrevistas</th><th>Notas</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section id="painel"><iframe src="/dashboard" id="dashframe"></iframe></section>
+
+  <section id="claude">
+    <div style="display:flex;gap:10px;margin-bottom:12px;align-items:center">
+      <button class="btn primary" id="launchClaude">▶ iniciar claude</button>
+      <span class="sub">terminal real nesta pasta — o Claude Code aqui usa sua assinatura (sem custo de API) e enxerga todos os arquivos e skills do projeto</span>
+    </div>
+    <div id="term" style="height:calc(100vh - 260px);border:1px solid var(--line);background:#0d0b08;padding:6px"></div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const api = async (path, opts) => (await fetch(path, opts)).json();
+const post = (path, body) => api(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+/* tabs */
+document.querySelectorAll("nav button").forEach((b) =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach((x) => x.classList.remove("on"));
+    document.querySelectorAll("section").forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    $("#" + b.dataset.tab).classList.add("on");
+    if (b.dataset.tab === "painel") $("#dashframe").src = "/dashboard?t=" + Date.now();
+    if (b.dataset.tab === "claude") initTerm();
+  })
+);
+
+/* ── terminal embedado (aba Claude) ────── */
+let term = null, termWs = null, fit = null;
+function initTerm() {
+  if (term) { fit && fit.fit(); term.focus(); return; }
+  term = new Terminal({
+    fontFamily: '"IBM Plex Mono", monospace', fontSize: 13, cursorBlink: true,
+    theme: {
+      background: "#0d0b08", foreground: "#ece5d6", cursor: "#ff5c1f",
+      selectionBackground: "#ff5c1f44", black: "#171410", brightBlack: "#5c554a",
+      red: "#e5533d", green: "#7fb069", yellow: "#e0a458", blue: "#7d97c9",
+      magenta: "#b57ab8", cyan: "#6fb3a8", white: "#ece5d6",
+    },
+  });
+  fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open($("#term"));
+  fit.fit();
+  termWs = new WebSocket(`ws://${location.host}/term`);
+  termWs.onmessage = (e) => term.write(e.data);
+  termWs.onclose = () => term.write("\r\n\x1b[38;5;208m[sessão encerrada — recarregue a página para abrir outra]\x1b[0m\r\n");
+  term.onData((d) => termWs.readyState === 1 && termWs.send(JSON.stringify({ t: "i", d })));
+  const sendSize = () => termWs.readyState === 1 && termWs.send(JSON.stringify({ t: "r", cols: term.cols, rows: term.rows }));
+  termWs.onopen = () => { sendSize(); term.focus(); };
+  new ResizeObserver(() => { fit.fit(); sendSize(); }).observe($("#term"));
+}
+$("#launchClaude")?.addEventListener("click", () => {
+  initTerm();
+  setTimeout(() => termWs?.readyState === 1 && termWs.send(JSON.stringify({ t: "i", d: "claude\r" })), 300);
+});
+
+$("#clock").textContent = new Date().toLocaleString("pt-BR");
+
+async function loadSummary() {
+  const s = await api("/api/summary");
+  const items = [
+    ["Na fila", s.queued, s.queued > 0],
+    ["Kits prontos", s.kits, s.kits > 0],
+    ["Pausadas", s.awaiting, false],
+    ["Aplicadas", s.applied, false],
+    ["Entrevistas+", s.interviews, s.interviews > 0],
+  ];
+  $("#strip").innerHTML = items
+    .map(([l, v, hot]) => `<div class="stat ${hot ? "hot" : ""}"><b>${v}</b><span>${l}</span></div>`)
+    .join("");
+  const note = $("#searchnote");
+  if (s.searchRunning) { note.className = "searchnote run"; note.textContent = "busca em andamento…"; setTimeout(loadAll, 4000); }
+  else if (s.lastRun) {
+    note.className = "searchnote";
+    const age = Math.round((Date.now() - new Date(s.lastRun.at)) / 3600000);
+    note.textContent = `última busca há ${age}h (${s.lastRun.mode})`;
+  }
+}
+
+async function loadQueue() {
+  const jobs = await api("/api/queue?limit=60");
+  const el = $("#queue");
+  if (!jobs.length) { el.innerHTML = `<div class="empty">fila vazia — rode uma busca acima</div>`; return; }
+  el.innerHTML = jobs.map((j) => {
+    const d = j.score_detail || {};
+    const max = Math.max(1, ...Object.values(d));
+    const bars = Object.entries(d).map(([k, v]) => `<i title="${k}: ${v}" style="height:${Math.max(2, (v / max) * 16)}px"></i>`).join("");
+    return `<div class="card" data-id="${j.id}">
+      <div class="score"><b>${Math.round(j.score)}</b><div class="bars">${bars}</div></div>
+      <div class="body">
+        <h3><a href="${j.url}" target="_blank" rel="noopener">${esc(j.title)}</a></h3>
+        <div class="meta">
+          <span>${esc(j.company_name)}</span>
+          <span>${j.source}</span>
+          ${j.location ? `<span>${esc(j.location)}</span>` : ""}
+          ${j.remote_type ? `<span class="tag">${j.remote_type}</span>` : ""}
+          ${j.track_hint ? `<span class="tag">trilha: ${j.track_hint}</span>` : ""}
+          <span class="tag ${j.policy_action?.startsWith("gerar") ? "act" : ""}">${esc(j.policy_action || "")}</span>
+        </div>
+      </div>
+      <div class="acts">
+        <button class="btn" data-act="aprovar">Aprovar ↗</button>
+        <button class="btn" data-act="rejeitar">Rejeitar</button>
+        <button class="btn ghost" data-act="snapshot">JD</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  el.querySelectorAll("[data-act]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const id = b.closest(".card").dataset.id;
+      if (b.dataset.act === "aprovar") {
+        await post("/api/feedback", { jobId: id, verdict: "aprovar" });
+        await navigator.clipboard.writeText(`/gerar ${id}`).catch(() => {});
+        toast(`aprovada — "/gerar ${id}" copiado: cole no Claude Code`);
+      } else if (b.dataset.act === "rejeitar") {
+        const reason = prompt("motivo (opcional — ensina o score):") || undefined;
+        await post("/api/feedback", { jobId: id, verdict: "rejeitar", reason });
+        b.closest(".card").style.opacity = .3;
+        toast("rejeitada — vagas parecidas vão pontuar menos");
+        loadSummary();
+      } else if (b.dataset.act === "snapshot") {
+        window.open(`/api/snapshot/${id}`, "_blank");
+      }
+    })
+  );
+}
+
+const FUNNEL = ["kit_ready", "applied", "screening", "interview", "offer"];
+const NEXT = { kit_ready: ["applied"], applied: ["screening", "rejected", "ghosted"], screening: ["interview", "rejected"], interview: ["offer", "rejected"], offer: [] };
+
+async function loadBoard() {
+  const apps = await api("/api/applications");
+  $("#board").innerHTML = FUNNEL.map((st) => {
+    const list = apps.filter((a) => a.status === st);
+    return `<div class="col"><h4>${st.replace("_", " ")} <b>${list.length}</b></h4>` +
+      (list.map((a) => `<div class="app">
+          <div>${esc(a.title)}</div><div class="c">${esc(a.company_name)} · ${a.submission_mode || "manual"}</div>
+          <select data-job="${a.job_id}">
+            <option value="">mover para…</option>
+            ${(NEXT[st] || []).map((n) => `<option value="${n}">${n}</option>`).join("")}
+          </select>
+        </div>`).join("") || `<div class="empty" style="padding:16px 0">—</div>`) + `</div>`;
+  }).join("");
+  $("#board").querySelectorAll("select").forEach((sel) =>
+    sel.addEventListener("change", async () => {
+      if (!sel.value) return;
+      await post("/api/status", { jobId: sel.dataset.job, status: sel.value });
+      toast(`status → ${sel.value}`);
+      loadBoard(); loadSummary();
+    })
+  );
+}
+
+async function loadCompanies() {
+  const rows = await api("/api/companies");
+  $("#companies tbody").innerHTML = rows.length
+    ? rows.map((c) => `<tr><td>${esc(c.name)}</td><td>${c.applications_count}</td><td>${c.responses_count}</td><td>${c.interviews_count}</td><td>${esc(c.notes || "")}</td></tr>`).join("")
+    : `<tr><td colspan="5" style="color:var(--bone-dim);font-family:var(--mono);font-size:11px">nenhuma aplicação registrada ainda</td></tr>`;
+}
+
+$("#go").addEventListener("click", async () => {
+  const r = await post("/api/search", { query: $("#q").value.trim() || undefined });
+  if (r.ok) { toast("busca disparada"); loadSummary(); }
+  else toast(r.error || "erro");
+});
+$("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#go").click(); });
+
+function esc(s) { return String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c])); }
+
+function loadAll() { loadSummary(); loadQueue(); loadBoard(); loadCompanies(); }
+loadAll();
+setInterval(loadSummary, 30000);
+</script>
+</body>
+</html>
