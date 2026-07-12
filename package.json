@@ -1,0 +1,24 @@
+{
+  "name": "curriculos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Maximizador de entrevistas com restrição de veracidade — busca vagas, gera kits de aplicação ATS e rastreia o funil",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "db:migrate": "tsx src/cli/migrate.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ulid": "^3.0.0",
+    "yaml": "^2.8.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}

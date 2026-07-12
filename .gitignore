@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# dados locais — nunca commitar
+db/*.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+logs/
+
+# saída por vaga (PDFs, receipts, snapshots)
+output/
+
+# fontes do perfil (PDFs pessoais) e dados sensíveis
+profile/sources/
+.env
+.env.local
+
+# dashboard gerado
+dashboard/index.html
+
+# sistema
+.DS_Store
