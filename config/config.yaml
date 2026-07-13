@@ -8,7 +8,7 @@ auto_search_hour: 9 # hora local do dia para a busca automática
 # Estratégia: queries PT → Gupy/LinkedIn BR; queries EN → boards remotos internacionais.
 # LinkedIn (guest) fica só nas 3 apostas principais para não estressar o endpoint.
 searches:
-  - query: QA
+  - query: QA Assistant Analist Junior associate
     sources:
       - remotive
       - remoteok
@@ -16,7 +16,7 @@ searches:
       - gupy
       - linkedin
     remote_only: true
-  - query: quality assurance junior
+  - query: quality assurance junior  associate
     sources:
       - remotive
       - remoteok
@@ -24,13 +24,13 @@ searches:
       - gupy
       - linkedin
     remote_only: true
-  - query: Product Manager
+  - query: Product Manager junior estágio
     sources:
       - gupy
       - linkedin
     location: Brazil
     remote_only: false
-  - query: Product Owner
+  - query: Product Owner estágio
     sources:
       - gupy
       - linkedin
@@ -42,13 +42,7 @@ searches:
       - linkedin
     location: Belo Horizonte
     remote_only: false
-  - query: Scrum Master
-    sources:
-      - gupy
-      - linkedin
-    location: Belo Horizonte
-    remote_only: false
-  - query: scrum master
+  - query: Scrum Master estágio
     sources:
       - gupy
       - linkedin
@@ -82,6 +76,12 @@ searches:
 # Threshold para uma vaga entrar na fila (score 0-100)
 queue_threshold: 40
 
+# Filtros duros — vaga filtrada NÃO entra na fila (motivo fica no policy_action)
+# exclude_seniority: intern | junior | mid | senior | lead | leadership
+filters:
+  exclude_seniority: [senior, lead, leadership]
+  max_years_required: 5   # exclui JD que exige mais anos que isso; null = sem limite
+
 # Pesos do score (soma das contribuições, normalizada para 0-100)
 scoring:
   keyword_overlap: 0.55 # overlap keywords do JD × léxico da trilha
@@ -92,7 +92,7 @@ scoring:
 
 # Policy engine — quando gerar, quando submeter, em qual modo
 policy:
-  generate_min_score: 60
+  generate_min_score: 65
   full_auto_min_score: 80
   full_auto_blocked_sources: [ linkedin ]
   weekly_cap_per_track: 25

@@ -18,6 +18,13 @@ const ConfigSchema = z.object({
   auto_search_days: z.array(z.number().int().min(0).max(6)).default([0, 1, 2, 3, 4, 5, 6]),
   searches: z.array(SearchSpec).default([]),
   queue_threshold: z.number().default(40),
+  // Filtros duros — vaga filtrada não entra na fila (status new, motivo no policy_action)
+  filters: z
+    .object({
+      exclude_seniority: z.array(z.string()).default([]), // intern|junior|mid|senior|lead|leadership
+      max_years_required: z.number().int().min(0).max(30).nullable().default(null),
+    })
+    .default({}),
   scoring: z
     .object({
       keyword_overlap: z.number().default(0.55),

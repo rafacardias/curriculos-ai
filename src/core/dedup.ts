@@ -35,6 +35,27 @@ export function detectSeniority(title: string): string | undefined {
   if (/\b(pleno|mid|middle)\b/.test(t)) return "mid";
   if (/\b(senior|sr|especialista|specialist)\b/.test(t)) return "senior";
   if (/\b(lead|lider|principal|staff)\b/.test(t)) return "lead";
-  if (/\b(head|director|diretor|vp|cto|cmo|coo|ceo|gerente|manager)\b/.test(t)) return "leadership";
+  // "manager/gerente" só é liderança quando NÃO faz parte de cargo de produto/projeto
+  // (Product Manager, Gerente de Projetos etc. são funções IC, não chefia)
+  const tLead = t
+    .replace(/\b(product|project|produto|projeto)s?\s+manager\b/g, "")
+    .replace(/\bgerente de (produtos?|projetos?)\b/g, "");
+  if (/\b(head|director|diretor|vp|cto|cmo|coo|ceo|gerente|manager)\b/.test(tLead)) return "leadership";
   return undefined;
+}
+
+/**
+ * Anos de experiência exigidos pelo JD ("8+ anos de experiência", "5-7 years of experience").
+ * Retorna o MAIOR requisito mencionado; num intervalo ("5-7 anos") vale o mínimo (5).
+ * Padrão amarrado a "experiência/experience" para não confundir com "empresa com 20 anos de mercado".
+ */
+export function detectRequiredYears(text: string): number | undefined {
+  const t = text.toLowerCase();
+  const re = /(\d{1,2})\s*(?:\+|\s*(?:a|-|to)\s*\d{1,2})?\s*(?:anos?|years?)(?:\s+(?:de|of))?\s+experi[êe]nc/g;
+  let max: number | undefined;
+  for (const m of t.matchAll(re)) {
+    const n = parseInt(m[1] ?? "0", 10);
+    if (n >= 1 && n <= 30 && (max === undefined || n > max)) max = n;
+  }
+  return max;
 }

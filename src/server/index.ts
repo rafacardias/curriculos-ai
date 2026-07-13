@@ -74,10 +74,18 @@ function apiQueue(limit: number) {
       .prepare(
         `SELECT id, title, company_name, url, source, ats_platform, location, remote_type,
                 language, seniority, score, score_detail, track_hint, policy_action, posted_at
-         FROM jobs WHERE status='queued' ORDER BY score DESC LIMIT ?`
+         FROM jobs
+         WHERE status='queued'
+           AND id NOT IN (SELECT job_id FROM applications)  -- kit gerado/aprovada = sai da fila
+         ORDER BY score DESC LIMIT ?`
       )
       .all(limit) as any[]
-  ).map((j) => ({ ...j, score_detail: j.score_detail ? JSON.parse(j.score_detail) : null }));
+  )
+    .filter((j) => {
+      const p = pipelineItems.get(j.id);
+      return !p || p.stage === "erro"; // em erro volta à fila para nova tentativa
+    })
+    .map((j) => ({ ...j, score_detail: j.score_detail ? JSON.parse(j.score_detail) : null }));
 }
 
 function apiApplications() {
@@ -261,7 +269,7 @@ function doApply(jobId: string) {
     return { ok: false, error: "vaga já está no pipeline" };
   }
   doFeedback(jobId, "aprovar");
-  setJobStatus(jobId, "approved"); // sai da fila; volta a aparecer no funil quando o kit ficar pronto
+  // a vaga some da fila via apiQueue (pipeline em memória + application após o finalize)
   pipelineItems.set(jobId, {
     jobId,
     title: job.title,
@@ -305,6 +313,7 @@ function apiConfig() {
     auto_search_hour: c.auto_search_hour,
     auto_search_days: c.auto_search_days,
     searches: c.searches,
+    filters: c.filters,
     policy: {
       generate_min_score: c.policy.generate_min_score,
       full_auto_min_score: c.policy.full_auto_min_score,
@@ -321,6 +330,10 @@ const ConfigPatch = z.object({
   auto_search_hour: z.number().int().min(0).max(23),
   auto_search_days: z.array(z.number().int().min(0).max(6)),
   searches: z.array(SearchSpec),
+  filters: z.object({
+    exclude_seniority: z.array(z.string()),
+    max_years_required: z.number().int().min(0).max(30).nullable(),
+  }),
   policy: z.object({
     generate_min_score: z.number().min(0).max(100),
     full_auto_min_score: z.number().min(0).max(100),
@@ -348,6 +361,8 @@ function doConfigSave(body: unknown) {
         remote_only: s.remote_only,
       }))
   );
+  doc.setIn(["filters", "exclude_seniority"], p.filters.exclude_seniority);
+  doc.setIn(["filters", "max_years_required"], p.filters.max_years_required);
   doc.setIn(["policy", "generate_min_score"], p.policy.generate_min_score);
   doc.setIn(["policy", "full_auto_min_score"], p.policy.full_auto_min_score);
   doc.setIn(["submission", "default_mode"], p.submission.default_mode);

@@ -1,5 +1,6 @@
 import { getDb } from "../db/client.js";
 import { termsPresent, tokenize } from "./keywords.js";
+import { detectRequiredYears } from "./dedup.js";
 import { decidePolicy } from "./policy.js";
 import { getJob, updateJobScore, type JobRow } from "../db/repo/jobs.js";
 import type { AppConfig } from "./config.js";
@@ -102,8 +103,18 @@ export function scoreNewJobs(config: AppConfig, jobIds: string[]): ScoredJob[] {
     if (!job) continue;
     const { score, detail, trackHint } = scoreJob(config, job);
     const policy = decidePolicy(config, job, score, trackHint);
-    const status: "new" | "queued" = score >= config.queue_threshold ? "queued" : "new";
-    updateJobScore(id, score, detail, trackHint, policy.action, status);
+    // filtros duros: senioridade excluída ou anos exigidos acima do teto → fora da fila
+    let filtered: string | null = null;
+    if (job.seniority && config.filters.exclude_seniority.includes(job.seniority)) {
+      filtered = `filtrado: senioridade ${job.seniority}`;
+    } else if (config.filters.max_years_required != null) {
+      const years = detectRequiredYears(`${job.title}\n${job.description ?? ""}`);
+      if (years != null && years > config.filters.max_years_required) {
+        filtered = `filtrado: exige ${years}+ anos de experiência`;
+      }
+    }
+    const status: "new" | "queued" = !filtered && score >= config.queue_threshold ? "queued" : "new";
+    updateJobScore(id, score, detail, trackHint, filtered ?? policy.action, status);
     results.push({
       jobId: id,
       title: job.title,
@@ -111,7 +122,7 @@ export function scoreNewJobs(config: AppConfig, jobIds: string[]): ScoredJob[] {
       score,
       scoreDetail: detail,
       trackHint,
-      policyAction: policy.action,
+      policyAction: filtered ?? policy.action,
       status,
     });
   }

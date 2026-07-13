@@ -184,6 +184,19 @@
   .srow { display: grid; grid-template-columns: 1fr auto; gap: 10px; border-bottom: 1px dashed var(--line); padding: 12px 0; align-items: start; }
   .srow:last-child { border-bottom: none; }
 
+  /* ── seleção em lote na fila ──────────── */
+  .pick {
+    appearance: none; width: 16px; height: 16px; border: 1px solid var(--line);
+    background: var(--ink-3); cursor: pointer; flex-shrink: 0;
+  }
+  .pick:checked { background: var(--signal); border-color: var(--signal); }
+  .batchbar {
+    position: fixed; bottom: 0; left: 76px; right: 0; background: var(--ink-3);
+    border-top: 1px solid var(--signal); padding: 12px 36px; display: none;
+    gap: 12px; align-items: center; z-index: 9; font-family: var(--mono); font-size: 12px;
+  }
+  .batchbar.show { display: flex; }
+
   .toast {
     position: fixed; bottom: 22px; right: 22px; background: var(--signal); color: var(--ink);
     font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 12px 18px;
@@ -225,6 +238,12 @@
       <summary id="rejsummary">rejeitadas</summary>
       <div id="rejected"></div>
     </details>
+    <div class="batchbar" id="batchbar">
+      <span id="batchcount"></span>
+      <button class="btn primary" id="batchApprove">Aprovar selecionadas</button>
+      <button class="btn" id="batchReject">Rejeitar selecionadas</button>
+      <button class="btn ghost" id="batchClear">limpar seleção</button>
+    </div>
   </section>
 
   <section id="apps"><div class="board" id="board"></div></section>
@@ -338,7 +357,7 @@ async function loadQueue() {
     const max = Math.max(1, ...Object.values(d));
     const bars = Object.entries(d).map(([k, v]) => `<i title="${k}: ${v}" style="height:${Math.max(2, (v / max) * 16)}px"></i>`).join("");
     return `<div class="card" data-id="${j.id}">
-      <div class="score"><b>${Math.round(j.score)}</b><div class="bars">${bars}</div></div>
+      <div class="score"><input type="checkbox" class="pick" title="selecionar para lote"><b>${Math.round(j.score)}</b><div class="bars">${bars}</div></div>
       <div class="body">
         <h3><a href="${j.url}" target="_blank" rel="noopener">${esc(j.title)}</a></h3>
         <div class="meta">
@@ -382,6 +401,39 @@ async function loadQueue() {
     })
   );
 }
+
+/* ── lote (seleção múltipla) ───────────── */
+function pickedCards() { return [...document.querySelectorAll("#queue .pick:checked")].map((c) => c.closest(".card")); }
+function updateBatchBar() {
+  const n = pickedCards().length;
+  $("#batchbar").classList.toggle("show", n > 0);
+  $("#batchcount").textContent = `${n} selecionada${n > 1 ? "s" : ""}`;
+}
+document.addEventListener("change", (e) => { if (e.target.classList?.contains("pick")) updateBatchBar(); });
+$("#batchClear").addEventListener("click", () => { document.querySelectorAll("#queue .pick:checked").forEach((c) => (c.checked = false)); updateBatchBar(); });
+$("#batchApprove").addEventListener("click", async () => {
+  const cards = pickedCards();
+  if (!cards.length) return;
+  if (!confirm(`Aprovar e aplicar ${cards.length} vaga(s)?\n\nOs kits são gerados um a um no pipeline (cada um leva alguns minutos) e o Chrome abre para você revisar cada envio.`)) return;
+  for (const card of cards) {
+    const r = await post("/api/apply", { jobId: card.dataset.id });
+    if (r.ok) card.remove();
+  }
+  toast(`${cards.length} no pipeline — acompanhe no topo da fila`);
+  updateBatchBar(); loadPipeline(); loadSummary();
+});
+$("#batchReject").addEventListener("click", async () => {
+  const cards = pickedCards();
+  if (!cards.length) return;
+  if (!confirm(`Rejeitar ${cards.length} vaga(s)?\n\nElas saem da fila e ensinam o score (reversível em "rejeitadas").`)) return;
+  const reason = prompt("motivo comum (opcional — ensina o score):") || undefined;
+  for (const card of cards) {
+    await post("/api/feedback", { jobId: card.dataset.id, verdict: "rejeitar", reason });
+    card.remove();
+  }
+  toast(`${cards.length} rejeitadas`);
+  updateBatchBar(); loadSummary(); loadRejected();
+});
 
 /* ── pipeline (Aprovar → gerar → submeter) ─ */
 const STAGES = {
@@ -516,6 +568,19 @@ function renderConfig() {
       <div class="row" style="margin:12px 0 0"><button class="btn" id="cfgAdd">+ adicionar busca</button></div>
     </div>
     <div class="cfg">
+      <h4>Filtros duros</h4>
+      <div class="row">
+        <label>excluir senioridade:</label>
+        ${["intern", "junior", "mid", "senior", "lead", "leadership"].map((s) => `<span class="chip fsen ${c.filters.exclude_seniority.includes(s) ? "on" : ""}" data-sen="${s}">${s}</span>`).join("")}
+      </div>
+      <div class="row">
+        <label>excluir JD que exige mais de</label>
+        <input type="number" id="cfgMaxYears" value="${c.filters.max_years_required ?? ""}" min="0" max="30" placeholder="—" style="width:64px">
+        <label>anos de experiência (vazio = sem limite)</label>
+      </div>
+      <div class="sub">chips laranja = senioridade EXCLUÍDA da fila. Vagas filtradas ficam fora da fila com o motivo registrado — mude o filtro e rode nova busca (ou re-score) para reavaliar.</div>
+    </div>
+    <div class="cfg">
       <h4>Autonomia</h4>
       <div class="row">
         <label>modo de submissão default</label>
@@ -538,6 +603,9 @@ function syncCfg() {
   CFG.auto_search_hour = parseInt($("#cfgHour").value, 10);
   CFG.auto_search_days = [...document.querySelectorAll(".chip.day.on")].map((x) => +x.dataset.day);
   CFG.submission.default_mode = $("#cfgMode").value;
+  CFG.filters.exclude_seniority = [...document.querySelectorAll(".chip.fsen.on")].map((x) => x.dataset.sen);
+  const my = $("#cfgMaxYears").value.trim();
+  CFG.filters.max_years_required = my === "" ? null : parseInt(my, 10);
   CFG.policy.generate_min_score = parseFloat($("#cfgGenMin").value) || 60;
   CFG.policy.full_auto_min_score = parseFloat($("#cfgAutoMin").value) || 80;
   CFG.searches = [...document.querySelectorAll("#cfgSearches .srow")].map((r) => ({
@@ -574,6 +642,7 @@ function bindConfig() {
       auto_search_hour: CFG.auto_search_hour,
       auto_search_days: CFG.auto_search_days,
       searches: CFG.searches.filter((s) => s.query.trim() && s.sources.length),
+      filters: CFG.filters,
       policy: CFG.policy,
       submission: { default_mode: CFG.submission.default_mode },
     };
