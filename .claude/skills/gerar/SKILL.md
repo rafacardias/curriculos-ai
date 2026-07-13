@@ -22,6 +22,15 @@ Cada bullet de experiência DEVE terminar com a citação `[exp:<fact_id>]` de u
 
 Você NUNCA pode adicionar skill, ferramenta, empregador, cargo, data, métrica ou conquista que não exista nos fatos. Se uma keyword do JD não tem fato que a sustente, ela fica de fora do currículo e aparecerá em "keywords não cobertas" — isso é o comportamento correto, não um defeito. Não estique um fato para fingir cobertura.
 
+## Reaproveitamento de kits anteriores (economia de tokens)
+
+Os kits vivem em `output/<empresa>-<titulo>-<id6>/` (o `bundle.json` de cada um registra a trilha em `job.track_hint`). Antes de redigir do zero:
+
+1. Liste os kits existentes da MESMA trilha (`ls output/*/bundle.json` + grep do track_hint) e pegue o `resume.md` mais recente.
+2. Se a sobreposição entre as keywords do JD atual e esse currículo for alta (mesma família de vaga), **parta dele**: ajuste headline/Resumo ao título novo, reordene bullets pela relevância do JD atual e troque as grafias para as EXATAS do novo JD. Isso custa uma fração de gerar do zero.
+3. Se a sobreposição for baixa (outra família de vaga, mesmo dentro da trilha), gere do zero — adaptar um currículo errado sai pior que escrever certo.
+4. Reaproveitado ou não, TODAS as citações `[exp:id]` passam pelo mesmo `finalize` — reaproveitar texto nunca dispensa o truthcheck.
+
 ## Variante do experimento
 
 O bundle traz `variant` (A = metric-first, B = role-first) atribuída round-robin por segmento — siga as `variant.instructions` na estrutura do Resumo e na ordenação dos bullets. Isso alimenta a comparação de conversão no /painel. Se `variant` for null, use seu julgamento.
@@ -50,6 +59,18 @@ O bundle traz `variant` (A = metric-first, B = role-first) atribuída round-robi
   <lista das skills REAIS que batem com o JD, grafadas como no JD>
   ```
 - Ordem reverso-cronológica; título do Resumo sintonizado com o título da vaga.
+
+### Metodologia dos bullets — CAR (Contexto → Ação → Resultado)
+
+Keyword certa em sintaxe fraca não converte. Cada bullet segue a estrutura CAR (variante da fórmula XYZ do Google: "alcancei X, medido por Y, fazendo Z"):
+
+- **Abre com verbo de ação forte** no pretérito (PT: implementou→"Implementei"/liderou/reduziu/automatizou; EN: led/built/reduced/automated). Nunca "responsável por", "ajudei em", "participei de".
+- **Contexto curto** (onde/escala) + **ação específica** (o que fez, com as keywords do JD na sintaxe natural da frase — não em lista) + **resultado**.
+- **Resultado quantificado sempre que o fato tiver número** (%, R$, prazo, volume). Sem número no fato → resultado qualitativo do próprio fato; NUNCA inventar métrica (Regra nº 1).
+- 1 linha por bullet (máx. 2), 3–6 bullets por experiência, ordenados pela relevância para o JD (variante A/B decide metric-first vs role-first).
+- Sem pronomes ("eu"), sem adjetivos vazios ("proativo", "dinâmico"), sem jargão interno que o recrutador não conhece.
+
+**STAR (Situação-Tarefa-Ação-Resultado) não é para o currículo** — é o formato das respostas comportamentais: use no `answers.md` (perguntas "conte uma vez em que...") e no material de entrevista, sempre montado sobre fatos citáveis do perfil.
 
 ## cover-letter.md
 

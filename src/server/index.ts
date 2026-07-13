@@ -7,9 +7,9 @@
  * redigir) continuam no Claude Code — a UI cobre operação e visibilidade.
  */
 import { createServer } from "node:http";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, execFile, spawn } from "node:child_process";
 import { WebSocketServer } from "ws";
 import pty from "node-pty";
 import { parseDocument } from "yaml";
@@ -103,13 +103,9 @@ function apiCompanies() {
     .all();
 }
 
-function doFeedback(jobId: string, verdict: "aprovar" | "rejeitar", reason?: string) {
+function adjustPreferenceWeights(job: NonNullable<ReturnType<typeof getJob>>, delta: number): string[] {
   const db = getDb();
-  const job = getJob(jobId);
-  if (!job) throw new Error("vaga não encontrada");
   const config = loadConfig();
-  const approve = verdict === "aprovar";
-  const delta = approve ? 1 : -1;
   const cap = config.preferences.max_weight;
   const keys: string[] = [`company:${job.company_name.toLowerCase()}`, `source:${job.source}`];
   if (job.seniority) keys.push(`seniority:${job.seniority}`);
@@ -125,11 +121,162 @@ function doFeedback(jobId: string, verdict: "aprovar" | "rejeitar", reason?: str
        updated_at = excluded.updated_at`
   );
   for (const key of keys) upsert.run(key, delta, nowIso());
-  db.prepare(
-    "INSERT INTO events (id, entity, entity_id, type, payload, created_at) VALUES (?, 'job', ?, ?, ?, ?)"
-  ).run(ulid(), jobId, approve ? "feedback_approve" : "feedback_reject", JSON.stringify({ reason: reason ?? null, via: "ui" }), nowIso());
+  return keys;
+}
+
+function logJobEvent(jobId: string, type: string, payload: Record<string, unknown>): void {
+  getDb()
+    .prepare("INSERT INTO events (id, entity, entity_id, type, payload, created_at) VALUES (?, 'job', ?, ?, ?, ?)")
+    .run(ulid(), jobId, type, JSON.stringify(payload), nowIso());
+}
+
+function doFeedback(jobId: string, verdict: "aprovar" | "rejeitar", reason?: string) {
+  const job = getJob(jobId);
+  if (!job) throw new Error("vaga não encontrada");
+  const approve = verdict === "aprovar";
+  const keys = adjustPreferenceWeights(job, approve ? 1 : -1);
+  logJobEvent(jobId, approve ? "feedback_approve" : "feedback_reject", { reason: reason ?? null, via: "ui" });
   if (!approve) setJobStatus(jobId, "rejected");
   return { ok: true, keys };
+}
+
+function apiRejected(limit: number) {
+  const db = getDb();
+  return (
+    db
+      .prepare(
+        `SELECT j.id, j.title, j.company_name, j.score, j.source, j.location,
+                (SELECT e.payload FROM events e WHERE e.entity_id = j.id AND e.type = 'feedback_reject'
+                 ORDER BY e.created_at DESC LIMIT 1) AS reject_payload
+         FROM jobs j WHERE j.status = 'rejected' ORDER BY j.score DESC LIMIT ?`
+      )
+      .all(limit) as any[]
+  ).map((r) => ({ ...r, reject_reason: r.reject_payload ? JSON.parse(r.reject_payload).reason : null }));
+}
+
+function doRevert(jobId: string) {
+  const job = getJob(jobId);
+  if (!job) throw new Error("vaga não encontrada");
+  if (job.status !== "rejected") throw new Error("vaga não está rejeitada");
+  // desfaz o aprendizado negativo da rejeição e devolve à fila
+  adjustPreferenceWeights(job, 1);
+  logJobEvent(jobId, "feedback_revert", { via: "ui" });
+  setJobStatus(jobId, "queued");
+  return { ok: true };
+}
+
+/* ── pipeline Aprovar → gerar (claude -p headless) → submeter (modo do config) ──
+ * A geração é trabalho de julgamento: roda numa sessão headless do Claude Code
+ * (usa a assinatura logada, não a API). A submissão é o submit.ts normal,
+ * destacado — em review_first o Chrome abre preenchido e para antes do envio. */
+interface PipelineItem {
+  jobId: string;
+  title: string;
+  company: string;
+  stage: "aguardando" | "gerando" | "no_chrome" | "concluida" | "erro";
+  detail: string | null;
+  startedAt: string;
+}
+const pipelineItems = new Map<string, PipelineItem>();
+const pipelineQueue: string[] = [];
+let pipelineBusy = false;
+
+const TSX_BIN = join(PROJECT_ROOT, "node_modules", ".bin", "tsx");
+
+function runClaudeGenerate(jobId: string): Promise<void> {
+  const prompt =
+    `Execute o fluxo do skill /gerar (arquivo .claude/skills/gerar/SKILL.md) de ponta a ponta para a vaga ${jobId}, ` +
+    `de forma 100% autônoma, sem fazer nenhuma pergunta. A REGRA Nº 1 (veracidade, citações [exp:id]) vale integralmente. ` +
+    `Se faltar um candidate_fact, escreva [CONFIRMAR: ...] no answers.md e prossiga. ` +
+    `Só termine depois que "npx tsx src/cli/kit.ts finalize ${jobId}" passar. NÃO execute /submeter.`;
+  return new Promise((resolve, reject) => {
+    execFile(
+      "claude",
+      [
+        "-p", prompt,
+        "--allowedTools",
+        "Read", "Write", "Edit", "Glob", "Grep", "Skill", "WebSearch", "WebFetch",
+        "Bash(npx tsx:*)", "Bash(ls:*)",
+      ],
+      { cwd: PROJECT_ROOT, timeout: 20 * 60_000, maxBuffer: 32 * 1024 * 1024, env: process.env },
+      (err, stdout, stderr) => {
+        mkdirSync(join(PROJECT_ROOT, "logs"), { recursive: true });
+        writeFileSync(join(PROJECT_ROOT, "logs", `pipeline-${jobId}.log`), `${stdout}\n--- stderr ---\n${stderr}`, "utf-8");
+        if (err) reject(new Error(`geração falhou: ${String(err.message).slice(0, 200)} (logs/pipeline-${jobId}.log)`));
+        else resolve();
+      }
+    );
+  });
+}
+
+function spawnSubmit(jobId: string): void {
+  mkdirSync(join(PROJECT_ROOT, "logs"), { recursive: true });
+  const log = openSync(join(PROJECT_ROOT, "logs", `submit-${jobId}.log`), "a");
+  const child = spawn(process.execPath, [TSX_BIN, join(PROJECT_ROOT, "src", "cli", "submit.ts"), jobId], {
+    cwd: PROJECT_ROOT,
+    detached: true,
+    stdio: ["ignore", log, log],
+    env: process.env,
+  });
+  child.unref();
+}
+
+async function runPipeline(): Promise<void> {
+  if (pipelineBusy) return;
+  const jobId = pipelineQueue.shift();
+  if (!jobId) return;
+  pipelineBusy = true;
+  const st = pipelineItems.get(jobId)!;
+  try {
+    st.stage = "gerando";
+    await runClaudeGenerate(jobId);
+    const app = getApplicationByJob(jobId);
+    if (!app || app.status !== "kit_ready") {
+      throw new Error(`kit não ficou pronto (status: ${app?.status ?? "sem application"}) — veja logs/pipeline-${jobId}.log`);
+    }
+    // só há submissão automatizada para estes ATSs; nos demais o kit fica pronto para aplicação manual
+    const SUBMITTABLE = new Set(["greenhouse", "lever", "workday", "linkedin"]);
+    const jobNow = getJob(jobId); // o /gerar pode ter resolvido a URL direta (job-url) e mudado o ats_platform
+    if (jobNow && SUBMITTABLE.has(jobNow.ats_platform ?? "")) {
+      spawnSubmit(jobId);
+      st.stage = "no_chrome";
+      st.detail = "kit gerado — o Chrome abre preenchido; revise e clique em enviar";
+    } else {
+      st.stage = "concluida";
+      st.detail = `kit pronto em ${app.kit_dir?.split("/").pop() ?? "output/"} — plataforma "${jobNow?.ats_platform ?? "?"}" ainda sem submissão automática: aplique com o PDF do kit (link da vaga no funil)`;
+    }
+  } catch (err) {
+    st.stage = "erro";
+    st.detail = String(err instanceof Error ? err.message : err).slice(0, 400);
+  }
+  pipelineBusy = false;
+  void runPipeline();
+}
+
+function doApply(jobId: string) {
+  const job = getJob(jobId);
+  if (!job) throw new Error("vaga não encontrada");
+  const existing = pipelineItems.get(jobId);
+  if (existing && !["concluida", "erro"].includes(existing.stage)) {
+    return { ok: false, error: "vaga já está no pipeline" };
+  }
+  doFeedback(jobId, "aprovar");
+  setJobStatus(jobId, "approved"); // sai da fila; volta a aparecer no funil quando o kit ficar pronto
+  pipelineItems.set(jobId, {
+    jobId,
+    title: job.title,
+    company: job.company_name,
+    stage: "aguardando",
+    detail: null,
+    startedAt: nowIso(),
+  });
+  pipelineQueue.push(jobId);
+  void runPipeline();
+  return { ok: true };
+}
+
+function apiPipeline() {
+  return [...pipelineItems.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 20);
 }
 
 function doStatus(jobId: string, status: ApplicationStatus, note?: string) {
@@ -271,6 +418,16 @@ const server = createServer(async (req, res) => {
     } else if (req.method === "POST" && url.pathname === "/api/status") {
       const { jobId, status, note } = await readBody(req);
       json(res, 200, doStatus(jobId, status, note));
+    } else if (req.method === "GET" && url.pathname === "/api/pipeline") {
+      json(res, 200, apiPipeline());
+    } else if (req.method === "GET" && url.pathname === "/api/rejected") {
+      json(res, 200, apiRejected(parseInt(url.searchParams.get("limit") ?? "40", 10)));
+    } else if (req.method === "POST" && url.pathname === "/api/apply") {
+      const { jobId } = await readBody(req);
+      json(res, 200, doApply(jobId));
+    } else if (req.method === "POST" && url.pathname === "/api/revert") {
+      const { jobId } = await readBody(req);
+      json(res, 200, doRevert(jobId));
     } else if (req.method === "GET" && url.pathname === "/api/config") {
       json(res, 200, apiConfig());
     } else if (req.method === "POST" && url.pathname === "/api/config") {

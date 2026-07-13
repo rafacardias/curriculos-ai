@@ -139,6 +139,31 @@
   th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
   thead th { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--bone-dim); }
   iframe { width: 100%; height: calc(100vh - 220px); border: 1px solid var(--line); background: #fff; }
+  /* ── pipeline + rejeitadas ────────────── */
+  .pipe {
+    border: 1px solid var(--line); border-left: 2px solid var(--signal); background: var(--ink-2);
+    padding: 10px 14px; margin-bottom: 10px; font-family: var(--mono); font-size: 11.5px;
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  }
+  .pipe .st { color: var(--signal); }
+  .pipe.err { border-left-color: #e5533d; }
+  .pipe.err .st { color: #e5533d; }
+  .pipe .spin::before { content: "⟳"; display: inline-block; animation: rot 1.2s linear infinite; margin-right: 6px; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  #rejwrap { margin-top: 28px; }
+  #rejwrap summary {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--bone-dim); cursor: pointer; padding: 12px 0; border-top: 1px solid var(--line); user-select: none;
+  }
+  #rejwrap summary:hover { color: var(--bone); }
+  .rrow {
+    display: flex; gap: 14px; align-items: center; border: 1px solid var(--line);
+    background: var(--ink-2); padding: 10px 14px; margin-bottom: 8px; font-size: 13px;
+  }
+  .rrow .sc { font-family: var(--mono); color: var(--bone-dim); min-width: 28px; }
+  .rrow .why { font-family: var(--mono); font-size: 10.5px; color: var(--bone-dim); }
+  .rrow .grow { flex: 1; min-width: 0; }
+
   /* ── config ───────────────────────────── */
   .cfg { border: 1px solid var(--line); background: var(--ink-2); padding: 18px; margin-bottom: 16px; }
   .cfg h4 { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--signal); margin-bottom: 14px; }
@@ -193,7 +218,14 @@
   </div>
   <div class="searchnote" id="searchnote"></div>
 
-  <section id="fila" class="on"><div id="queue"></div></section>
+  <section id="fila" class="on">
+    <div id="pipeline"></div>
+    <div id="queue"></div>
+    <details id="rejwrap">
+      <summary id="rejsummary">rejeitadas</summary>
+      <div id="rejected"></div>
+    </details>
+  </section>
 
   <section id="apps"><div class="board" id="board"></div></section>
 
@@ -328,20 +360,70 @@ async function loadQueue() {
 
   el.querySelectorAll("[data-act]").forEach((b) =>
     b.addEventListener("click", async () => {
-      const id = b.closest(".card").dataset.id;
+      const card = b.closest(".card");
+      const id = card.dataset.id;
       if (b.dataset.act === "aprovar") {
-        await post("/api/feedback", { jobId: id, verdict: "aprovar" });
-        await navigator.clipboard.writeText(`/gerar ${id}`).catch(() => {});
-        toast(`aprovada — "/gerar ${id}" copiado: cole no Claude Code`);
+        const r = await post("/api/apply", { jobId: id });
+        if (!r.ok) { toast(r.error || "erro"); return; }
+        card.remove();
+        toast("aprovada — gerando o currículo sob medida e preparando a aplicação…");
+        loadPipeline(); loadSummary();
       } else if (b.dataset.act === "rejeitar") {
+        const sure = confirm("Rejeitar esta vaga?\n\nEla sai da fila e ensina o score a evitar vagas parecidas.\n(Dá para reverter depois na seção \"rejeitadas\", no fim da fila.)");
+        if (!sure) return;
         const reason = prompt("motivo (opcional — ensina o score):") || undefined;
         await post("/api/feedback", { jobId: id, verdict: "rejeitar", reason });
-        b.closest(".card").style.opacity = .3;
-        toast("rejeitada — vagas parecidas vão pontuar menos");
-        loadSummary();
+        card.remove();
+        toast("rejeitada — recuperável em \"rejeitadas\"");
+        loadSummary(); loadRejected();
       } else if (b.dataset.act === "snapshot") {
         window.open(`/api/snapshot/${id}`, "_blank");
       }
+    })
+  );
+}
+
+/* ── pipeline (Aprovar → gerar → submeter) ─ */
+const STAGES = {
+  aguardando: ["na fila do pipeline", true],
+  gerando: ["gerando kit — currículo sob medida + cover letter", true],
+  no_chrome: ["kit pronto — o Chrome abre preenchido: revise e envie", false],
+  concluida: ["concluída", false],
+  erro: ["erro", false],
+};
+let pipeTimer = null;
+async function loadPipeline() {
+  const items = await api("/api/pipeline");
+  $("#pipeline").innerHTML = items.map((p) => {
+    const [label, spin] = STAGES[p.stage] || [p.stage, false];
+    return `<div class="pipe ${p.stage === "erro" ? "err" : ""}">
+      <span class="${spin ? "spin st" : "st"}">${label}</span>
+      <span>${esc(p.title)} @ ${esc(p.company)}</span>
+      ${p.detail ? `<span style="color:var(--bone-dim)">${esc(p.detail)}</span>` : ""}
+    </div>`;
+  }).join("");
+  clearTimeout(pipeTimer);
+  if (items.some((p) => p.stage === "aguardando" || p.stage === "gerando")) {
+    pipeTimer = setTimeout(() => { loadPipeline(); loadBoard(); }, 5000);
+  }
+}
+
+/* ── rejeitadas (reversível) ───────────── */
+async function loadRejected() {
+  const rows = await api("/api/rejected");
+  $("#rejsummary").textContent = `rejeitadas (${rows.length})`;
+  $("#rejected").innerHTML = rows.length
+    ? rows.map((r) => `<div class="rrow" data-id="${r.id}">
+        <span class="sc">${Math.round(r.score ?? 0)}</span>
+        <div class="grow">${esc(r.title)} <span class="why">· ${esc(r.company_name)} · ${r.source}${r.reject_reason ? ` · motivo: ${esc(r.reject_reason)}` : ""}</span></div>
+        <button class="btn" data-rev>Reverter ↩</button>
+      </div>`).join("")
+    : `<div class="empty" style="padding:14px 0">nenhuma vaga rejeitada</div>`;
+  $("#rejected").querySelectorAll("[data-rev]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const r = await post("/api/revert", { jobId: b.closest(".rrow").dataset.id });
+      if (r.ok) { toast("revertida — de volta à fila"); loadQueue(); loadRejected(); loadSummary(); }
+      else toast(r.error || "erro");
     })
   );
 }
@@ -503,7 +585,7 @@ function bindConfig() {
   });
 }
 
-function loadAll() { loadSummary(); loadQueue(); loadBoard(); loadCompanies(); }
+function loadAll() { loadSummary(); loadQueue(); loadBoard(); loadCompanies(); loadPipeline(); loadRejected(); }
 loadAll();
 setInterval(loadSummary, 30000);
 </script>

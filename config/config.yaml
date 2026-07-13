@@ -10,14 +10,19 @@ auto_search_hour: 9 # hora local do dia para a busca automática
 searches:
   - query: QA
     sources:
+      - remotive
+      - remoteok
+      - wwr
       - gupy
-    location: Brazil
-    remote_only: false
+      - linkedin
+    remote_only: true
   - query: quality assurance junior
     sources:
       - remotive
       - remoteok
       - wwr
+      - gupy
+      - linkedin
     remote_only: true
   - query: Product Manager
     sources:
@@ -28,45 +33,51 @@ searches:
   - query: Product Owner
     sources:
       - gupy
-    location: Brazil
+      - linkedin
+    location: Belo Horizonte
     remote_only: false
   - query: associate product manager
     sources:
-      - remotive
-      - remoteok
-      - wwr
-    remote_only: true
+      - gupy
+      - linkedin
+    location: Belo Horizonte
+    remote_only: false
   - query: Scrum Master
     sources:
       - gupy
       - linkedin
-    location: Brazil
+    location: Belo Horizonte
     remote_only: false
   - query: scrum master
     sources:
-      - remotive
-      - remoteok
-      - wwr
-    remote_only: true
+      - gupy
+      - linkedin
+    location: Belo Horizonte
+    remote_only: false
   - query: n8n
     sources:
-      - gupy
       - remotive
       - remoteok
       - wwr
-    remote_only: false
+      - gupy
+      - linkedin
+    remote_only: true
   - query: AI automation
     sources:
       - remotive
       - remoteok
       - wwr
+      - gupy
+      - linkedin
     remote_only: true
   - query: vibe coder
     sources:
-      - linkedin
       - remotive
       - remoteok
-    remote_only: false
+      - wwr
+      - gupy
+      - linkedin
+    remote_only: true
 
 # Threshold para uma vaga entrar na fila (score 0-100)
 queue_threshold: 40
