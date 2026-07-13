@@ -32,6 +32,7 @@ Todo conteúdo gerado (currículo, cover letter, respostas) espelha o vocabulár
 ## Operação
 
 - `npm run db:migrate` — aplica migrations (idempotente; roda automático em qualquer acesso ao DB)
+- UI (localhost:4780) roda como serviço launchd: `npx tsx src/cli/ui-service.ts on|off|status`. **Nunca** subir `npm run ui` de shell sandboxado (ex.: de dentro do Claude Code): o pipeline de aprovação dispara `claude -p`, que precisa do Keychain — em sandbox trava com o pop-up "Chaves Não Encontradas"
 - Scripts CLI: `npx tsx src/cli/<nome>.ts` — todos aceitam `--help`
 - Config do operador: `config/config.yaml` (auto_search, policy, modos de submissão)
 - DB: `db/curriculos.db` (gitignored) · Kits gerados: `output/<job_slug>/` (gitignored)

@@ -199,7 +199,7 @@ function runClaudeGenerate(jobId: string): Promise<void> {
     `Só termine depois que "npx tsx src/cli/kit.ts finalize ${jobId}" passar. NÃO execute /submeter.`;
   return new Promise((resolve, reject) => {
     execFile(
-      "claude",
+      process.env.CLAUDE_BIN ?? "claude",
       [
         "-p", prompt,
         "--allowedTools",
@@ -486,9 +486,12 @@ wss.on("connection", (ws) => {
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`Curriculos UI: http://localhost:${PORT}`);
-  try {
-    execFileSync("open", [`http://localhost:${PORT}`]);
-  } catch {
-    /* abrir manualmente */
+  // como serviço (launchd) não abre o browser — senão surge uma aba a cada login/restart
+  if (!process.env.CURRICULOS_SERVICE) {
+    try {
+      execFileSync("open", [`http://localhost:${PORT}`]);
+    } catch {
+      /* abrir manualmente */
+    }
   }
 });
