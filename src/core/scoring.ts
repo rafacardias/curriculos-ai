@@ -1,6 +1,6 @@
 import { getDb } from "../db/client.js";
 import { termsPresent, tokenize } from "./keywords.js";
-import { detectRequiredYears } from "./dedup.js";
+import { detectRequiredYears, normalize } from "./dedup.js";
 import { decidePolicy } from "./policy.js";
 import { getJob, updateJobScore, type JobRow } from "../db/repo/jobs.js";
 import type { AppConfig } from "./config.js";
@@ -105,8 +105,11 @@ export function scoreNewJobs(config: AppConfig, jobIds: string[]): ScoredJob[] {
     const policy = decidePolicy(config, job, score, trackHint);
     // filtros duros: senioridade excluída ou anos exigidos acima do teto → fora da fila
     let filtered: string | null = null;
+    const badKeyword = titleKeywordHit(job.title, config.filters.exclude_title_keywords);
     if (job.seniority && config.filters.exclude_seniority.includes(job.seniority)) {
       filtered = `filtrado: senioridade ${job.seniority}`;
+    } else if (badKeyword) {
+      filtered = `filtrado: título contém "${badKeyword}"`;
     } else if (config.filters.max_years_required != null) {
       const years = detectRequiredYears(`${job.title}\n${job.description ?? ""}`);
       if (years != null && years > config.filters.max_years_required) {
@@ -131,6 +134,19 @@ export function scoreNewJobs(config: AppConfig, jobIds: string[]): ScoredJob[] {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Primeira keyword excluída presente no título (palavra inteira, normalizada), ou null. */
+function titleKeywordHit(title: string, keywords: string[]): string | null {
+  if (!keywords.length) return null;
+  const words = new Set(normalize(title).split(" "));
+  for (const kw of keywords) {
+    const norm = normalize(kw);
+    if (!norm) continue;
+    // keyword com mais de uma palavra ("nivel iii") → busca de frase; senão, palavra inteira
+    if (norm.includes(" ") ? ` ${normalize(title)} `.includes(` ${norm} `) : words.has(norm)) return kw;
+  }
+  return null;
 }
 
 /** Decaimento dos pesos aprendidos — chamado uma vez por execução de busca. */

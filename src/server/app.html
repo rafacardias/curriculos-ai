@@ -578,7 +578,11 @@ function renderConfig() {
         <input type="number" id="cfgMaxYears" value="${c.filters.max_years_required ?? ""}" min="0" max="30" placeholder="—" style="width:64px">
         <label>anos de experiência (vazio = sem limite)</label>
       </div>
-      <div class="sub">chips laranja = senioridade EXCLUÍDA da fila. Vagas filtradas ficam fora da fila com o motivo registrado — mude o filtro e rode nova busca (ou re-score) para reavaliar.</div>
+      <div class="row">
+        <label>excluir títulos com as palavras:</label>
+        <input type="text" id="cfgExclKw" value="${(c.filters.exclude_title_keywords ?? []).join(", ")}" placeholder="ex.: specialist, coordenador, tech lead" style="flex:1;min-width:240px">
+      </div>
+      <div class="sub">chips laranja = senioridade EXCLUÍDA da fila (PL/II contam como mid; III/SR como senior). Palavras acima: separadas por vírgula, comparação por palavra inteira sem case/acento. Vagas filtradas ficam fora da fila com o motivo registrado — mude o filtro e rode nova busca (ou re-score) para reavaliar.</div>
     </div>
     <div class="cfg">
       <h4>Autonomia</h4>
@@ -606,6 +610,7 @@ function syncCfg() {
   CFG.filters.exclude_seniority = [...document.querySelectorAll(".chip.fsen.on")].map((x) => x.dataset.sen);
   const my = $("#cfgMaxYears").value.trim();
   CFG.filters.max_years_required = my === "" ? null : parseInt(my, 10);
+  CFG.filters.exclude_title_keywords = $("#cfgExclKw").value.split(",").map((s) => s.trim()).filter(Boolean);
   CFG.policy.generate_min_score = parseFloat($("#cfgGenMin").value) || 60;
   CFG.policy.full_auto_min_score = parseFloat($("#cfgAutoMin").value) || 80;
   CFG.searches = [...document.querySelectorAll("#cfgSearches .srow")].map((r) => ({

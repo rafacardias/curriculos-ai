@@ -78,9 +78,17 @@ queue_threshold: 40
 
 # Filtros duros — vaga filtrada NÃO entra na fila (motivo fica no policy_action)
 # exclude_seniority: intern | junior | mid | senior | lead | leadership
+# Foco em vagas de entrada: pleno (PL/II) e acima ficam de fora.
 filters:
-  exclude_seniority: [senior, lead, leadership]
-  max_years_required: 5   # exclui JD que exige mais anos que isso; null = sem limite
+  exclude_seniority:
+    - mid
+    - senior
+    - lead
+    - leadership
+  max_years_required: 2 # exclui JD que exige mais anos que isso; null = sem limite
+  # Palavras que, no título, filtram a vaga (palavra inteira, sem case/acento).
+  # PL, II e III já são detectados como senioridade; use para termos extras (ex.: specialist, coordenador).
+  exclude_title_keywords: []
 
 # Pesos do score (soma das contribuições, normalizada para 0-100)
 scoring:

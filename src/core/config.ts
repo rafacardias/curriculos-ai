@@ -23,6 +23,9 @@ const ConfigSchema = z.object({
     .object({
       exclude_seniority: z.array(z.string()).default([]), // intern|junior|mid|senior|lead|leadership
       max_years_required: z.number().int().min(0).max(30).nullable().default(null),
+      // Palavras/termos que, presentes no título (comparação normalizada, palavra inteira), filtram a vaga.
+      // Ex.: ["PL", "II", "III", "sênior"] — cobre convenções de nível que a heurística não conhece.
+      exclude_title_keywords: z.array(z.string()).default([]),
     })
     .default({}),
   scoring: z
