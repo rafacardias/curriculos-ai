@@ -7,9 +7,9 @@
  * redigir) continuam no Claude Code — a UI cobre operação e visibilidade.
  */
 import { createServer } from "node:http";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, openSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, openSync, writeSync, closeSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync, execFile, spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { WebSocketServer } from "ws";
 import pty from "node-pty";
 import { parseDocument } from "yaml";
@@ -196,24 +196,62 @@ function runClaudeGenerate(jobId: string): Promise<void> {
     `Execute o fluxo do skill /gerar (arquivo .claude/skills/gerar/SKILL.md) de ponta a ponta para a vaga ${jobId}, ` +
     `de forma 100% autônoma, sem fazer nenhuma pergunta. A REGRA Nº 1 (veracidade, citações [exp:id]) vale integralmente. ` +
     `Se faltar um candidate_fact, escreva [CONFIRMAR: ...] no answers.md e prossiga. ` +
-    `Só termine depois que "npx tsx src/cli/kit.ts finalize ${jobId}" passar. NÃO execute /submeter.`;
+    `Só termine depois que "npx tsx src/cli/kit.ts finalize ${jobId}" passar. NÃO execute /submeter. ` +
+    `Rode comandos Bash um por um (sem encadear com && ou ;) — comandos compostos são bloqueados pela permissão headless.`;
+  const GENERATE_TIMEOUT_MS = 45 * 60_000; // /gerar completo passa fácil de 20 min (skill + plugins no headless)
   return new Promise((resolve, reject) => {
-    execFile(
+    mkdirSync(join(PROJECT_ROOT, "logs"), { recursive: true });
+    const logPath = join(PROJECT_ROOT, "logs", `pipeline-${jobId}.log`);
+    const log = openSync(logPath, "w");
+    // stream-json + verbose: 1 evento JSON por linha, escrito no log conforme acontece —
+    // dá visibilidade do progresso e sobrevive a kill por timeout (execFile só entregava stdout no fim)
+    const child = spawn(
       process.env.CLAUDE_BIN ?? "claude",
       [
         "-p", prompt,
+        "--output-format", "stream-json", "--verbose",
         "--allowedTools",
         "Read", "Write", "Edit", "Glob", "Grep", "Skill", "WebSearch", "WebFetch",
-        "Bash(npx tsx:*)", "Bash(ls:*)",
+        // o hook global do RTK reescreve "npx tsx …" para "rtk npx tsx …" — as duas formas precisam passar
+        "Bash(npx tsx:*)", "Bash(ls:*)", "Bash(rtk npx tsx:*)", "Bash(rtk ls:*)",
       ],
-      { cwd: PROJECT_ROOT, timeout: 20 * 60_000, maxBuffer: 32 * 1024 * 1024, env: process.env },
-      (err, stdout, stderr) => {
-        mkdirSync(join(PROJECT_ROOT, "logs"), { recursive: true });
-        writeFileSync(join(PROJECT_ROOT, "logs", `pipeline-${jobId}.log`), `${stdout}\n--- stderr ---\n${stderr}`, "utf-8");
-        if (err) reject(new Error(`geração falhou: ${String(err.message).slice(0, 200)} (logs/pipeline-${jobId}.log)`));
-        else resolve();
-      }
+      { cwd: PROJECT_ROOT, env: process.env, stdio: ["ignore", "pipe", "pipe"] }
     );
+    let tail = ""; // últimos bytes do output — suficiente p/ classificar o erro sem reler o log
+    const onData = (buf: Buffer) => {
+      writeSync(log, buf);
+      tail = (tail + buf.toString()).slice(-8192);
+    };
+    child.stdout.on("data", onData);
+    child.stderr.on("data", onData);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, GENERATE_TIMEOUT_MS);
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      closeSync(log);
+      reject(new Error(`não consegui iniciar o claude: ${e.message}`));
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      closeSync(log);
+      if (timedOut) {
+        reject(new Error(`geração excedeu ${GENERATE_TIMEOUT_MS / 60_000} min e foi abortada — veja até onde foi em logs/pipeline-${jobId}.log`));
+      } else if (code !== 0) {
+        const limitMatch = tail.match(/hit your (?:session|usage) limit[^"\\]*/i);
+        if (limitMatch) {
+          reject(new Error(`limite de uso da assinatura Claude atingido (${limitMatch[0].trim()}) — clique Aplicar de novo após o reset`));
+        } else if (/failed to authenticate|oauth|token.*(expired|revoked)|invalid.*api key|please run \/login/i.test(tail)) {
+          reject(new Error(
+            `sessão do Claude Code expirada — rode "claude /login" no terminal e clique Aplicar de novo (logs/pipeline-${jobId}.log)`
+          ));
+        } else {
+          reject(new Error(`geração falhou (exit ${code}) — logs/pipeline-${jobId}.log`));
+        }
+      } else resolve();
+    });
   });
 }
 
@@ -333,6 +371,7 @@ const ConfigPatch = z.object({
   filters: z.object({
     exclude_seniority: z.array(z.string()),
     max_years_required: z.number().int().min(0).max(30).nullable(),
+    exclude_title_keywords: z.array(z.string()).default([]),
   }),
   policy: z.object({
     generate_min_score: z.number().min(0).max(100),
@@ -363,6 +402,7 @@ function doConfigSave(body: unknown) {
   );
   doc.setIn(["filters", "exclude_seniority"], p.filters.exclude_seniority);
   doc.setIn(["filters", "max_years_required"], p.filters.max_years_required);
+  doc.setIn(["filters", "exclude_title_keywords"], p.filters.exclude_title_keywords);
   doc.setIn(["policy", "generate_min_score"], p.policy.generate_min_score);
   doc.setIn(["policy", "full_auto_min_score"], p.policy.full_auto_min_score);
   doc.setIn(["submission", "default_mode"], p.submission.default_mode);
