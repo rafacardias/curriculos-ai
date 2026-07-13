@@ -2,64 +2,88 @@
 # Edite à vontade; tudo aqui é lido a cada execução (sem cache).
 
 auto_search: on
-auto_search_hour: 9       # hora local do dia para a busca automática
+auto_search_hour: 9 # hora local do dia para a busca automática
 
 # Buscas rodadas pelo /buscar (e pelo modo automático)
 # Estratégia: queries PT → Gupy/LinkedIn BR; queries EN → boards remotos internacionais.
 # LinkedIn (guest) fica só nas 3 apostas principais para não estressar o endpoint.
 searches:
-  # ── QA (trilha qa) ──
-  - query: "QA"
-    sources: [gupy]
-    location: "Brazil"
-  - query: "quality assurance junior"
-    sources: [remotive, remoteok, wwr]
+  - query: QA
+    sources:
+      - gupy
+    location: Brazil
+    remote_only: false
+  - query: quality assurance junior
+    sources:
+      - remotive
+      - remoteok
+      - wwr
     remote_only: true
-
-  # ── Product Manager / Product Owner (trilha product) ──
-  - query: "Product Manager"
-    sources: [gupy, linkedin]
-    location: "Brazil"
-  - query: "Product Owner"
-    sources: [gupy]
-    location: "Brazil"
-  - query: "associate product manager"
-    sources: [remotive, remoteok, wwr]
+  - query: Product Manager
+    sources:
+      - gupy
+      - linkedin
+    location: Brazil
+    remote_only: false
+  - query: Product Owner
+    sources:
+      - gupy
+    location: Brazil
+    remote_only: false
+  - query: associate product manager
+    sources:
+      - remotive
+      - remoteok
+      - wwr
     remote_only: true
-
-  # ── Scrum Master (trilha product) ──
-  - query: "Scrum Master"
-    sources: [gupy, linkedin]
-    location: "Brazil"
-  - query: "scrum master"
-    sources: [remotive, remoteok, wwr]
+  - query: Scrum Master
+    sources:
+      - gupy
+      - linkedin
+    location: Brazil
+    remote_only: false
+  - query: scrum master
+    sources:
+      - remotive
+      - remoteok
+      - wwr
     remote_only: true
-
-  # ── AI Builder / Vibe Coder / Automação (trilha ai-builder) ──
-  - query: "n8n"
-    sources: [gupy, remotive, remoteok, wwr]
-  - query: "AI automation"
-    sources: [remotive, remoteok, wwr]
+  - query: n8n
+    sources:
+      - gupy
+      - remotive
+      - remoteok
+      - wwr
+    remote_only: false
+  - query: AI automation
+    sources:
+      - remotive
+      - remoteok
+      - wwr
     remote_only: true
-  - query: "vibe coder"
-    sources: [linkedin, remotive, remoteok]
+  - query: vibe coder
+    sources:
+      - linkedin
+      - remotive
+      - remoteok
+    remote_only: false
 
 # Threshold para uma vaga entrar na fila (score 0-100)
 queue_threshold: 40
 
 # Pesos do score (soma das contribuições, normalizada para 0-100)
 scoring:
-  keyword_overlap: 0.55   # overlap keywords do JD × léxico da trilha
-  recency: 0.15           # vagas recentes valem mais
-  location_fit: 0.15      # remoto/local compatível
-  language_fit: 0.05      # idioma do JD × idiomas do perfil
-  preference: 0.10        # preference_weights aprendidos do feedback
+  keyword_overlap: 0.55 # overlap keywords do JD × léxico da trilha
+  recency: 0.15 # vagas recentes valem mais
+  location_fit: 0.15 # remoto/local compatível
+  language_fit: 0.05 # idioma do JD × idiomas do perfil
+  preference: 0.10 # preference_weights aprendidos do feedback
 
 # Policy engine — quando gerar, quando submeter, em qual modo
 policy:
   generate_min_score: 60
   full_auto_min_score: 80
-  full_auto_blocked_sources: [linkedin]
+  full_auto_blocked_sources: [ linkedin ]
   weekly_cap_per_track: 25
   prefer_responsive_companies: true
   cooldown_same_company_days: 30
@@ -79,9 +103,17 @@ submission:
 # Experiment engine
 experiments:
   enabled: true
-  min_n_to_compare: 8     # mínimo de aplicações por variante antes de exibir comparação
+  min_n_to_compare: 8 # mínimo de aplicações por variante antes de exibir comparação
 
 # Aprendizado de preferências (feedback aprovar/rejeitar)
 preferences:
-  max_weight: 10          # cap por chave
-  decay: 0.95             # decaimento aplicado a cada busca
+  max_weight: 10 # cap por chave
+  decay: 0.95 # decaimento aplicado a cada busca
+auto_search_days:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6

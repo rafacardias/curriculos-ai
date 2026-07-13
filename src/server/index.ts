@@ -7,13 +7,16 @@
  * redigir) continuam no Claude Code — a UI cobre operação e visibilidade.
  */
 import { createServer } from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { WebSocketServer } from "ws";
 import pty from "node-pty";
+import { parseDocument } from "yaml";
+import { z } from "zod";
 import { getDb, nowIso, PROJECT_ROOT } from "../db/client.js";
-import { loadConfig } from "../core/config.js";
+import { loadConfig, CONFIG_PATH, SearchSpec } from "../core/config.js";
+import { applySchedule, describeSchedule } from "../local/schedule-ctl.js";
 import { runSearch } from "../core/pipeline.js";
 import { resolveAdapters } from "../adapters/index.js";
 import { scoreNewJobs, decayPreferenceWeights } from "../core/scoring.js";
@@ -148,6 +151,70 @@ function doStatus(jobId: string, status: ApplicationStatus, note?: string) {
   return { ok: true };
 }
 
+function apiConfig() {
+  const c = loadConfig();
+  return {
+    auto_search: c.auto_search,
+    auto_search_hour: c.auto_search_hour,
+    auto_search_days: c.auto_search_days,
+    searches: c.searches,
+    policy: {
+      generate_min_score: c.policy.generate_min_score,
+      full_auto_min_score: c.policy.full_auto_min_score,
+    },
+    submission: {
+      default_mode: c.submission.default_mode,
+      i_accept_ban_risk: c.submission.i_accept_ban_risk,
+    },
+  };
+}
+
+const ConfigPatch = z.object({
+  auto_search: z.boolean(),
+  auto_search_hour: z.number().int().min(0).max(23),
+  auto_search_days: z.array(z.number().int().min(0).max(6)),
+  searches: z.array(SearchSpec),
+  policy: z.object({
+    generate_min_score: z.number().min(0).max(100),
+    full_auto_min_score: z.number().min(0).max(100),
+  }),
+  submission: z.object({
+    default_mode: z.enum(["review_first", "approve_batch", "full_auto"]),
+  }),
+});
+
+function doConfigSave(body: unknown) {
+  const p = ConfigPatch.parse(body);
+  // parseDocument preserva os comentários do config.yaml fora das chaves editadas
+  const doc = parseDocument(readFileSync(CONFIG_PATH, "utf-8"));
+  doc.set("auto_search", p.auto_search ? "on" : "off");
+  doc.set("auto_search_hour", p.auto_search_hour);
+  doc.set("auto_search_days", p.auto_search_days);
+  doc.set(
+    "searches",
+    p.searches
+      .filter((s) => s.query.trim().length > 0)
+      .map((s) => ({
+        query: s.query.trim(),
+        sources: s.sources,
+        ...(s.location ? { location: s.location } : {}),
+        remote_only: s.remote_only,
+      }))
+  );
+  doc.setIn(["policy", "generate_min_score"], p.policy.generate_min_score);
+  doc.setIn(["policy", "full_auto_min_score"], p.policy.full_auto_min_score);
+  doc.setIn(["submission", "default_mode"], p.submission.default_mode);
+  writeFileSync(CONFIG_PATH, doc.toString(), "utf-8");
+
+  const config = loadConfig(); // revalida o YAML gravado
+  applySchedule(config);
+  return {
+    ok: true,
+    schedule: config.auto_search ? `busca automática: ${describeSchedule(config)}` : "busca automática desligada",
+    searches: config.searches.length,
+  };
+}
+
 async function doSearch(query?: string) {
   if (searchState.running) return { ok: false, error: "busca já em andamento" };
   searchState = { running: true, startedAt: nowIso(), lastResult: null };
@@ -204,6 +271,10 @@ const server = createServer(async (req, res) => {
     } else if (req.method === "POST" && url.pathname === "/api/status") {
       const { jobId, status, note } = await readBody(req);
       json(res, 200, doStatus(jobId, status, note));
+    } else if (req.method === "GET" && url.pathname === "/api/config") {
+      json(res, 200, apiConfig());
+    } else if (req.method === "POST" && url.pathname === "/api/config") {
+      json(res, 200, doConfigSave(await readBody(req)));
     } else if (req.method === "POST" && url.pathname === "/api/search") {
       const { query } = await readBody(req);
       json(res, 200, await doSearch(query));

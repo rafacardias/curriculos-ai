@@ -4,7 +4,7 @@ import { parse } from "yaml";
 import { z } from "zod";
 import { PROJECT_ROOT } from "../db/client.js";
 
-const SearchSpec = z.object({
+export const SearchSpec = z.object({
   query: z.string().default(""),
   sources: z.array(z.string()).default(["remotive", "remoteok", "wwr", "gupy"]),
   location: z.string().optional(),
@@ -14,6 +14,8 @@ const SearchSpec = z.object({
 const ConfigSchema = z.object({
   auto_search: z.union([z.boolean(), z.enum(["on", "off"])]).transform((v) => v === true || v === "on"),
   auto_search_hour: z.number().int().min(0).max(23).default(9),
+  // Dias da semana em que a busca automática roda (0=domingo … 6=sábado). Vazio/omitido = todos os dias.
+  auto_search_days: z.array(z.number().int().min(0).max(6)).default([0, 1, 2, 3, 4, 5, 6]),
   searches: z.array(SearchSpec).default([]),
   queue_threshold: z.number().default(40),
   scoring: z

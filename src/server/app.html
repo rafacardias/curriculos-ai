@@ -139,6 +139,26 @@
   th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
   thead th { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--bone-dim); }
   iframe { width: 100%; height: calc(100vh - 220px); border: 1px solid var(--line); background: #fff; }
+  /* ── config ───────────────────────────── */
+  .cfg { border: 1px solid var(--line); background: var(--ink-2); padding: 18px; margin-bottom: 16px; }
+  .cfg h4 { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--signal); margin-bottom: 14px; }
+  .cfg .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .cfg label { font-family: var(--mono); font-size: 11px; color: var(--bone-dim); }
+  .cfg input[type="text"], .cfg input[type="number"], .cfg select {
+    background: var(--ink-3); border: 1px solid var(--line); color: var(--bone);
+    font-family: var(--mono); font-size: 12px; padding: 8px 10px; outline: none;
+  }
+  .cfg input:focus, .cfg select:focus { border-color: var(--signal); }
+  .chip {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    padding: 6px 10px; border: 1px solid var(--line); cursor: pointer; color: var(--bone-dim); user-select: none;
+    transition: all .12s;
+  }
+  .chip:hover { border-color: var(--bone-dim); }
+  .chip.on { border-color: var(--signal); color: var(--signal); background: var(--signal-soft); }
+  .srow { display: grid; grid-template-columns: 1fr auto; gap: 10px; border-bottom: 1px dashed var(--line); padding: 12px 0; align-items: start; }
+  .srow:last-child { border-bottom: none; }
+
   .toast {
     position: fixed; bottom: 22px; right: 22px; background: var(--signal); color: var(--ink);
     font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 12px 18px;
@@ -155,6 +175,7 @@
   <button data-tab="apps">Aplicações</button>
   <button data-tab="empresas">Empresas</button>
   <button data-tab="painel">Painel</button>
+  <button data-tab="config">Config</button>
   <button data-tab="claude">Claude</button>
 </nav>
 
@@ -181,6 +202,8 @@
   </section>
 
   <section id="painel"><iframe src="/dashboard" id="dashframe"></iframe></section>
+
+  <section id="config"><div id="configbody"></div></section>
 
   <section id="claude">
     <div style="display:flex;gap:10px;margin-bottom:12px;align-items:center">
@@ -211,6 +234,7 @@ document.querySelectorAll("nav button").forEach((b) =>
     b.classList.add("on");
     $("#" + b.dataset.tab).classList.add("on");
     if (b.dataset.tab === "painel") $("#dashframe").src = "/dashboard?t=" + Date.now();
+    if (b.dataset.tab === "config") loadConfig();
     if (b.dataset.tab === "claude") initTerm();
   })
 );
@@ -247,8 +271,13 @@ $("#launchClaude")?.addEventListener("click", () => {
 
 $("#clock").textContent = new Date().toLocaleString("pt-BR");
 
+let queueSig = null;
 async function loadSummary() {
   const s = await api("/api/summary");
+  // re-busca a lista da fila quando contagem/última busca mudam (senão a lista fica desatualizada)
+  const sig = `${s.queued}|${s.lastRun?.at ?? ""}`;
+  if (queueSig !== null && sig !== queueSig) loadQueue();
+  queueSig = sig;
   const items = [
     ["Na fila", s.queued, s.queued > 0],
     ["Kits prontos", s.kits, s.kits > 0],
@@ -358,6 +387,121 @@ $("#go").addEventListener("click", async () => {
 $("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#go").click(); });
 
 function esc(s) { return String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c])); }
+
+/* ── aba config ────────────────────────── */
+const SOURCES = ["remotive", "remoteok", "wwr", "gupy", "linkedin"];
+const DAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+let CFG = null;
+
+async function loadConfig() {
+  CFG = await api("/api/config");
+  renderConfig();
+}
+
+function srowHtml(s, i) {
+  return `<div class="srow" data-i="${i}">
+    <div>
+      <div class="row">
+        <input type="text" class="sq" value="${esc(s.query)}" placeholder="query — ex.: scrum master" style="flex:1;min-width:220px">
+        <input type="text" class="sl" value="${esc(s.location || "")}" placeholder="location (opcional)" style="width:150px">
+        <span class="chip sr ${s.remote_only ? "on" : ""}">remote only</span>
+      </div>
+      <div class="row" style="margin-bottom:0">
+        ${SOURCES.map((src) => `<span class="chip ss ${s.sources.includes(src) ? "on" : ""}" data-src="${src}">${src}</span>`).join("")}
+      </div>
+    </div>
+    <button class="btn ghost sdel" title="remover busca">×</button>
+  </div>`;
+}
+
+function renderConfig() {
+  const c = CFG;
+  $("#configbody").innerHTML = `
+    <div class="cfg">
+      <h4>Busca automática</h4>
+      <div class="row">
+        <span class="chip ${c.auto_search ? "on" : ""}" id="cfgAuto">${c.auto_search ? "ligada" : "desligada"}</span>
+        <label>às</label>
+        <select id="cfgHour">${Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${h === c.auto_search_hour ? "selected" : ""}>${String(h).padStart(2, "0")}:00</option>`).join("")}</select>
+        <label>nos dias</label>
+        ${DAYS.map((d, i) => `<span class="chip day ${c.auto_search_days.includes(i) ? "on" : ""}" data-day="${i}">${d}</span>`).join("")}
+      </div>
+      <div class="sub">roda sozinha nos dias/hora marcados, pontua e enfileira; você recebe notificação do macOS</div>
+    </div>
+    <div class="cfg">
+      <h4>Buscas configuradas</h4>
+      <div id="cfgSearches">${c.searches.map(srowHtml).join("") || '<div class="sub">nenhuma busca — adicione abaixo</div>'}</div>
+      <div class="row" style="margin:12px 0 0"><button class="btn" id="cfgAdd">+ adicionar busca</button></div>
+    </div>
+    <div class="cfg">
+      <h4>Autonomia</h4>
+      <div class="row">
+        <label>modo de submissão default</label>
+        <select id="cfgMode">${["review_first", "approve_batch", "full_auto"].map((m) => `<option ${m === c.submission.default_mode ? "selected" : ""}>${m}</option>`).join("")}</select>
+        <label>score mín. p/ gerar kit</label>
+        <input type="number" id="cfgGenMin" value="${c.policy.generate_min_score}" min="0" max="100" style="width:72px">
+        <label>score mín. p/ full_auto</label>
+        <input type="number" id="cfgAutoMin" value="${c.policy.full_auto_min_score}" min="0" max="100" style="width:72px">
+      </div>
+      <div class="sub">full_auto submete sozinho quando score ≥ mínimo; pergunta desconhecida no formulário sempre PAUSA (nunca chuta resposta). LinkedIn em full_auto continua bloqueado sem a flag i_accept_ban_risk no config.yaml.</div>
+    </div>
+    <div class="row" style="display:flex;gap:10px">
+      <button class="btn primary" id="cfgSave">salvar configuração</button>
+    </div>`;
+  bindConfig();
+}
+
+function syncCfg() {
+  CFG.auto_search = $("#cfgAuto").classList.contains("on");
+  CFG.auto_search_hour = parseInt($("#cfgHour").value, 10);
+  CFG.auto_search_days = [...document.querySelectorAll(".chip.day.on")].map((x) => +x.dataset.day);
+  CFG.submission.default_mode = $("#cfgMode").value;
+  CFG.policy.generate_min_score = parseFloat($("#cfgGenMin").value) || 60;
+  CFG.policy.full_auto_min_score = parseFloat($("#cfgAutoMin").value) || 80;
+  CFG.searches = [...document.querySelectorAll("#cfgSearches .srow")].map((r) => ({
+    query: r.querySelector(".sq").value,
+    location: r.querySelector(".sl").value.trim() || undefined,
+    remote_only: r.querySelector(".sr").classList.contains("on"),
+    sources: [...r.querySelectorAll(".ss.on")].map((x) => x.dataset.src),
+  }));
+}
+
+function bindConfig() {
+  $("#configbody").querySelectorAll(".chip").forEach((ch) =>
+    ch.addEventListener("click", () => {
+      ch.classList.toggle("on");
+      if (ch.id === "cfgAuto") ch.textContent = ch.classList.contains("on") ? "ligada" : "desligada";
+    })
+  );
+  $("#cfgAdd").addEventListener("click", () => {
+    syncCfg();
+    CFG.searches.push({ query: "", sources: ["remotive", "remoteok", "wwr", "gupy"], remote_only: false });
+    renderConfig();
+  });
+  $("#configbody").querySelectorAll(".sdel").forEach((b) =>
+    b.addEventListener("click", () => {
+      syncCfg();
+      CFG.searches.splice(+b.closest(".srow").dataset.i, 1);
+      renderConfig();
+    })
+  );
+  $("#cfgSave").addEventListener("click", async () => {
+    syncCfg();
+    const body = {
+      auto_search: CFG.auto_search,
+      auto_search_hour: CFG.auto_search_hour,
+      auto_search_days: CFG.auto_search_days,
+      searches: CFG.searches.filter((s) => s.query.trim() && s.sources.length),
+      policy: CFG.policy,
+      submission: { default_mode: CFG.submission.default_mode },
+    };
+    try {
+      const r = await post("/api/config", body);
+      if (r.ok) toast(`salvo — ${r.schedule} · ${r.searches} buscas`);
+      else toast("erro: " + (r.error || "config inválida"));
+    } catch { toast("erro ao salvar"); }
+  });
+}
 
 function loadAll() { loadSummary(); loadQueue(); loadBoard(); loadCompanies(); }
 loadAll();

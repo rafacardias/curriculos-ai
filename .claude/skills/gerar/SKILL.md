@@ -8,9 +8,10 @@ description: Gera o kit completo de aplicação para uma vaga — currículo ATS
 ## Fluxo
 
 1. `npx tsx src/cli/kit.ts prepare <job_id>` — retorna o bundle JSON: vaga + JD, keywords ranqueadas, trilhas, perfil mestre completo (fatos com ids), candidate_facts disponíveis e respostas de triagem já conhecidas.
-2. Redija os 4 arquivos no `kit_dir` indicado no bundle (regras abaixo).
-3. `npx tsx src/cli/kit.ts finalize <job_id>` — roda truthcheck (falha se houver citação inválida), gera coverage report e renderiza os PDFs.
-4. Apresente ao usuário: cobertura %, keywords não cobertas (com a nota honesta abaixo), trilha usada, e ofereça iterar ou seguir para `/submeter`.
+2. **Resolver a URL de aplicação direta** (só se a vaga veio de board agregador — `source` remoteok/remotive/wwr — ou se a URL atual é uma página de redirect/paywall do board): localize a vaga na página de carreiras da própria empresa (WebSearch/WebFetch: "<empresa> careers <título>"; priorize greenhouse/lever/workday/gupy). Se achar, grave: `npx tsx src/cli/job-url.ts <job_id> <url_direta>` — isso destrava o submission adapter certo. Se não achar, siga com a URL do board (a aplicação por lá é gratuita; paywalls como o "premium" do RemoteOK sempre têm caminho de skip — NUNCA pagar).
+3. Redija os 4 arquivos no `kit_dir` indicado no bundle (regras abaixo).
+4. `npx tsx src/cli/kit.ts finalize <job_id>` — roda truthcheck (falha se houver citação inválida), gera coverage report e renderiza os PDFs.
+5. Apresente ao usuário: cobertura %, keywords não cobertas (com a nota honesta abaixo), trilha usada, e ofereça iterar ou seguir para `/submeter`.
 
 ## REGRA Nº 1 — VERACIDADE (inegociável)
 
