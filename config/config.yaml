@@ -1,15 +1,48 @@
 # Curriculos — configuração do operador
 # Edite à vontade; tudo aqui é lido a cada execução (sem cache).
 
-auto_search: off
+auto_search: on
 auto_search_hour: 9       # hora local do dia para a busca automática
 
 # Buscas rodadas pelo /buscar (e pelo modo automático)
+# Estratégia: queries PT → Gupy/LinkedIn BR; queries EN → boards remotos internacionais.
+# LinkedIn (guest) fica só nas 3 apostas principais para não estressar o endpoint.
 searches:
-  - query: ""             # preencha após o /perfil ingest — ex.: "marketing manager"
-    sources: [remotive, remoteok, wwr, gupy]
+  # ── QA (trilha qa) ──
+  - query: "QA"
+    sources: [gupy]
     location: "Brazil"
-    remote_only: false
+  - query: "quality assurance junior"
+    sources: [remotive, remoteok, wwr]
+    remote_only: true
+
+  # ── Product Manager / Product Owner (trilha product) ──
+  - query: "Product Manager"
+    sources: [gupy, linkedin]
+    location: "Brazil"
+  - query: "Product Owner"
+    sources: [gupy]
+    location: "Brazil"
+  - query: "associate product manager"
+    sources: [remotive, remoteok, wwr]
+    remote_only: true
+
+  # ── Scrum Master (trilha product) ──
+  - query: "Scrum Master"
+    sources: [gupy, linkedin]
+    location: "Brazil"
+  - query: "scrum master"
+    sources: [remotive, remoteok, wwr]
+    remote_only: true
+
+  # ── AI Builder / Vibe Coder / Automação (trilha ai-builder) ──
+  - query: "n8n"
+    sources: [gupy, remotive, remoteok, wwr]
+  - query: "AI automation"
+    sources: [remotive, remoteok, wwr]
+    remote_only: true
+  - query: "vibe coder"
+    sources: [linkedin, remotive, remoteok]
 
 # Threshold para uma vaga entrar na fila (score 0-100)
 queue_threshold: 40
