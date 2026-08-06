@@ -27,9 +27,15 @@ import { bumpCompanyStat } from "../db/repo/companies.js";
 import { ulid } from "ulid";
 import { termsPresent } from "../core/keywords.js";
 import type { ApplicationStatus } from "../core/types.js";
+import { isAuthorizedUpgrade, newSessionToken } from "./ws-auth.js";
 
 const PORT = 4780;
 const APP_HTML = join(PROJECT_ROOT, "src", "server", "app.html");
+
+// Token de sessão do terminal: novo a cada boot, entregue só ao HTML que nós
+// servimos. Reiniciar o serviço invalida abas antigas — o cliente detecta o
+// código de fechamento e recarrega sozinho para pegar o token novo.
+const SESSION_TOKEN = newSessionToken();
 
 let searchState: { running: boolean; startedAt: string | null; lastResult: string | null } = {
   running: false,
@@ -446,7 +452,7 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === "GET" && url.pathname === "/") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(readFileSync(APP_HTML, "utf-8"));
+      res.end(readFileSync(APP_HTML, "utf-8").replaceAll("__WS_TOKEN__", SESSION_TOKEN));
     } else if (req.method === "GET" && url.pathname === "/dashboard") {
       buildDashboard();
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -500,9 +506,17 @@ const server = createServer(async (req, res) => {
 
 // Terminal embedado (aba Claude): PTY real rodando zsh no diretório do projeto.
 // O `claude` CLI dentro dele usa a assinatura logada — zero custo de API.
-// Bind exclusivo em 127.0.0.1: nunca expor um terminal na rede.
+//
+// Bind em 127.0.0.1 não basta: conexões WebSocket não passam pela política de
+// mesma origem, então o upgrade exige Origin na allowlist E token de sessão.
+// A verificação vem antes do spawn — conexão recusada não cria PTY nenhum.
 const wss = new WebSocketServer({ server, path: "/term" });
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, req) => {
+  const verdict = isAuthorizedUpgrade(req, SESSION_TOKEN, PORT);
+  if (!verdict.ok) {
+    ws.close(verdict.code, verdict.reason);
+    return;
+  }
   const shell = pty.spawn(process.env.SHELL ?? "/bin/zsh", ["-l"], {
     name: "xterm-256color",
     cols: 120,

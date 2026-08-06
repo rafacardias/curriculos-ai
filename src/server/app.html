@@ -291,6 +291,9 @@ document.querySelectorAll("nav button").forEach((b) =>
 );
 
 /* ── terminal embedado (aba Claude) ────── */
+// Injetado pelo servidor a cada boot (src/server/index.ts). Autoriza o upgrade
+// do /term junto com a checagem de Origin — WebSocket não passa por CORS.
+const WS_TOKEN = "__WS_TOKEN__";
 let term = null, termWs = null, fit = null;
 function initTerm() {
   if (term) { fit && fit.fit(); term.focus(); return; }
@@ -307,12 +310,26 @@ function initTerm() {
   term.loadAddon(fit);
   term.open($("#term"));
   fit.fit();
-  termWs = new WebSocket(`ws://${location.host}/term`);
+  termWs = new WebSocket(`ws://${location.host}/term?token=${encodeURIComponent(WS_TOKEN)}`);
   termWs.onmessage = (e) => term.write(e.data);
-  termWs.onclose = () => term.write("\r\n\x1b[38;5;208m[sessão encerrada — recarregue a página para abrir outra]\x1b[0m\r\n");
+  termWs.onclose = (e) => {
+    // 4401/4403: o token desta aba não vale mais — o serviço reiniciou e gerou
+    // outro. Uma recarga pega o token novo. O guard evita loop se a recarga
+    // também for recusada (aí sim mostramos o aviso em vez de ficar rodando).
+    if (e.code === 4401 || e.code === 4403) {
+      if (!sessionStorage.getItem("termReload")) {
+        sessionStorage.setItem("termReload", "1");
+        location.reload();
+        return;
+      }
+      term.write("\r\n\x1b[38;5;208m[terminal não autorizado — abra a UI por http://localhost:4780]\x1b[0m\r\n");
+      return;
+    }
+    term.write("\r\n\x1b[38;5;208m[sessão encerrada — recarregue a página para abrir outra]\x1b[0m\r\n");
+  };
   term.onData((d) => termWs.readyState === 1 && termWs.send(JSON.stringify({ t: "i", d })));
   const sendSize = () => termWs.readyState === 1 && termWs.send(JSON.stringify({ t: "r", cols: term.cols, rows: term.rows }));
-  termWs.onopen = () => { sendSize(); term.focus(); };
+  termWs.onopen = () => { sessionStorage.removeItem("termReload"); sendSize(); term.focus(); };
   new ResizeObserver(() => { fit.fit(); sendSize(); }).observe($("#term"));
 }
 $("#launchClaude")?.addEventListener("click", () => {
