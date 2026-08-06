@@ -32,10 +32,15 @@ CODE=$?
 echo "$OUT" | tail -25
 AFTER="$(snapshot_db)"
 
-[ "$CODE" -eq 0 ]                 || fail "G3: npm test saiu com código $CODE"
-echo "$OUT" | grep -qE 'fail 0$'    || fail "G3: há teste falhando"
-echo "$OUT" | grep -qE 'skipped 0$' || fail "G3: há teste pulado — o PDF não pode fechar o portão por omissão"
-[ "$BEFORE" = "$AFTER" ]          || fail "G3: o banco REAL foi modificado pela suíte"
+# O reporter do node --test colore a saída: a linha do sumário termina em ESC[39m,
+# não no dígito. Sem remover o ANSI, 'fail 0$' NUNCA casa e o portão acusa falha
+# com a suíte verde — ou, pior, deixa 'skipped 0' passar sem nunca ter conferido.
+PLAIN="$(printf '%s' "$OUT" | sed -E $'s/\x1b\\[[0-9;]*m//g')"
+
+[ "$CODE" -eq 0 ]                      || fail "G3: npm test saiu com código $CODE"
+grep -qE '^ℹ fail 0$'    <<< "$PLAIN"  || fail "G3: há teste falhando"
+grep -qE '^ℹ skipped 0$' <<< "$PLAIN"  || fail "G3: há teste pulado — o PDF não pode fechar o portão por omissão"
+[ "$BEFORE" = "$AFTER" ]               || fail "G3: o banco REAL foi modificado pela suíte"
 
 echo "▸ G4 — checkpoint recuperável"
 git tag -l v0.1.0-pre-premium | grep -q . || fail "G4: tag v0.1.0-pre-premium ausente"

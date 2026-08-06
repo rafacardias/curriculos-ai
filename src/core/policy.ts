@@ -15,8 +15,20 @@ export interface PolicyDecision {
  * Policy engine: decide se vale gerar kit e em qual modo submeter,
  * com base em score, fonte, cooldown de empresa e cap semanal por trilha.
  * Toda decisão é logada em events (type=policy_decision).
+ *
+ * `opts.log = false` desliga o registro em events. Existe para a repontuação em
+ * massa (`rescore`), que consulta a política de centenas de vagas de uma vez:
+ * gravar um evento por vaga inundaria a auditoria com decisões que não foram
+ * tomadas em resposta a nada — e no `--dry-run` seriam escrita pura num comando
+ * que promete não escrever.
  */
-export function decidePolicy(config: AppConfig, job: JobRow, score: number, trackHint: string | null): PolicyDecision {
+export function decidePolicy(
+  config: AppConfig,
+  job: JobRow,
+  score: number,
+  trackHint: string | null,
+  opts: { log?: boolean } = {}
+): PolicyDecision {
   const db = getDb();
   const p = config.policy;
   let decision: PolicyDecision;
@@ -85,9 +97,11 @@ export function decidePolicy(config: AppConfig, job: JobRow, score: number, trac
     };
   }
 
-  db.prepare(
-    "INSERT INTO events (id, entity, entity_id, type, payload, created_at) VALUES (?, 'policy', ?, 'policy_decision', ?, ?)"
-  ).run(ulid(), job.id, JSON.stringify({ score, trackHint, ...decision }), nowIso());
+  if (opts.log !== false) {
+    db.prepare(
+      "INSERT INTO events (id, entity, entity_id, type, payload, created_at) VALUES (?, 'policy', ?, 'policy_decision', ?, ?)"
+    ).run(ulid(), job.id, JSON.stringify({ score, trackHint, ...decision }), nowIso());
+  }
 
   return decision;
 }

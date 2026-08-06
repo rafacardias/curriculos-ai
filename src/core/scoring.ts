@@ -2,7 +2,14 @@ import { getDb } from "../db/client.js";
 import { termsPresent, tokenize } from "./keywords.js";
 import { detectRequiredYears, normalize } from "./dedup.js";
 import { decidePolicy } from "./policy.js";
-import { getJob, updateJobScore, type JobRow } from "../db/repo/jobs.js";
+import {
+  getJob,
+  listRescorableJobs,
+  updateJobRescore,
+  updateJobScore,
+  type JobRow,
+} from "../db/repo/jobs.js";
+import { nowIso } from "../db/client.js";
 import type { AppConfig } from "./config.js";
 
 export interface ScoredJob {
@@ -103,19 +110,7 @@ export function scoreNewJobs(config: AppConfig, jobIds: string[]): ScoredJob[] {
     if (!job) continue;
     const { score, detail, trackHint } = scoreJob(config, job);
     const policy = decidePolicy(config, job, score, trackHint);
-    // filtros duros: senioridade excluída ou anos exigidos acima do teto → fora da fila
-    let filtered: string | null = null;
-    const badKeyword = titleKeywordHit(job.title, config.filters.exclude_title_keywords);
-    if (job.seniority && config.filters.exclude_seniority.includes(job.seniority)) {
-      filtered = `filtrado: senioridade ${job.seniority}`;
-    } else if (badKeyword) {
-      filtered = `filtrado: título contém "${badKeyword}"`;
-    } else if (config.filters.max_years_required != null) {
-      const years = detectRequiredYears(`${job.title}\n${job.description ?? ""}`);
-      if (years != null && years > config.filters.max_years_required) {
-        filtered = `filtrado: exige ${years}+ anos de experiência`;
-      }
-    }
+    const filtered = hardFilterReason(config, job);
     const status: "new" | "queued" = !filtered && score >= config.queue_threshold ? "queued" : "new";
     updateJobScore(id, score, detail, trackHint, filtered ?? policy.action, status);
     results.push({
@@ -130,6 +125,133 @@ export function scoreNewJobs(config: AppConfig, jobIds: string[]): ScoredJob[] {
     });
   }
   return results.sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Filtros duros do config: senioridade excluída, palavra barrada no título ou
+ * anos exigidos acima do teto. Retorna o motivo, ou null se a vaga passa.
+ *
+ * Vive numa função só porque DOIS caminhos precisam dela — `scoreNewJobs` (na
+ * coleta) e `rescoreAll` (na repontuação do acervo). Duplicar a cascata faria os
+ * dois divergirem silenciosamente no dia em que um filtro novo entrasse.
+ */
+export function hardFilterReason(config: AppConfig, job: JobRow): string | null {
+  if (job.seniority && config.filters.exclude_seniority.includes(job.seniority)) {
+    return `filtrado: senioridade ${job.seniority}`;
+  }
+  const badKeyword = titleKeywordHit(job.title, config.filters.exclude_title_keywords);
+  if (badKeyword) return `filtrado: título contém "${badKeyword}"`;
+  if (config.filters.max_years_required != null) {
+    const years = detectRequiredYears(`${job.title}\n${job.description ?? ""}`);
+    if (years != null && years > config.filters.max_years_required) {
+      return `filtrado: exige ${years}+ anos de experiência`;
+    }
+  }
+  return null;
+}
+
+export interface RescoreChange {
+  jobId: string;
+  title: string;
+  company: string;
+  source: string;
+  location: string | null;
+  scoreBefore: number | null;
+  scoreAfter: number;
+  delta: number;
+  statusBefore: string;
+  statusAfter: string;
+  detailBefore: Record<string, number> | null;
+  detailAfter: Record<string, number>;
+  policyAction: string;
+  trackHint: string | null;
+}
+
+export interface RescorePlan {
+  scanned: number;
+  /** Todas as vagas repontuadas, mudando ou não. */
+  all: RescoreChange[];
+  /** Só as que mudam score ou status. */
+  changed: RescoreChange[];
+  entering: RescoreChange[]; // new → queued
+  leaving: RescoreChange[]; // queued → new
+  committed: boolean;
+}
+
+/**
+ * Repontua o acervo já coletado com o scorer e o config ATUAIS.
+ *
+ * Existe porque o score é congelado no insert: sem isto, qualquer melhoria no
+ * scorer só alcançaria vagas futuras, e a fila que o operador abre continuaria
+ * ordenada pela régua antiga.
+ *
+ * Escreve APENAS com `commit: true`. O default é planejar e não tocar em nada.
+ *
+ * Regra de transição: o score é recalculado para `new`, `queued` e `rejected`,
+ * mas a transição só ocorre entre `new` ↔ `queued`. Uma vaga `rejected` foi uma
+ * DECISÃO do operador — repontuá-la para `queued` desfaria essa decisão pelas
+ * costas dele. O score dela é atualizado (para a análise ficar correta), o
+ * status não.
+ */
+export function rescoreAll(config: AppConfig, opts: { commit?: boolean } = {}): RescorePlan {
+  const commit = opts.commit === true;
+  const at = nowIso();
+  const jobs = listRescorableJobs();
+  const all: RescoreChange[] = [];
+
+  for (const job of jobs) {
+    const { score, detail, trackHint } = scoreJob(config, job);
+    // log: false — repontuar 375 vagas não são 375 decisões de política tomadas.
+    const policy = decidePolicy(config, job, score, trackHint, { log: false });
+    const filtered = hardFilterReason(config, job);
+    const statusAfter =
+      job.status === "rejected"
+        ? "rejected"
+        : !filtered && score >= config.queue_threshold
+          ? "queued"
+          : "new";
+    const policyAction = filtered ?? policy.action;
+
+    all.push({
+      jobId: job.id,
+      title: job.title,
+      company: job.company_name,
+      source: job.source,
+      location: job.location,
+      scoreBefore: job.score,
+      scoreAfter: score,
+      delta: round2(score - (job.score ?? 0)),
+      statusBefore: job.status,
+      statusAfter,
+      detailBefore: parseDetail(job.score_detail),
+      detailAfter: detail,
+      policyAction,
+      trackHint,
+    });
+
+    if (commit) {
+      updateJobRescore(job.id, score, detail, trackHint, policyAction, statusAfter, at);
+    }
+  }
+
+  const changed = all.filter((c) => c.scoreBefore !== c.scoreAfter || c.statusBefore !== c.statusAfter);
+  return {
+    scanned: jobs.length,
+    all,
+    changed,
+    entering: all.filter((c) => c.statusBefore !== "queued" && c.statusAfter === "queued"),
+    leaving: all.filter((c) => c.statusBefore === "queued" && c.statusAfter !== "queued"),
+    committed: commit,
+  };
+}
+
+function parseDetail(raw: string | null): Record<string, number> | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Record<string, number>;
+  } catch {
+    return null; // score_detail corrompido não pode derrubar a repontuação inteira
+  }
 }
 
 function round2(n: number): number {

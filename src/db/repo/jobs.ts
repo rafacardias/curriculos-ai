@@ -31,6 +31,9 @@ export interface JobRow {
   track_hint: string | null;
   policy_action: string | null;
   status: string;
+  /** Score original, do momento do insert. Escrito uma única vez, na 1ª repontuação. */
+  score_previous: number | null;
+  score_rescored_at: string | null;
 }
 
 const SNAPSHOT_DIR = join(PROJECT_ROOT, "output", "_jd-snapshots");
@@ -81,6 +84,8 @@ export function insertJob(raw: RawJob): JobRow | null {
     track_hint: null,
     policy_action: null,
     status: "new",
+    score_previous: null,
+    score_rescored_at: null,
   };
 
   db.prepare(
@@ -125,4 +130,55 @@ export function listQueuedJobs(limit = 20): JobRow[] {
   return getDb()
     .prepare("SELECT * FROM jobs WHERE status = 'queued' ORDER BY score DESC LIMIT ?")
     .all(limit) as unknown as JobRow[];
+}
+
+/**
+ * Vagas elegíveis para repontuação em massa.
+ *
+ * Duas exclusões deliberadas:
+ *  - status `expired`/`applied_elsewhere`: já saíram do funil, repontuar é ruído;
+ *  - qualquer vaga com linha em `applications`: repontuar uma vaga onde já houve
+ *    kit ou candidatura corromperia o histórico. O filtro é por `applications`,
+ *    não por `jobs.status`, porque `kit_ready`/`applied` vivem lá — em `jobs` a
+ *    vaga continua marcada como `queued` e passaria batido.
+ */
+export function listRescorableJobs(): JobRow[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM jobs
+        WHERE status IN ('new','queued','rejected')
+          AND NOT EXISTS (SELECT 1 FROM applications a WHERE a.job_id = jobs.id)
+        ORDER BY id`
+    )
+    .all() as unknown as JobRow[];
+}
+
+/**
+ * Grava o resultado de uma repontuação. `score_previous` só é escrito quando
+ * ainda é NULL: ele guarda o score do momento do insert, não o da rodada
+ * anterior — é o marco zero da baseline, e por isso rodar `rescore` duas vezes
+ * produz exatamente o mesmo estado.
+ */
+export function updateJobRescore(
+  id: string,
+  score: number,
+  detail: Record<string, number>,
+  trackHint: string | null,
+  policyAction: string,
+  status: string,
+  at: string
+): void {
+  getDb()
+    .prepare(
+      `UPDATE jobs
+          SET score_previous    = COALESCE(score_previous, score),
+              score             = ?,
+              score_detail      = ?,
+              track_hint        = ?,
+              policy_action     = ?,
+              status            = ?,
+              score_rescored_at = ?
+        WHERE id = ?`
+    )
+    .run(score, JSON.stringify(detail), trackHint, policyAction, status, at, id);
 }
