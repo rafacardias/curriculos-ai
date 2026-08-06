@@ -20,11 +20,27 @@ export function truthcheck(resumeMd: string, profile: MasterProfile): Truthcheck
   const invalid = [...new Set(citations.filter((id) => !validIds.has(id)))];
 
   // Bullets (linhas começando com "- ") na seção de experiências devem citar.
+  //
+  // A seção é delimitada por NÍVEL de heading, não pela última linha de heading
+  // vista: o formato canônico do currículo (ver .claude/skills/gerar/SKILL.md)
+  // é "## Experiência Profissional" seguido de "### <Cargo> — <Empresa>", e os
+  // bullets ficam sob o subheading. Comparar só o texto do último heading fazia
+  // a seção desligar no "### Cargo" e os bullets reais escapavam da checagem.
+  // Regra: heading MAIS PROFUNDO que o da seção não a encerra; heading de nível
+  // igual ou superior encerra.
   const uncitedBullets: string[] = [];
   let inExperience = false;
+  let sectionLevel = 0;
   for (const line of resumeMd.split("\n")) {
-    if (/^#{1,3}\s/.test(line)) {
-      inExperience = /experi[êe]ncia|experience/i.test(line);
+    const heading = /^(#{1,6})\s/.exec(line);
+    if (heading) {
+      const level = heading[1]!.length;
+      if (/experi[êe]ncia|experience/i.test(line)) {
+        inExperience = true;
+        sectionLevel = level;
+      } else if (inExperience && level <= sectionLevel) {
+        inExperience = false;
+      }
       continue;
     }
     if (inExperience && /^\s*[-*]\s+/.test(line) && !CITATION_RE.test(line)) {

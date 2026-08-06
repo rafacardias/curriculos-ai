@@ -76,15 +76,15 @@ describe("kit.ts finalize — exit code do guardrail de veracidade", () => {
     assert.match(r.stderr, /bullet sem citação/);
   });
 
-  it("BUG-005 CONGELADO: bullet sem citação sob '### Cargo — Empresa' NÃO falha", () => {
-    // A máquina de estado do truthcheck desliga em qualquer heading que não case
-    // /experi[êe]ncia|experience/ — e "### <Cargo> — <Empresa>" é exatamente o
-    // formato que a skill /gerar prescreve (SKILL.md:52). No formato canônico do
-    // sistema, a metade "bullet sem citação" do guardrail nunca dispara.
-    // Quando for corrigido, ESTE TESTE DEVE FALHAR.
+  it("BUG-005 CORRIGIDO: bullet sem citação sob '### Cargo — Empresa' → exit 2", () => {
+    // Este é o formato que a skill /gerar realmente produz (SKILL.md:52). Antes da
+    // correção o guardrail não olhava esses bullets e o PDF saía normalmente.
     useResume("resume.uncited-bullet.md");
     const r = runCli("src/cli/kit.ts", ["finalize", jobId]);
-    assert.notEqual(r.status, 2, "se deu 2, o BUG-005 foi corrigido — inverta o teste");
+
+    assert.equal(r.status, 2, `esperava exit 2, veio ${r.status}. stderr: ${r.stderr}`);
+    assert.match(r.stderr, /bullet sem citação/);
+    assert.equal(existsSync(join(kitDir, "resume.pdf")), false, "o PDF não pode sair");
   });
 
   it("resume.md ausente → exit 1, provando que o 2 é específico do truthcheck", () => {

@@ -35,19 +35,62 @@ describe("truthcheck", () => {
     assert.equal(r.uncitedBullets.length, 1);
   });
 
-  it("BUG-005 CONGELADO: sob '### Cargo — Empresa' o bullet sem citação PASSA", () => {
-    // A máquina de estado liga inExperience em headings que casam /experi[êe]ncia|experience/
-    // e DESLIGA em qualquer outro heading. Como a skill /gerar prescreve
-    // "### <Cargo> — <Empresa>" (SKILL.md:52), o subheading desliga a checagem e
-    // todos os bullets reais do currículo ficam sem verificação de citação.
-    //
-    // A metade "citação inexistente" continua funcionando — só a metade
-    // "bullet sem citação" está morta no formato canônico.
-    //
-    // Comportamento ATUAL congelado. Quando for corrigido, ESTE TESTE DEVE FALHAR.
+  it("BUG-005 CORRIGIDO: bullet sem citação sob '### Cargo — Empresa' é pego", () => {
+    // Era o buraco: o subheading de cargo desligava a checagem e todos os bullets
+    // reais do currículo escapavam. Agora a seção é delimitada por nível de heading.
     const r = truthcheck(fixture("resume.uncited-bullet.md"), profile);
-    assert.equal(r.ok, true, "se isto falhou, o BUG-005 foi corrigido — inverta o teste");
-    assert.deepEqual(r.uncitedBullets, []);
+    assert.equal(r.ok, false);
+    assert.equal(r.uncitedBullets.length, 1);
+    assert.match(r.uncitedBullets[0]!, /reescrever o pipeline de CI/);
+  });
+
+  it("BUG-005: no formato EXATO que a skill /gerar prescreve, o bullet sem lastro falha", () => {
+    // Reproduz .claude/skills/gerar/SKILL.md:51-54 literalmente — é o formato que
+    // o sistema realmente produz, e era justamente o que passava batido.
+    const md = [
+      "## Experiência Profissional",
+      "### Analista de QA — ACME Software",
+      "2023-01 – 2025-06",
+      "",
+      "- Estruturei a suíte de regressão do checkout [exp:exp-acme-qa.f1]",
+      "- Liderei um time de 8 pessoas e dobrei a receita da unidade",
+      "",
+      "### Analista de Suporte Técnico — Globex",
+      "2021-03 – 2022-12",
+      "",
+      "- Atendi 120 chamados por mês [exp:exp-globex-suporte.f1]",
+      "",
+    ].join("\n");
+
+    const r = truthcheck(md, profile);
+    assert.equal(r.ok, false, "bullet inventado sem citação tem que reprovar");
+    assert.equal(r.uncitedBullets.length, 1);
+    assert.match(r.uncitedBullets[0]!, /Liderei um time de 8 pessoas/);
+  });
+
+  it("a seção de experiência termina no próximo heading de mesmo nível", () => {
+    const md = [
+      "## Experiência Profissional",
+      "### Analista de QA — ACME",
+      "- com citação [exp:exp-acme-qa.f1]",
+      "## Skills",
+      "- Playwright",
+      "- SQL",
+      "",
+    ].join("\n");
+    assert.deepEqual(truthcheck(md, profile).uncitedBullets, [], "bullets de Skills não exigem citação");
+  });
+
+  it("heading de nível superior também encerra a seção", () => {
+    const md = [
+      "## Experiência Profissional",
+      "### Cargo — Empresa",
+      "- citado [exp:exp-acme-qa.f1]",
+      "# Outro Documento",
+      "- solto sem citação",
+      "",
+    ].join("\n");
+    assert.deepEqual(truthcheck(md, profile).uncitedBullets, []);
   });
 
   it("aceita tanto o id da experiência quanto o id do fato", () => {
