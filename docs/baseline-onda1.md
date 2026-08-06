@@ -396,3 +396,87 @@ Com `keyword_overlap` em 0.65 e `preference` em 0, o piso do fallback morto caiu
 trilha no banco ainda ganha 19.5 pontos de aderência que não existem), mas parou de encher a
 fila sozinho. **A margem é de 0.5 ponto:** baixar `queue_threshold` para 39 na calibração do
 item 1.6 ressuscita o BUG-002 inteiro. Congelado em `tests/unit/scoring.test.ts`.
+
+---
+
+# Adendo 4 — 1.3 (BUG-006) medido e 1.6 calibrado (2026-08-06)
+
+## 1.3 — o componente moveu, a fila não
+
+`location_fit` médio por fonte, de 15:
+
+| Fonte | Antes | Depois | n |
+|---|---:|---:|---:|
+| gupy | 8.81 | **10.30** | 180 |
+| linkedin | 13.99 | 11.90 | 74 |
+| remoteok | 15.00 | **9.69** | 35 |
+| remotive | 15.00 | 14.25 | 40 |
+| wwr | 15.00 | 14.20 | 45 |
+
+A queda do `remoteok` é a correção, não regressão: a flag `remote` da fonte deixou de valer 1.0
+sem corroboração de região.
+
+**A meta de aceite era ~15 para a Gupy e chegou a 10.30.** Causa: vaga presencial fora da UF do
+operador é graduada em 0.7, escolha de desenho além do escopo original do BUG-006 — uma vaga
+presencial em Chapecó-SC não é 15/15 para quem mora em Belo Horizonte. Com essa graduação, 15 é
+inalcançável para a maior parte da Gupy.
+
+**Composição da fila, antes e depois:**
+
+| | Antes | Depois |
+|---|---:|---:|
+| Vagas na fila | 41 | 40 |
+| p50 | 52.0 | 51.8 |
+| Brasileiras | 28 | 27 |
+| Vagas de MG (UF do operador) | 9 | **9** |
+| Remotas internacionais sem elegibilidade | 13 | **13** |
+
+252 scores mudaram e o teto subiu (74.8 → 82.3; `Product Owner Sênior (Presencial/BH)` foi de
+47.2 a 60.7 — uma vaga de BH finalmente creditada). Mas a composição ficou igual: as brasileiras
+ganharam pontos, as remotas internacionais perderam, e no corte de 40 os efeitos se cancelam.
+
+**A métrica de aceite nº 3 era a métrica errada.** "`location_fit` médio da Gupy: 8.84 → ~15"
+mede o **componente**, não o **resultado**. Com peso 0.15, `location_fit` vale no máximo 15 de
+100 pontos: deslocá-lo em 6 não reordena uma fila cuja variância é dominada pelo
+`keyword_overlap` de peso 0.65. Lição de método para as próximas ondas: critério de aceite tem de
+ser medido na saída que o operador lê, não no componente que se mexeu.
+
+## 1.6 — a calibração não tem o que calibrar
+
+Base: 170 vagas não-rejeitadas e não-filtradas.
+
+| Corte | Fila | Título relevante | Sem barreira de entrada | ≥65 gerável |
+|---:|---:|---:|---:|---:|
+| **40** | 40 | 37 (93%) | 17 (43%) | 8 |
+| 45 | 33 | 31 (94%) | 15 (45%) | 8 |
+| 48 | 26 | 24 (92%) | 12 (46%) | 8 |
+| 50 | 26 | 24 (92%) | 12 (46%) | 8 |
+| 52 | 19 | 17 (89%) | 9 (47%) | 8 |
+| 55 | 17 | 16 (94%) | 7 (41%) | 8 |
+| 58 | 12 | 11 (92%) | 4 (33%) | 8 |
+| 60 | 10 | 9 (90%) | 4 (40%) | 8 |
+| 62 | 9 | 8 (89%) | 4 (44%) | 8 |
+| 65 | 8 | 7 (88%) | 3 (38%) | 8 |
+
+**A precisão é plana em ~90% em todos os cortes, e a fração sem barreira de entrada também.**
+Subir o threshold não melhora relevância nem acessibilidade — só encolhe a fila. O scorer já fez
+a separação; não sobrou trabalho para o corte. Não existe corte natural nesta distribuição, e
+escolher 55 ou 62 seria arbítrio disfarçado de calibração.
+
+**Recomendação: manter `queue_threshold: 40` e `generate_min_score: 65`.** Guarda dura: **não
+baixar para 39** — o piso do fallback morto do BUG-002 é 39.5, e 39 ressuscita o bug inteiro.
+
+## A dor que sobra, e ela não é de código
+
+No corte de 40, por trilha:
+
+| Trilha | Vagas na fila | Sem barreira |
+|---|---:|---:|
+| `product` | **30** | 14 |
+| `ai-builder` | **5** | 2 |
+| `qa` | 5 | 1 |
+
+A trilha-alvo tem 5 vagas na fila; a trilha que o operador está deixando tem 30. As `searches` em
+`config/config.yaml` são majoritariamente de Produto, herdadas de quando essa era a trilha.
+**Nenhum ajuste de score corrige uma fila que nunca recebeu as vagas certas.** É a próxima
+decisão, é de produto, e é do operador — registrada como item 3 do `docs/roadmap.md`.
