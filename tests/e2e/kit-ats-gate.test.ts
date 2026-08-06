@@ -95,6 +95,16 @@ describe("kit.ts finalize — gates de ATS (exit 4)", () => {
     assert.deepEqual(faltando, [], "conteúdo do markdown que não sobreviveu até o PDF");
   });
 
+  it("o coverage-report traz páginas e caracteres extraíveis — informação, não gate", () => {
+    // Duas páginas é ruim para vaga de entrada e normal para sênior; o sistema não
+    // sabe distinguir, então informa ao lado da cobertura em vez de reprovar.
+    useKit("resume.ok.md");
+    assert.equal(runCli("src/cli/kit.ts", ["finalize", jobId]).status, 0);
+
+    const relatorio = readFileSync(join(kitDir, "coverage-report.md"), "utf-8");
+    assert.match(relatorio, /\*\*PDF:\*\* \d+ página\(s\) · \d+ caracteres extraíveis/);
+  });
+
   it("o parser ausente FALHA ALTO — nunca passa em silêncio", async () => {
     // Um gate que se desliga sozinho quando a ferramenta some é pior que gate
     // nenhum: cria a impressão de que foi verificado.

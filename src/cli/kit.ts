@@ -147,11 +147,11 @@ if (cmd === "prepare") {
     process.exit(3);
   }
 
-  // 3. Coverage report
+  // 3. Coverage — calculado aqui, mas GRAVADO depois do render: o relatório passou
+  //    a trazer páginas e caracteres extraíveis do PDF, que só existem lá na frente.
   const cleanMd = stripCitations(resumeMd);
   const jdText = `${job.title}\n${job.description ?? ""}`;
   const report = coverageReport(jdText, cleanMd);
-  writeFileSync(join(kitDir, "coverage-report.md"), renderCoverageMd(report), "utf-8");
 
   // 4. Render PDFs
   const resumeHtml = wrapAtsHtml(cleanMd, `${profile.identity.name} — ${job.title}`);
@@ -185,6 +185,12 @@ if (cmd === "prepare") {
     console.error("O resume.pdf foi removido — um PDF que o ATS não lê não deve ficar no kit.");
     process.exit(4);
   }
+
+  writeFileSync(
+    join(kitDir, "coverage-report.md"),
+    renderCoverageMd(report, { pages: pdfText.pages, extractedChars: pdfText.text.length }),
+    "utf-8"
+  );
 
   // 6. Registros
   const policy = decidePolicy(config, job, job.score ?? 0, job.track_hint);

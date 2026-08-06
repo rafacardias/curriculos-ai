@@ -10,6 +10,12 @@ db/backups/
 logs/
 
 # saída por vaga (PDFs, receipts, snapshots)
+#
+# Os kits contêm o currículo real com nome, e-mail e telefone. O repo é PÚBLICO.
+# Isto vale inclusive para "copiar um kit real como fixture de teste": tests/ é
+# tão público quanto o resto — é por isso que a sandbox usa a Ana Teste sintética.
+# Quando um kit real for evidência de um defeito, ele prova no KNOWN-BUGS.md e uma
+# fixture sintética equivalente é quem entra no teste. Ver CLAUDE.md.
 output/
 
 # fontes do perfil (PDFs pessoais) e dados sensíveis — NUNCA para o repo público
@@ -18,6 +24,8 @@ profile/candidate-facts.yaml
 profile/master-profile.yaml
 profile/tracks.yaml
 profile/linkedin-pack.md
+# currículos-mestre por trilha: são os bullets reais, redigidos a partir dos fatos
+profile/masters/
 .env
 .env.local
 

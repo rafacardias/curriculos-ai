@@ -44,3 +44,15 @@ Todo conteúdo gerado (currículo, cover letter, respostas) espelha o vocabulár
 - Datas ISO-8601 UTC; ids ulid; JSON em colunas TEXT
 - "ATS score" é heurística — rotular sempre como estimativa; o artefato honesto é o coverage report
 - Submissão default `review_first`; `full_auto` só via policy engine + opt-in por plataforma
+
+## Dado pessoal nunca entra no repositório — nem como fixture
+
+O repo é **público**. `profile/`, `output/` e `db/` guardam nome, e-mail, telefone, currículos
+reais e histórico de candidatura, e **nada dali pode ser commitado em hipótese nenhuma** —
+inclusive, e principalmente, "só como fixture de teste". `tests/` é público igual ao resto: é
+por isso que a sandbox usa a **Ana Teste** sintética (`tests/fixtures/sandbox-root/`) em vez do
+perfil real.
+
+Quando um artefato real for útil como prova (ex.: o kit que expôs o BUG-008), a regra é:
+**o real prova no `KNOWN-BUGS.md`, uma fixture sintética equivalente protege no teste.** Descreva
+o defeito com arquivo e linha; recrie o caso com dado inventado.
