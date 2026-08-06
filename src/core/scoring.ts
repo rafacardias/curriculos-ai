@@ -9,6 +9,7 @@ import {
   updateJobScore,
   type JobRow,
 } from "../db/repo/jobs.js";
+import { resolveLocality, declaresEligibleRegion } from "./locality.js";
 import { nowIso } from "../db/client.js";
 import type { AppConfig } from "./config.js";
 
@@ -72,11 +73,33 @@ export function scoreJob(config: AppConfig, job: JobRow): { score: number; detai
     recency = Math.max(w.recency_floor, Math.min(1, 1 - ageDays / 21));
   }
 
-  // 3. fit de local/remoto
-  let locationFit = 0.5;
-  if (job.remote_type === "remote") locationFit = 1;
-  else if (job.location && /brazil|brasil/i.test(job.location)) locationFit = 1;
-  else if (job.remote_type === "onsite" && job.location && !/brazil|brasil/i.test(job.location)) locationFit = 0.1;
+  // 3. fit de local/remoto — hierarquia cidade → UF → país (BUG-006)
+  //
+  // Antes: `remote_type === 'remote'` dava 1.0 direto, e o Brasil só era
+  // reconhecido pela palavra "Brasil"/"Brazil" na string. Isso produzia o
+  // resultado invertido que a fila mostrava: "São Paulo, SP" caía no default 0.5
+  // enquanto uma vaga de bombeiro de aeroporto em Mangaluru marcada `remote` pelo
+  // RemoteOK levava 1.0.
+  //
+  // A flag `remote` da fonte não é evidência de elegibilidade. O RemoteOK marca
+  // 100% do catálogo como remoto — uma constante, e constante não carrega
+  // informação. Por isso remoto sem corroboração de região vale 0.6: incerto, nem
+  // premiado nem punido.
+  const loc = resolveLocality(job.location);
+  const isRemote = job.remote_type === "remote";
+  let locationFit: number;
+  if (loc.isHome) {
+    // Resolveu para o país do operador, em qualquer nível da hierarquia.
+    if (isRemote) locationFit = 1; // remoto no próprio país: onde fica é irrelevante
+    else if (loc.isHomeUf) locationFit = 1; // presencial/híbrido na UF onde ele mora
+    else locationFit = 0.7; // presencial em outra UF: exigiria mudança
+  } else if (isRemote) {
+    locationFit = declaresEligibleRegion(`${job.location ?? ""}\n${job.description ?? ""}`) ? 1 : 0.6;
+  } else if (loc.level === "foreign") {
+    locationFit = 0.1; // presencial fora do país, sem elegibilidade nenhuma
+  } else {
+    locationFit = 0.5; // nenhuma informação de localidade
+  }
 
   // 4. fit de idioma (pt e en são ambos ok para o Rafael)
   const languageFit = job.language === "pt" || job.language === "en" ? 1 : 0.5;

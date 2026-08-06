@@ -1,0 +1,164 @@
+# Léxico de localidade — dado versionado, editável pelo operador.
+#
+# Existe porque `location_fit` só reconhecia o Brasil quando a string continha
+# literalmente "Brasil"/"Brazil" (BUG-006). A Gupy — fonte 100% brasileira e a
+# maior do acervo — devolve "São Paulo, SP" e "Belo Horizonte, Minas Gerais",
+# nenhuma das quais casava. Resultado medido: `location_fit` médio de 8.84/15 na
+# Gupy contra 15.00 nos boards internacionais, ou seja, a fila pendia para vaga
+# remota em inglês exatamente ao contrário do que a configuração pedia.
+#
+# A resolução é HIERÁRQUICA: cidade → UF → país. Achar a cidade implica a UF, que
+# implica o país. Editar isto é a forma correta de ensinar uma localidade nova ao
+# sistema — não mexer em regex no scorer.
+
+# Onde o operador mora. Usado para distinguir "no meu estado" de "no meu país".
+base:
+  city: Belo Horizonte
+  uf: MG
+  country: BR
+
+# Como o país aparece escrito nas fontes.
+country_aliases:
+  BR: [brasil, brazil, br, bra]
+
+# Regiões que, num anúncio remoto, indicam que o Brasil é elegível.
+# Sem um destes (ou sem localidade brasileira), "remoto" não é prova de nada:
+# o RemoteOK marca 100% do catálogo como remote, inclusive vaga de bombeiro.
+remote_eligible_regions:
+  - worldwide
+  - world wide
+  - anywhere
+  - global
+  - remote global
+  - latam
+  - latin america
+  - américa latina
+  - america latina
+  - south america
+  - américa do sul
+  - americas
+  - emea/latam
+  - brazil
+  - brasil
+
+# UFs: sigla → nome oficial. A sigla só casa como palavra inteira, para "PA"
+# (Pará) não casar dentro de "Palo Alto".
+ufs:
+  AC: Acre
+  AL: Alagoas
+  AP: Amapá
+  AM: Amazonas
+  BA: Bahia
+  CE: Ceará
+  DF: Distrito Federal
+  ES: Espírito Santo
+  GO: Goiás
+  MA: Maranhão
+  MT: Mato Grosso
+  MS: Mato Grosso do Sul
+  MG: Minas Gerais
+  PA: Pará
+  PB: Paraíba
+  PR: Paraná
+  PE: Pernambuco
+  PI: Piauí
+  RJ: Rio de Janeiro
+  RN: Rio Grande do Norte
+  RS: Rio Grande do Sul
+  RO: Rondônia
+  RR: Roraima
+  SC: Santa Catarina
+  SP: São Paulo
+  SE: Sergipe
+  TO: Tocantins
+
+# Cidades → UF. Não é exaustivo e não precisa ser: cobre as capitais e os polos
+# de tecnologia, que é onde as vagas estão. Cidade desconhecida cai no passo
+# seguinte da hierarquia (UF) e, falhando esse, no país.
+cities:
+  # capitais
+  rio branco: AC
+  maceió: AL
+  macapá: AP
+  manaus: AM
+  salvador: BA
+  fortaleza: CE
+  brasília: DF
+  vitória: ES
+  goiânia: GO
+  são luís: MA
+  cuiabá: MT
+  campo grande: MS
+  belo horizonte: MG
+  belém: PA
+  joão pessoa: PB
+  curitiba: PR
+  recife: PE
+  teresina: PI
+  rio de janeiro: RJ
+  natal: RN
+  porto alegre: RS
+  porto velho: RO
+  boa vista: RR
+  florianópolis: SC
+  são paulo: SP
+  aracaju: SE
+  palmas: TO
+  # polos de tecnologia e cidades com volume de vaga
+  campinas: SP
+  são josé dos campos: SP
+  ribeirão preto: SP
+  sorocaba: SP
+  santo andré: SP
+  são bernardo do campo: SP
+  osasco: SP
+  barueri: SP
+  jundiaí: SP
+  santos: SP
+  são josé do rio preto: SP
+  bauru: SP
+  contagem: MG
+  uberlândia: MG
+  juiz de fora: MG
+  betim: MG
+  nova lima: MG
+  uberaba: MG
+  niterói: RJ
+  são gonçalo: RJ
+  petrópolis: RJ
+  campos dos goytacazes: RJ
+  joinville: SC
+  blumenau: SC
+  chapecó: SC
+  criciúma: SC
+  itajaí: SC
+  são josé: SC
+  caxias do sul: RS
+  canoas: RS
+  pelotas: RS
+  novo hamburgo: RS
+  londrina: PR
+  maringá: PR
+  cascavel: PR
+  ponta grossa: PR
+  foz do iguaçu: PR
+  jaboatão dos guararapes: PE
+  olinda: PE
+  caruaru: PE
+  camaçari: BA
+  feira de santana: BA
+  vila velha: ES
+  serra: ES
+  cariacica: ES
+  anápolis: GO
+  aparecida de goiânia: GO
+  sumaré: SP
+  indaiatuba: SP
+  são caetano do sul: SP
+  guarulhos: SP
+  diadema: SP
+  taubaté: SP
+  piracicaba: SP
+  limeira: SP
+  franca: SP
+  marília: SP

@@ -82,11 +82,35 @@ describe("scoreJob — composição dos 5 componentes", () => {
     assert.ok(Math.abs(soma - score) < 0.01, `soma ${soma} != score ${score}`);
   });
 
-  it("remoto pontua location_fit cheio; onsite fora do Brasil pontua quase zero", () => {
-    const remoto = insertJob(raw({ url: "https://x/1", remoteType: "remote" }))!;
-    const fora = insertJob(raw({ url: "https://x/2", title: "Outra Coisa", remoteType: "onsite", location: "Berlin, Germany" }))!;
-    assert.equal(scoreJob(config, getJob(remoto.id)!).detail.location_fit, 15);
-    assert.equal(scoreJob(config, getJob(fora.id)!).detail.location_fit, 1.5);
+  // BUG-006 — a matriz completa de location_fit depois da hierarquia cidade→UF→país.
+  // O caso `remoto sem corroboração` era 15 e passou a 9: a flag `remote` da fonte
+  // deixou de ser prova de elegibilidade. É a correção, não uma regressão.
+  const casos: Array<[string, Partial<RawJob>, number]> = [
+    ["cidade da UF do operador, presencial", { remoteType: "onsite", location: "Belo Horizonte, Minas Gerais" }, 15],
+    ["cidade brasileira de outra UF, presencial", { remoteType: "onsite", location: "São Paulo, SP" }, 10.5],
+    ["cidade brasileira, remoto", { remoteType: "remote", location: "São Paulo, São Paulo" }, 15],
+    ["UF por nome, sem cidade conhecida", { remoteType: "onsite", location: "interior de Goiás" }, 10.5],
+    ["país por alias", { remoteType: "onsite", location: "Brasil" }, 10.5],
+    ["remoto SEM corroboração de região", { remoteType: "remote" }, 9],
+    ["remoto em país estrangeiro, sem elegibilidade", { remoteType: "remote", location: "Mangaluru, India" }, 9],
+    ["remoto COM região elegível na localidade", { remoteType: "remote", location: "Remote - LATAM" }, 15],
+    ["remoto COM região elegível na description", { remoteType: "remote", location: "Lisbon", description: "Open to candidates anywhere." }, 15],
+    ["presencial fora do país", { remoteType: "onsite", location: "Berlin, Germany" }, 1.5],
+    ["sem informação de localidade nenhuma", {}, 7.5],
+  ];
+
+  for (const [nome, over, esperado] of casos) {
+    it(`location_fit — ${nome} → ${esperado}`, () => {
+      const job = insertJob(raw({ url: `https://x/${encodeURIComponent(nome)}`, title: nome, ...over }))!;
+      assert.equal(scoreJob(config, getJob(job.id)!).detail.location_fit, esperado);
+    });
+  }
+
+  it("a sigla de UF só casa como palavra inteira — 'Palo Alto, CA' não é Pará", () => {
+    // Sem essa guarda, "PA" dentro de "Palo Alto" faria uma vaga da Califórnia
+    // resolver para o Brasil e ganhar pontuação de localidade brasileira.
+    const job = insertJob(raw({ url: "https://x/pa", title: "Vaga Palo Alto", remoteType: "onsite", location: "Palo Alto, CA" }))!;
+    assert.equal(scoreJob(config, getJob(job.id)!).detail.location_fit, 1.5, "tem de ser tratada como estrangeira");
   });
 
   it("recência decai em 21 dias e assenta no piso de calibração", () => {
