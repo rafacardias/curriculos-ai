@@ -92,11 +92,16 @@ filters:
 
 # Pesos do score (soma das contribuições, normalizada para 0-100)
 scoring:
-  keyword_overlap: 0.55 # overlap keywords do JD × léxico da trilha
+  keyword_overlap: 0.65 # overlap keywords do JD × léxico da trilha (era 0.55; herdou o peso do preference)
   recency: 0.15 # vagas recentes valem mais
   location_fit: 0.15 # remoto/local compatível
   language_fit: 0.05 # idioma do JD × idiomas do perfil
-  preference: 0.10 # preference_weights aprendidos do feedback
+  # 0 até a atribuição de culpa do /feedback creditar o MOTIVO, não o vocabulário
+  # do JD — ver KNOWN-BUGS.md BUG-007. Medido em 2026-08-06: kw:qa -7.65,
+  # kw:product manager -9.50, seniority:junior -1.90, source:gupy -5.65. O
+  # componente aprendeu a punir exatamente as trilhas e o nível do candidato.
+  # NÃO voltar para 0.10 sem o BUG-007 corrigido: as 98 chaves seguem no banco.
+  preference: 0
 
 # Policy engine — quando gerar, quando submeter, em qual modo
 policy:

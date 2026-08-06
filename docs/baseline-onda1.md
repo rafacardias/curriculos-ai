@@ -243,3 +243,79 @@ entre commits anteriores e posteriores a essa mudança é válida; use `score_pr
 Ele é idempotente **na mesma leitura de relógio**, não ao longo do tempo: `recency` depende de
 `Date.now()`, então rodar amanhã dá scores menores. Isso é correto (uma vaga de 40 dias não
 pode manter a recência do dia 1) e está declarado aqui para não ser lido como bug depois.
+
+---
+
+# Adendo 2 — 1.2b/c aplicado, e as duas medições que reordenam a onda (2026-08-06)
+
+`config/config.yaml`: `scoring.preference 0.10 → 0` e `keyword_overlap 0.55 → 0.65`.
+Motivo e evidência completos em `KNOWN-BUGS.md` BUG-007.
+
+## Dry-run na escala nova (nada escrito)
+
+| | Fila | p50 | p90 | max | precisão |
+|---|---:|---:|---:|---:|---:|
+| Hoje, score congelado | 84 | 45.8 | 60.4 | 69.7 | 63% |
+| `rescore`, escala nova | 32 | 50.3 | 64.5 | 68.8 | 91% |
+
+A prova de que o `preference` era a causa: as 12 maiores quedas passaram a ser **todas ruído**
+(Social Media Coordinator, Deputy CEO, Firefighter ARFF, HR Assistant, Support Technician).
+No dry-run anterior, com `preference` em 0.10, três das doze maiores quedas eram vagas de QA
+remoto — o componente estava punindo exatamente o alvo.
+
+## Decisão de `recency` para o 1.6
+
+**Idade do acervo: min 25d · p50 41d · max 1276d.** O decaimento é de 21 dias, então `recency`
+vale 0 para **374 de 374** vagas. Não é um componente neutro: são 15 pontos de escala ausentes.
+
+| Hipótese | `recency`>0 | fila | p50 | p90 | max | precisão |
+|---|---:|---:|---:|---:|---:|---:|
+| atual (21d linear) | 0/374 | 32 | 50.3 | 64.5 | 68.8 | 91% |
+| H1 meia-vida 90d | 344/374 | 45 | 53.3 | 70.7 | 75.0 | 87% |
+| H2 piso 0.4 | 374/374 | 41 | 52.0 | 69.3 | 74.8 | 90% |
+
+**Escolha recomendada: H2.** H1 devolve discriminação *falsa* — com 90 dias, uma vaga de 60 dias
+leva 33% dos pontos de recência, premiando vaga provavelmente preenchida. H2 preserva a
+discriminação real na janela de 21 dias (que é quando importa: busca nova traz vagas de 0–21d)
+e, para o acervo velho, devolve 6 pontos **uniformes** — que não discriminam nada, mas impedem
+que a escala evapore e descalibre os dois thresholds. É calibração, não sinal.
+
+Qualidade de dado para o roadmap: a vaga de 1276 dias é `posted_at` mal parseado.
+
+## 1.2d — barreira de entrada: a medição ANTES do design
+
+Medido sobre as 375 vagas (0 sem `description`, extração possível em todas).
+
+**Os dois sinais especificados são anti-discriminantes.** Taxa de disparo por grupo:
+
+| Sinal | `queued` | `rejected` | lift rej/queued |
+|---|---:|---:|---:|
+| "vivência em…" | 25% | 46% | **1.83×** |
+| "experiência prévia / comprovada / sólida" | 24% | 42% | **1.75×** |
+| anos em número (`detectRequiredYears`) | 11% | 8% | **0.78×** ✗ |
+| diploma obrigatório | 25% | 21% | **0.83×** ✗ |
+
+`detectRequiredYears` cobre só **10% do acervo** (37 de 375): o JD brasileiro pede requisito de
+forma qualitativa, não numérica. Diploma obrigatório aparece em 31% — mas *menos* nas rejeitadas.
+
+**Funil real:** 236 de 375 sem barreira pela definição original (63% acessíveis). Incluindo o
+sinal qualitativo, ~47% ficam limpas. Na trilha `ai-builder`: 73 vagas, 49 acessíveis.
+
+**Consequência de design:** não pode ser filtro duro. O sinal qualitativo dispara em 51% das
+vagas que o operador **aprovou** — filtrar removeria metade da fila acessível. Penalidade
+graduada + campo exibido na fila é o que a medição sustenta.
+
+## Validação retroativa contra as 48 rejeições: NÃO serve como teste de aceitação
+
+Serve como sanity check direcional. Três razões, a terceira fatal:
+
+1. Lift de 1.8× é real, mas **51% das vagas mantidas também disparam o sinal**. Um classificador
+   nessa separação erraria em metade da fila.
+2. **41 das 48 rejeitadas são da trilha `product`; `ai-builder` tem 1 de 73.** A trilha-alvo
+   passou a ser `ai-builder` — validar contra rejeições de Produto testa a população errada.
+3. **0 de 95 vagas `senior` estão em `rejected`** — foram barradas pelo filtro duro antes de
+   chegar aos olhos do operador. O conjunto rotulado tem viés de sobrevivência por construção.
+
+O teste de aceitação honesto: corrigir o BUG-007, capturar motivo estruturado, e validar sobre
+~25 decisões de `ai-builder` com motivo registrado. Vinte e cinco rótulos limpos valem mais que
+48 confundidos.

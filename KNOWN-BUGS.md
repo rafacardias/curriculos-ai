@@ -11,13 +11,80 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 
 | # | Gravidade | Estado | Onde |
 |---|---|---|---|
-| [BUG-005](#bug-005) | **Alta** | Congelado | `src/core/truthcheck.ts:26-28` |
+| [BUG-007](#bug-007) | **Crítica** | Componente desarmado; causa não corrigida | `src/cli/feedback.ts` + `src/core/scoring.ts:70-85` |
+| [BUG-005](#bug-005) | **Alta** | **Corrigido** | `src/core/truthcheck.ts:31-50` |
 | [BUG-006](#bug-006) | **Alta** | Medido, sem teste ainda | `src/core/scoring.ts:63` |
 | [BUG-002](#bug-002) | Média | Congelado | `src/core/scoring.ts:50` |
 | [BUG-001](#bug-001) | Média | Congelado | os 5 adapters |
 | [BUG-003](#bug-003) | Média | **Corrigido** | `src/core/pipeline.ts:41-45` |
 | [BUG-004](#bug-004) | Baixa | Sem cobertura | `src/submit/linkedin-easyapply.ts` |
 | [LIM-001](#lim-001) | — | Limitação aceita | `tests/e2e/smoke-pipeline.test.ts` |
+
+---
+
+## BUG-007
+
+**O `/feedback` não tem taxonomia de motivo, então elegibilidade é gravada como preferência
+de tópico — e o componente aprende o inverso do objetivo do candidato.**
+
+### O que foi medido (2026-08-06, banco real, 70 eventos de feedback → 98 chaves)
+
+| Pesos negativos | | Pesos positivos | |
+|---|---:|---|---:|
+| `kw:product manager` | **−9.50** | `source:remoteok` | **+3.61** |
+| `kw:qa` | **−7.65** | `kw:claude` | +2.85 |
+| `kw:scrum master` | −7.60 | `source:wwr` | +2.85 |
+| `source:gupy` | −5.65 | `kw:ai agents` | +2.85 |
+| `kw:product owner` | −5.65 | `kw:llm` · `kw:rag` | +1.90 |
+| `kw:playwright` · `cypress` · `istqb` | −2.85 | `kw:n8n` | +1.90 |
+| **`seniority:junior`** | **−1.90** | | |
+
+`seniority:junior` negativo é a prova irrefutável: o sistema aprendeu a punir o próprio
+nível-alvo do candidato. E `source:gupy` — a única fonte 100% brasileira, para quem configurou
+`location: Brazil` — carrega −5.65, enquanto `source:remoteok`, a fonte que produziu
+`Firefighter ARFF` em Mangaluru e `Health Navigator I` em Portland, é o **maior peso positivo
+do banco**.
+
+### Causa raiz: ausência de taxonomia de motivo, não atribuição difusa
+
+O diagnóstico inicial ("a rejeição credita todos os termos do JD") descreve o mecanismo, mas
+erra a causa. A causa é anterior:
+
+**Quase todas as ~70 rejeições foram pelo mesmo motivo — a vaga exigia experiência comprovada
+na área e/ou diploma. Nenhuma foi sobre o tema da vaga.** O candidato busca a primeira vaga
+nessas áreas e não tem nenhum dos dois.
+
+O `/feedback` só sabe registrar "rejeitar". Não existe onde dizer *por quê*. Então o
+aprendizado converte um fato de **elegibilidade** ("não me qualifico para esta vaga") num fato
+de **preferência** ("não gosto deste assunto"). E como vaga sênior e júnior compartilham
+vocabulário, cada rejeição honesta puniu exatamente a área desejada.
+
+### Por que o componente não pode ser religado nem com escopo por trilha
+
+Escopar os pesos por trilha não resolve: dentro da trilha `ai-builder`, uma vaga sênior de
+ai-builder e uma júnior de ai-builder usam o mesmo léxico. A rejeição da sênior continuaria
+punindo a júnior. Sem **motivo estruturado**, o sinal é irrecuperável.
+
+### Correção exigida antes de religar
+
+1. `/feedback` passa a exigir motivo de um vocabulário fechado:
+   `nao_elegivel` · `fora_do_tema` · `senioridade` · `remuneracao` · `empresa`.
+2. Só `fora_do_tema` e `empresa` alimentam `preference_weights`. `nao_elegivel` e `senioridade`
+   alimentam o componente de barreira de entrada (item 1.2d) — **campo estrutural, nunca `kw:*`**.
+3. `source:*` deixa de ser chave aprendida. Uma fonte não é uma preferência: é um canal, e
+   aprender peso de canal codificou "prefiro board internacional" a partir de rejeições que
+   nada tinham a ver com o canal.
+4. Migration aditiva para a coluna de motivo; as 98 chaves atuais **ficam** no banco — quando
+   houver motivo registrado, elas podem ser reprocessadas em vez de descartadas.
+
+### Estado
+
+**Desarmado, não corrigido.** `config/config.yaml` tem `scoring.preference: 0` (o peso migrou
+para `keyword_overlap: 0.65`). As chaves envenenadas seguem no banco, inertes. Voltar o peso
+para 0.10 sem os 4 itens acima reintroduz a inversão.
+
+**Regra de captura, aprendida desta inversão:** motivo estrutural mora em campo estrutural.
+`"exige 5 anos"` nunca pode virar peso em `kw:*`.
 
 ---
 
