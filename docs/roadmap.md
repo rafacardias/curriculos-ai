@@ -43,14 +43,35 @@ aparência de dado. Insumo de desenho da taxonomia: `docs/labels-onda1-amostra.m
 **Desenho que a medição sustenta:** penalidade graduada + requisito **exibido na fila**. Não
 filtro duro.
 
+### Pergunta aberta acoplada: o peso de `location_fit` está subdimensionado?
+
+Medido no 1.3: `location_fit` mudou em 252 vagas e a composição da fila não se moveu (41 → 40
+vagas, 9 → 9 de MG, as mesmas 13 remotas internacionais sem elegibilidade). **Isso não é falha do
+1.3 — é a aritmética funcionando como configurada:** com peso 0.15, o componente vale no máximo 15
+de 100 pontos, e deslocá-lo em 6 não reordena uma fila cuja variância é dominada pelo
+`keyword_overlap` de peso 0.65.
+
+A pergunta é se 0.15 reflete o peso real da localização na decisão do operador. Evidência a favor
+de que não: **2 das 15 rejeições rotuladas à mão foram por localização** ("híbrido em Porto
+Alegre", "presencial") — 13% de uma amostra pequena, contra 15% do score.
+
+**Não mexer agora.** Subir o peso com base em 2 casos de 15 é a mesma classe de erro que produziu o
+BUG-007: inferir um peso de pouquíssimo sinal. A decisão vem **depois** do BUG-007, quando
+`nao_elegivel` e localização forem motivos distintos e contáveis. Aí o peso é medível, não
+chutado.
+
 ## 3. Configuração de busca para a trilha `ai-builder`
 
 **A dor medida que resta.** Na fila calibrada, 30 das 40 vagas são de `product` e **5 são de
 `ai-builder`** — a trilha-alvo. As `searches` em `config/config.yaml` são majoritariamente de
 Produto, herdadas de quando essa era a trilha.
 
-Nenhum ajuste de score corrige uma fila que nunca recebeu as vagas certas. É decisão de produto
-do operador, não de código, e por isso está aqui e não numa onda.
+Nenhum ajuste de score corrige uma fila que nunca recebeu as vagas certas.
+
+> **Este item é do operador, não do sistema.** As queries são escritas pelo Rafael — o que ele
+> quer buscar não é inferível do código, e nenhuma heurística deve adivinhar. O trabalho aqui é
+> editar `searches:` em `config/config.yaml`. Depois disso, `rescore --commit` torna o efeito
+> visível no acervo já coletado, e uma busca nova traz o resto.
 
 Dado que ajuda: `ai-builder` é a trilha **mais acessível** do acervo (62% sem barreira de
 entrada, contra 35% de `product`) — ver `KNOWN-BUGS.md` ACHADO-01.

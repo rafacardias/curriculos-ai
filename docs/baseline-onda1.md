@@ -480,3 +480,68 @@ A trilha-alvo tem 5 vagas na fila; a trilha que o operador está deixando tem 30
 `config/config.yaml` são majoritariamente de Produto, herdadas de quando essa era a trilha.
 **Nenhum ajuste de score corrige uma fila que nunca recebeu as vagas certas.** É a próxima
 decisão, é de produto, e é do operador — registrada como item 3 do `docs/roadmap.md`.
+
+---
+
+# Adendo 5 — fechamento: 1.3 aplicado e o critério nº 3 substituído (2026-08-06)
+
+## Proveniência do banco, segunda repontuação
+
+| | |
+|---|---|
+| Backup automático pré-escrita | `db/backups/curriculos.2026-08-06T19-46-30Z.db` |
+| `sha256` do backup | `b499d343333d7ece95606553f71ea7c9e6130381d5841c3f69d7eaebf8b7d38b` |
+| `sha256` do banco **pós-commit** (WAL checkpointado) | `9e57262ab38780a55ee680cbc6229f2636674de9eab0509c44e6fcd12b31864e` |
+| Vagas repontuadas | 374 · 252 com mudança de score |
+| Idempotência reverificada | `com mudança: 0`, fila 40 → 40 |
+
+Distribuição final da fila: **n=40 · min 41.7 · p50 51.8 · p90 69.3 · max 82.3**.
+
+`queue_threshold` permanece em 40 e `generate_min_score` em 65 — a tabela do 1.6 é plana em ~90%
+de precisão em todos os cortes, então não havia o que calibrar. **Guarda dura: nunca 39** (piso do
+BUG-002 é 39.5).
+
+## O critério de aceite nº 3 foi SUBSTITUÍDO, não descumprido
+
+O critério original dizia: *"`location_fit` médio da Gupy: 8.84 → ~15"*. Ele foi atingido apenas
+em parte (8.81 → 10.30) e a decisão foi **manter o código e trocar o critério**, porque o critério
+estava errado por construção — ele mede o **componente que se mexeu**, não a **saída que o
+operador lê**. Um componente pode mover 6 pontos e a fila não mudar: foi exatamente o que
+aconteceu (41 → 40 vagas, p50 52.0 → 51.8, 9 → 9 vagas de MG, as mesmas 13 remotas internacionais
+sem elegibilidade).
+
+A graduação que impede o 15 — presencial fora da UF do operador vale 0.7 — foi **confirmada pelos
+rótulos manuais**: 2 das 15 rejeições foram por localização ("híbrido em Porto Alegre",
+"presencial"). Chapecó não equivale a Belo Horizonte na vida real do operador, e o código está
+certo.
+
+### Critério correto, para as próximas ondas
+
+> **Variação na COMPOSIÇÃO da fila, não na média do componente.**
+>
+> Para uma mudança em `location_fit`, o aceite é medido em: nº de vagas da UF-base na fila · nº de
+> vagas brasileiras na fila · nº de vagas remotas internacionais **sem** sinal de elegibilidade que
+> deixam a fila. Nenhuma dessas é a média de um componente.
+
+Regra geral, aplicável a qualquer item futuro: **critério de aceite se mede na saída, nunca no
+componente.** Se a métrica proposta puder melhorar sem a fila mudar, ela é a métrica errada.
+
+## Estado das 6 métricas originais no fechamento
+
+| # | Métrica | Baseline | Fechamento | Estado |
+|---|---|---:|---:|---|
+| 1 | Fila acima do `generate_min_score` (65) | 5 de 84 (6%) | 8 de 40 (20%) | **atingido** |
+| 2 | Fração da fila no fundo do poço (40–45) | 43% | 22% | **atingido** |
+| 3 | `location_fit` médio da Gupy | 8.84 | 10.30 | **critério substituído** — ver acima |
+| 4 | Ruído de título na LawnStarter | 14 de 17 | 14 de 17 | roadmap item 6 |
+| 5 | Adapters honrando `remote_only` | 0 de 5 | 0 de 5 | roadmap item 4 |
+| 6 | Fonte morta sem alerta | LinkedIn, 3 buscas | idem | roadmap item 5 |
+
+Métricas que não estavam na lista original e passaram a existir:
+
+| Métrica | Baseline | Fechamento |
+|---|---:|---:|
+| Precisão de título na fila | 63% | **93%** |
+| p50 do score na fila | 45.8 | **51.8** |
+| Teto da fila | 69.7 | **82.3** |
+| Testes automatizados | 0 | **162 (0 falhas, 0 pulados)** |
