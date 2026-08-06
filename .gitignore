@@ -26,6 +26,8 @@ profile/tracks.yaml
 profile/linkedin-pack.md
 # currículos-mestre por trilha: são os bullets reais, redigidos a partir dos fatos
 profile/masters/
+# vocabulário descartado dos mestres — deriva dos fatos reais, mesma regra
+profile/synonyms-rejected.md
 .env
 .env.local
 

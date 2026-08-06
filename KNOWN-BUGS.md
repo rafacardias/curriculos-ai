@@ -19,6 +19,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | [BUG-003](#bug-003) | Média | **Corrigido** | `src/core/pipeline.ts:41-45` |
 | [BUG-004](#bug-004) | Baixa | Sem cobertura | `src/submit/linkedin-easyapply.ts` |
 | [BUG-008](#bug-008) | **Alta** | **Corrigido** | `src/cli/kit.ts` (gates de conteúdo) |
+| [REQ-001](#req-001) | — | Requisito aberto da Fase 2 | `src/core/master-resume.ts` |
 | [LIM-001](#lim-001) | — | **FECHADO** | `tests/e2e/kit-ats-gate.test.ts` |
 
 ---
@@ -334,6 +335,35 @@ truthcheck" não pode ser diluída, e a ordem importa: veracidade reprova primei
 
 **Congelado em:** `tests/unit/gates.test.ts` e `tests/e2e/truthcheck-exit2.test.ts`, incluindo o
 caso de precedência (currículo com citação falsa **e** placeholder sai 2, não 3).
+
+---
+
+## REQ-001 — substituir o sinônimo é requisito da Fase 2, não refinamento
+
+**Sinônimo listado e não substituído é teto de mentira.**
+
+O mestre guarda, por bullet, as grafias alternativas que aquele fato autoriza. O `master ceiling`
+mede a cobertura contando essas grafias — ou seja, mede o que o currículo **poderia** cobrir.
+
+Isso só vira cobertura real se a Fase 2 **trocar o termo dentro do texto do bullet** quando o JD
+usar aquela grafia. Se o sinônimo ficar apenas listado no YAML e o bullet for renderizado com a
+redação original, o teto diz uma coisa e o ATS lê outra — e a diferença é invisível, porque
+nenhum gate compara "o que o ceiling prometeu" com "o que o PDF entregou".
+
+**Portanto, na Fase 2:**
+
+1. A montagem do `resume.md` substitui a grafia do bullet pela do sinônimo quando o JD usa a
+   grafia alternativa. Substituição, não anexação — encher o bullet de sinônimos entre parênteses
+   é keyword stuffing e reprova em leitura humana.
+2. Um gate compara a cobertura **prometida** pelo `ceiling` com a **medida** no `coverage-report`
+   do kit gerado. Divergência é defeito, não variação aceitável.
+3. Superar o teto continua sendo o sinal de alarme do BUG-008: significa vocabulário sem fato.
+
+Medido em 2026-08-06, trilha ai-builder, 6 vagas da fila (180 keywords no total): fatos crus 36 ·
+só os bullets 28 · bullets + 262 sinônimos **42**. O ganho é real no agregado, mas desigual — numa
+das vagas o mestre ainda fica **abaixo** dos fatos crus (7 contra 8), porque a reescrita em CAR
+derrubou vocabulário de negócio em português que os sinônimos não recuperaram. O teto por vaga é
+o número honesto; a média esconde isso.
 
 ---
 
