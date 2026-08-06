@@ -12,6 +12,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | # | Gravidade | Estado | Onde |
 |---|---|---|---|
 | [BUG-005](#bug-005) | **Alta** | Congelado | `src/core/truthcheck.ts:26-28` |
+| [BUG-006](#bug-006) | **Alta** | Medido, sem teste ainda | `src/core/scoring.ts:63` |
 | [BUG-002](#bug-002) | Média | Congelado | `src/core/scoring.ts:50` |
 | [BUG-001](#bug-001) | Média | Congelado | os 5 adapters |
 | [BUG-003](#bug-003) | Média | **Corrigido** | `src/core/pipeline.ts:41-45` |
@@ -55,6 +56,41 @@ Regra nº 1 do projeto.
 
 **Correção sugerida:** desligar `inExperience` apenas em headings de mesmo nível ou superior
 ao que ligou a seção (`##` desliga `##`; `###` não desliga), ou rastrear o nível do heading.
+
+---
+
+## BUG-006
+
+**`location_fit` só reconhece o Brasil quando a palavra "Brasil"/"Brazil" está na string.**
+
+`src/core/scoring.ts:63`:
+
+```ts
+else if (job.location && /brazil|brasil/i.test(job.location)) locationFit = 1;
+```
+
+A Gupy — fonte 100% brasileira e a maior do banco (181 de 375 vagas) — devolve
+`"São Paulo, SP"`, `"Belo Horizonte, Minas Gerais"`. Nenhuma dessas casa o padrão, então caem
+no default `0.5`.
+
+**Medido no banco real** (ver `docs/baseline-onda1.md`):
+
+| Fonte | `location_fit` médio (de 15) |
+|---|---:|
+| gupy | **8.84** |
+| linkedin | 13.99 |
+| remotive / remoteok / wwr | 15.00 |
+
+119 vagas da Gupy não-remotas recebem metade da pontuação de localização que mereciam.
+
+**Impacto.** Vagas brasileiras perdem ~6 pontos de score contra vagas remotas internacionais,
+que ganham 15 automaticamente por serem `remote`. Com o piso da fila em 40, 6 pontos decidem
+quem entra. A fila fica enviesada para vaga remota em inglês, exatamente ao contrário do que a
+configuração pede (`location: Brazil`, `remote_only: true`). É uma das causas mensuráveis de
+"a fila não traz vagas boas".
+
+**Sem teste congelado ainda** — descoberto durante a medição de baseline da Onda 1, depois do
+commit da Onda 0. O teste entra junto da correção, na Onda 1.
 
 ---
 
