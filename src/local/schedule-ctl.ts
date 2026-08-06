@@ -8,6 +8,7 @@ import { writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { userInfo } from "node:os";
 import { PROJECT_ROOT } from "../db/client.js";
+import { SERVICE_LOGS_DIR } from "./service-logs.js";
 import type { AppConfig } from "../core/config.js";
 
 // HOME pode vir adulterado em ambientes sandboxed — o passwd é a fonte confiável.
@@ -15,7 +16,8 @@ const homedir = () => userInfo().homedir;
 
 export const LAUNCHD_LABEL = "com.rafael.curriculos.autosearch";
 export const PLIST_PATH = join(homedir(), "Library", "LaunchAgents", `${LAUNCHD_LABEL}.plist`);
-const LOGS_DIR = join(PROJECT_ROOT, "logs");
+/** stdout/stderr dos LaunchAgents — fora do projeto por causa do TCC. Ver service-logs.ts. */
+const LOGS_DIR = SERVICE_LOGS_DIR;
 
 const uid = () => execFileSync("id", ["-u"]).toString().trim();
 
