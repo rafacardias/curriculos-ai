@@ -19,11 +19,12 @@ filters:
   exclude_title_keywords: []
 
 scoring:
-  keyword_overlap: 0.55
+  keyword_overlap: 0.65
   recency: 0.15
+  recency_floor: 0.4
   location_fit: 0.15
   language_fit: 0.05
-  preference: 0.10
+  preference: 0 # desarmado — ver KNOWN-BUGS.md BUG-007
 
 policy:
   generate_min_score: 40

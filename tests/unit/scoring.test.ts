@@ -23,31 +23,56 @@ const raw = (over: Partial<RawJob> = {}): RawJob => ({
 describe("scoreJob — composição dos 5 componentes", () => {
   beforeEach(() => resetDb());
 
-  it("BUG-002 CONGELADO: sem profile_tracks o piso é 41.5, ACIMA do queue_threshold 40", () => {
-    // Aritmética do fallback morto (scoring.ts:50 → overlap = 0.3):
-    //   keyword_overlap 0.3 × 0.55 × 100 = 16.5
-    //   recency         0.5 × 0.15 × 100 =  7.5   (posted_at nulo)
+  it("BUG-002: o piso caiu de 41.5 para 39.5 e passou para BAIXO do queue_threshold 40", () => {
+    // O teste congelado da Onda 0 assertava 41.5 e status 'queued'. Ele FALHOU ao
+    // desarmarmos o `preference` (BUG-007), que é exatamente o que um teste
+    // congelado existe para fazer: avisar que a aritmética mudou.
+    //
+    // Aritmética nova, com o fallback morto (scoring.ts → overlap = 0.3) intacto:
+    //   keyword_overlap 0.3 × 0.65 × 100 = 19.5   (herdou o peso do preference)
+    //   recency         0.5 × 0.15 × 100 =  7.5   (posted_at nulo → desconhecido, não velho)
     //   location_fit    0.5 × 0.15 × 100 =  7.5   (remote_type nulo, location nulo)
     //   language_fit    1.0 × 0.05 × 100 =  5.0   (en)
-    //   preference      0.5 × 0.10 × 100 =  5.0   (nenhum peso aprendido)
+    //   preference      0   × 0    × 100 =  0.0   (componente desarmado)
     //                                     ------
-    //                                       41.5  >  40  → a fila enche indiscriminadamente
+    //                                       39.5  <  40
     //
-    // Comportamento ATUAL congelado. Quando a Onda 1 corrigir o fallback,
-    // ESTE TESTE DEVE FALHAR e ser reescrito com o novo piso.
+    // O fallback morto NÃO foi corrigido — a vaga ainda ganha 19.5 pontos de
+    // aderência sem nenhuma trilha no banco. O que mudou é que o total deixou de
+    // passar o threshold, então ele parou de encher a fila sozinho. A margem é de
+    // 0.5 ponto: qualquer recalibração de threshold (item 1.6) tem de considerar
+    // que baixar `queue_threshold` para 39 ressuscita o BUG-002 inteiro.
     const job = insertJob(raw())!;
     const { score, detail } = scoreJob(config, getJob(job.id)!);
 
-    assert.equal(detail.keyword_overlap, 16.5);
+    assert.equal(detail.keyword_overlap, 19.5);
     assert.equal(detail.recency, 7.5);
     assert.equal(detail.location_fit, 7.5);
     assert.equal(detail.language_fit, 5);
-    assert.equal(detail.preference, 5);
-    assert.equal(score, 41.5);
-    assert.ok(score >= config.queue_threshold, "o piso passa do threshold — esse é o bug");
+    assert.equal(detail.preference, 0);
+    assert.equal(score, 39.5);
+    assert.ok(score < config.queue_threshold, "o piso agora fica abaixo do threshold");
 
     const [scored] = scoreNewJobs(config, [job.id]);
-    assert.equal(scored!.status, "queued");
+    assert.equal(scored!.status, "new", "vaga sem trilha não entra mais na fila sozinha");
+  });
+
+  it("recency_floor é piso, não teto: vaga fresca ainda pontua mais que vaga velha", () => {
+    // A calibração não pode apagar a discriminação de 0–21 dias, que é a razão de
+    // o componente existir.
+    const hoje = insertJob(raw({ postedAt: new Date().toISOString() }))!;
+    // Título diferente: o fingerprint é empresa+título+local, então repetir o
+    // título faria o insert ser deduplicado e devolver null.
+    const velha = insertJob(
+      raw({ url: "https://exemplo.com/vaga/velha", title: "Vaga Antiga", postedAt: "2020-01-01T00:00:00Z" })
+    )!;
+
+    const a = scoreJob(config, getJob(hoje.id)!).detail.recency!;
+    const b = scoreJob(config, getJob(velha.id)!).detail.recency!;
+
+    assert.ok(a > b, `vaga de hoje (${a}) tem de pontuar acima da de 2020 (${b})`);
+    assert.equal(b, 6, "vaga velha assenta no piso: 0.4 × 0.15 × 100");
+    assert.equal(a, 15, "vaga de hoje leva o componente cheio");
   });
 
   it("os componentes sempre somam o score", () => {
@@ -64,13 +89,19 @@ describe("scoreJob — composição dos 5 componentes", () => {
     assert.equal(scoreJob(config, getJob(fora.id)!).detail.location_fit, 1.5);
   });
 
-  it("recência decai em 21 dias", () => {
+  it("recência decai em 21 dias e assenta no piso de calibração", () => {
+    // Antes do `recency_floor` esta asserção era `=== 0`. Ela falhou ao introduzirmos
+    // o piso, que é o comportamento correto de um teste que congela aritmética.
     const ontem = new Date(Date.now() - 86_400_000).toISOString();
     const antigo = new Date(Date.now() - 40 * 86_400_000).toISOString();
     const a = insertJob(raw({ url: "https://x/3", postedAt: ontem }))!;
     const b = insertJob(raw({ url: "https://x/4", title: "Outra Vaga Aqui", postedAt: antigo }))!;
     assert.ok(scoreJob(config, getJob(a.id)!).detail.recency! > 13, "vaga de ontem tem recência alta");
-    assert.equal(scoreJob(config, getJob(b.id)!).detail.recency, 0, "vaga de 40 dias zera a recência");
+    assert.equal(
+      scoreJob(config, getJob(b.id)!).detail.recency,
+      6,
+      "vaga de 40 dias assenta no piso (0.4 × 0.15 × 100), não em zero"
+    );
   });
 
   it("idioma fora de pt/en pontua metade", () => {

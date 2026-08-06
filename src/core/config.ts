@@ -32,6 +32,9 @@ const ConfigSchema = z.object({
     .object({
       keyword_overlap: z.number().default(0.55),
       recency: z.number().default(0.15),
+      // Piso da recência — calibração de escala, não opinião sobre frescor.
+      // Ver o comentário longo em config/config.yaml.
+      recency_floor: z.number().min(0).max(1).default(0),
       location_fit: z.number().default(0.15),
       language_fit: z.number().default(0.05),
       preference: z.number().default(0.1),

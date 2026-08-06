@@ -15,12 +15,27 @@ import type { RawJob } from "../../src/core/types.js";
 
 const config: AppConfig = loadConfig();
 
+/** Léxico da trilha; a description das fixturas bate todos, para a vaga entrar na fila. */
+const TRACK_KWS = ["qa", "teste de regressão", "automação", "playwright", "api", "bug"];
+
+/**
+ * As guardas do rescore são sobre TRANSIÇÃO DE STATUS, então a vaga semeada tem de
+ * entrar na fila de verdade. Sem trilha no banco o scorer cai no fallback morto e
+ * dá 39.5 — abaixo do threshold —, e todas as pré-condições falhariam.
+ */
+function seedTracks(): void {
+  getDb()
+    .prepare("INSERT INTO profile_tracks (id, name, keywords, updated_at) VALUES (?, ?, ?, ?)")
+    .run("qa", "Quality Assurance", JSON.stringify(TRACK_KWS), nowIso());
+}
+
 const raw = (over: Partial<RawJob> = {}): RawJob => ({
   source: "remotive",
   url: `https://exemplo.com/vaga/${ulid()}`,
   title: "Analista de QA Júnior",
   companyName: "ACME",
   language: "en",
+  description: "Vaga de qa com teste de regressão, automação de api em playwright e triagem de bug.",
   ...over,
 });
 
@@ -40,7 +55,10 @@ function seedApplication(jobId: string): void {
     .run(ulid(), jobId, nowIso(), nowIso());
 }
 
-beforeEach(() => resetDb());
+beforeEach(() => {
+  resetDb();
+  seedTracks();
+});
 
 describe("rescore — guarda: escopo do que pode ser repontuado", () => {
   it("vaga com candidatura registrada NÃO é repontuada", () => {

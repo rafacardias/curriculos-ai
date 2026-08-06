@@ -94,6 +94,18 @@ filters:
 scoring:
   keyword_overlap: 0.65 # overlap keywords do JD × léxico da trilha (era 0.55; herdou o peso do preference)
   recency: 0.15 # vagas recentes valem mais
+  # Piso do componente de recência. NÃO é uma opinião sobre frescor: é CALIBRAÇÃO.
+  # O decaimento é linear em 21 dias, e a discriminação real do componente só
+  # existe na janela de 0–21 dias — é lá que uma busca nova ranqueia vaga fresca
+  # acima de vaga velha, e é para isso que ele serve. Fora dessa janela o
+  # componente colapsa para 0 e some da escala: medido em 2026-08-06, com o acervo
+  # parado 3,5 semanas, `recency` valia 0 para 374 de 374 vagas, ou seja, 15 pontos
+  # de escala evaporados e os dois thresholds descalibrados sem ninguém mexer neles.
+  # O piso devolve esses pontos de forma UNIFORME — não discrimina nada, e não
+  # deveria. A alternativa avaliada (esticar a meia-vida para 90d) foi recusada
+  # porque devolveria discriminação FALSA: daria 33% dos pontos a uma vaga de 60
+  # dias, que provavelmente já foi preenchida.
+  recency_floor: 0.4
   location_fit: 0.15 # remoto/local compatível
   language_fit: 0.05 # idioma do JD × idiomas do perfil
   # 0 até a atribuição de culpa do /feedback creditar o MOTIVO, não o vocabulário

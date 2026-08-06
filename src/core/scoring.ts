@@ -57,11 +57,19 @@ export function scoreJob(config: AppConfig, job: JobRow): { score: number; detai
     overlap = Math.min(tokenize(job.title).length > 0 ? 0.3 : 0, 1);
   }
 
-  // 2. recência (decai em 21 dias)
+  // 2. recência (decai em 21 dias, com piso de calibração)
+  //
+  // O piso (`scoring.recency_floor`) não afrouxa o critério de frescor: ele impede
+  // que o componente desapareça da ESCALA quando todo o acervo está fora da janela
+  // de 21 dias. Sem ele, um acervo velho zera 15 pontos para todas as vagas e
+  // descalibra `queue_threshold` e `generate_min_score` sem ninguém tocá-los. A
+  // discriminação real segue existindo só entre 0 e 21 dias — ver config.yaml.
+  //
+  // `posted_at` ausente continua valendo 0.5 (desconhecido ≠ velho).
   let recency = 0.5;
   if (job.posted_at) {
     const ageDays = (Date.now() - new Date(job.posted_at).getTime()) / 86400_000;
-    recency = Math.max(0, Math.min(1, 1 - ageDays / 21));
+    recency = Math.max(w.recency_floor, Math.min(1, 1 - ageDays / 21));
   }
 
   // 3. fit de local/remoto

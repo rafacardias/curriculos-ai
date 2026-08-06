@@ -122,10 +122,15 @@ function printDist(label: string, values: number[]): void {
     return;
   }
   const s = [...values].sort((a, b) => a - b);
-  const p = (q: number) => s[Math.min(s.length - 1, Math.floor(q * s.length))]!;
+  // Mediana verdadeira (média dos dois centrais em n par) e percentil por ceil.
+  // Indexar por `floor` dava um número diferente do de qualquer outra ferramenta
+  // que olhasse a mesma fila — e métrica que discorda de si mesma não serve de
+  // baseline.
+  const p50 = s.length % 2 ? s[(s.length - 1) / 2]! : (s[s.length / 2 - 1]! + s[s.length / 2]!) / 2;
+  const p90 = s[Math.min(s.length - 1, Math.ceil(0.9 * s.length) - 1)]!;
   console.log(
-    `  ${label.padEnd(8)}${s[0]!.toFixed(1).padStart(5)}  ${p(0.5).toFixed(1).padStart(5)}  ` +
-      `${p(0.9).toFixed(1).padStart(5)}  ${s[s.length - 1]!.toFixed(1).padStart(5)}  ${String(s.length).padStart(5)}`
+    `  ${label.padEnd(8)}${s[0]!.toFixed(1).padStart(5)}  ${p50.toFixed(1).padStart(5)}  ` +
+      `${p90.toFixed(1).padStart(5)}  ${s[s.length - 1]!.toFixed(1).padStart(5)}  ${String(s.length).padStart(5)}`
   );
 }
 

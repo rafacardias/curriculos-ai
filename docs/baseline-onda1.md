@@ -319,3 +319,80 @@ Serve como sanity check direcional. Três razões, a terceira fatal:
 O teste de aceitação honesto: corrigir o BUG-007, capturar motivo estruturado, e validar sobre
 ~25 decisões de `ai-builder` com motivo registrado. Vinte e cinco rótulos limpos valem mais que
 48 confundidos.
+
+---
+
+# Adendo 3 — `rescore --commit` aplicado (2026-08-06)
+
+## Proveniência do banco
+
+| | |
+|---|---|
+| Backup automático pré-escrita | `db/backups/curriculos.2026-08-06T19-26-39Z.db` |
+| `sha256` do backup | `1b2491caf0bd826aeaf89d7667869481b5e1cb30ddc4f24d8cab5629bcc06ad9` |
+| `sha256` do banco **pós-commit** (WAL checkpointado) | `27ab405f1f6aaff439bc787e290e54a1a46756aefa63cd8f5d2460eb7021289a` |
+| Vagas repontuadas | 374 de 375 (1 excluída por ter candidatura) |
+| `score_previous` / `score_rescored_at` gravados | 374 / 374 |
+
+**Idempotência verificada mecanicamente:** um `--dry-run` imediatamente após o `--commit`
+devolveu `com mudança: 0`, `entram: 0`, `saem: 0` e distribuição idêntica.
+
+O que mudou junto neste ciclo, além da repontuação: `scoring.recency_floor: 0.4` (H2 aprovada) e
+`scoring.preference: 0` com `keyword_overlap: 0.65` (BUG-007).
+
+## Antes/depois — as métricas da fila
+
+Comparação sobre o **mesmo conjunto** nos dois lados: as 374 vagas repontuáveis, excluindo em
+ambos a vaga com candidatura registrada (que mantém score congelado, `PRODUCT OWNER I` 72.0).
+Os números "antes" vêm do `--dry-run`, medidos **antes** da escrita — é por isso que o dry-run
+existe: depois do `--commit` a informação de qual vaga estava na fila já não é reconstruível.
+
+| Métrica | Antes | Depois | Δ |
+|---|---:|---:|---|
+| Vagas na fila | 83 | **41** | −42 |
+| Título relevante na fila | 52 (63%) | **37 (90%)** | +27 p.p. |
+| p50 do score na fila | 45.8 | **52.0** | +6.2 |
+| p90 do score na fila | 60.4 | **69.3** | +8.9 |
+| max | 69.7 | **74.8** | +5.1 |
+| Acima do `generate_min_score` (65) | 5 (6%) | **9 (22%)** | +16 p.p. |
+| Fundo do poço (40–45) | 43% | **22%** | −21 p.p. |
+
+Método: `p50` é mediana verdadeira (média dos dois centrais em n par) e `p90` é percentil por
+`ceil`. A CLI foi uniformizada para o mesmo método — indexar por `floor` produzia um número que
+discordava de qualquer outra leitura da mesma fila.
+
+## Critério de aceite — estado das 6 métricas originais
+
+| # | Métrica | Hoje (baseline) | Agora | Estado |
+|---|---|---:|---:|---|
+| 1 | Fila acima do `generate_min_score` | 5 de 84 (6%) | 9 de 41 (22%) | **atingido** |
+| 2 | Fração da fila no fundo do poço (40–45) | 43% | 22% | **atingido** |
+| 3 | `location_fit` médio da Gupy | 8.84 | 8.84 | pendente — item 1.3 |
+| 4 | Ruído de título na LawnStarter | 14 de 17 | 14 de 17 | roadmap (dedup por similaridade) |
+| 5 | Adapters honrando `remote_only` | 0 de 5 | 0 de 5 | roadmap (item 1.5) |
+| 6 | Fonte morta sem alerta | LinkedIn, 3 buscas | idem | roadmap (item 1.4) |
+
+## Topo da fila depois do rescore
+
+| Score | Era | Vaga | Empresa | Fonte |
+|---:|---:|---|---|---|
+| 74.8 | 60.2 | Analista de Produto | Amo Promo | linkedin |
+| 73.7 | 64.8 | Product Owner (EdTech) | Coruja Labs | gupy |
+| 73.7 | 67.8 | Product Owner (Seguros de Vida) | Extractta | gupy |
+| 70.5 | 69.7 | Analista Quality Assurance (QA) Júnior | Globo | linkedin |
+| 69.3 | 63.5 | Product Manager | Ponta | linkedin |
+| 69.3 | 56.7 | Product Owner (PO) | Prime Results | linkedin |
+
+**Ressalva que o número não mostra.** O topo da fila é quase todo Produto/PO — porque as
+`searches` em `config/config.yaml` são majoritariamente de Produto. A fila melhorou de verdade,
+mas está otimizada para a trilha que o operador está **deixando**, não para `ai-builder`. Isso é
+configuração de busca, não scorer: nenhum ajuste de score corrige uma fila que nunca recebeu as
+vagas certas. É a próxima decisão de produto, e é do operador.
+
+## Efeito colateral no BUG-002
+
+Com `keyword_overlap` em 0.65 e `preference` em 0, o piso do fallback morto caiu de **41.5 para
+39.5** — abaixo do `queue_threshold` de 40. O fallback **não** foi corrigido (uma vaga sem
+trilha no banco ainda ganha 19.5 pontos de aderência que não existem), mas parou de encher a
+fila sozinho. **A margem é de 0.5 ponto:** baixar `queue_threshold` para 39 na calibração do
+item 1.6 ressuscita o BUG-002 inteiro. Congelado em `tests/unit/scoring.test.ts`.
