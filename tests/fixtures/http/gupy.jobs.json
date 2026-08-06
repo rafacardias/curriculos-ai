@@ -1,0 +1,28 @@
+{
+  "data": [
+    {
+      "id": 77001,
+      "name": "Analista de Qualidade de Software Júnior",
+      "careerPageName": "Fictícia Tecnologia",
+      "city": "São Paulo",
+      "state": "SP",
+      "workplaceType": "remote",
+      "isRemoteWork": true,
+      "jobUrl": "https://ficticia.gupy.io/job/eyJqb2JJZCI6NzcwMDF9",
+      "description": "<p>Buscamos pessoa para atuar com quality assurance e testes de produto. Você vai trabalhar com teste de regressão, automação de API com Playwright, registro de bug em Jira e consultas SQL. Não é necessária experiência com Cypress.</p>",
+      "publishedDate": null
+    },
+    {
+      "id": 77002,
+      "name": "Analista de Testes",
+      "careerPageName": "Fictícia Tecnologia",
+      "city": "São Paulo",
+      "state": "SP",
+      "workplaceType": "remote",
+      "isRemoteWork": true,
+      "jobUrl": "https://ficticia.gupy.io/job/eyJqb2JJZCI6NzcwMDJ9",
+      "description": "<p>Vaga para quem tem 8 anos de experiência com automação de testes. Você vai trabalhar com quality assurance, API, Playwright e SQL em um time sênior de qualidade.</p>",
+      "publishedDate": null
+    }
+  ]
+}

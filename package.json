@@ -10,7 +10,12 @@
   "scripts": {
     "db:migrate": "tsx src/cli/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "ui": "tsx src/server/index.ts"
+    "ui": "tsx src/server/index.ts",
+    "pretest": "rm -rf .test-sandbox && mkdir -p .test-sandbox && cp -R tests/fixtures/sandbox-root/. .test-sandbox/",
+    "test": "CURRICULOS_ROOT=\"$PWD/.test-sandbox\" node --import tsx --test --test-concurrency=1 --test-reporter=spec \"tests/**/*.test.ts\"",
+    "test:watch": "CURRICULOS_ROOT=\"$PWD/.test-sandbox\" node --import tsx --test --watch --test-concurrency=1 \"tests/**/*.test.ts\"",
+    "test:precheck": "node --import tsx -e \"import('./src/render/pdf.ts').then(m=>{m.findChrome();console.log('chrome ok')})\"",
+    "onda0": "npm run typecheck && npm run test:precheck && npm test"
   },
   "dependencies": {
     "@types/ws": "^8.18.1",

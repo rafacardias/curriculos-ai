@@ -1,0 +1,51 @@
+# CONFIG SINTÉTICA da sandbox de testes.
+# Os pesos de scoring e o queue_threshold são IGUAIS aos de produção de propósito:
+# se divergirem, o gate mente sobre o comportamento real do sistema.
+auto_search: off
+auto_search_hour: 9
+auto_search_days: [1, 2, 3, 4, 5]
+
+searches:
+  - query: quality assurance junior
+    sources: [remotive, remoteok, wwr, gupy, linkedin]
+    location: Brazil
+    remote_only: true
+
+queue_threshold: 40
+
+filters:
+  exclude_seniority: [senior, lead, leadership]
+  max_years_required: 5
+  exclude_title_keywords: []
+
+scoring:
+  keyword_overlap: 0.55
+  recency: 0.15
+  location_fit: 0.15
+  language_fit: 0.05
+  preference: 0.10
+
+policy:
+  generate_min_score: 40
+  full_auto_min_score: 80
+  full_auto_blocked_sources: [linkedin]
+  weekly_cap_per_track: 25
+  prefer_responsive_companies: true
+  cooldown_same_company_days: 30
+
+submission:
+  default_mode: review_first
+  per_platform:
+    greenhouse: review_first
+    lever: review_first
+    workday: review_first
+    linkedin: review_first
+  i_accept_ban_risk: false
+
+experiments:
+  enabled: true
+  min_n_to_compare: 8
+
+preferences:
+  max_weight: 10
+  decay: 0.95

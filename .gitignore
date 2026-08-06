@@ -23,6 +23,9 @@ profile/linkedin-pack.md
 # dashboard gerado
 dashboard/index.html
 
+# sandbox descartável da suíte de testes (recriada pelo pretest)
+.test-sandbox/
+
 # sistema
 .DS_Store
 Captura de Tela*.png

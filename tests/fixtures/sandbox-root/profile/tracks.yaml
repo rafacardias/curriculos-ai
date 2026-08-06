@@ -1,0 +1,34 @@
+# TRILHAS SINTÉTICAS — os ids precisam casar com os track_tags do master-profile,
+# senão `ingest-profile.ts sync` falha na validação cruzada (e é isso que queremos testar).
+tracks:
+  - id: qa
+    name: Quality Assurance
+    summary: Testes manuais e automatizados, qualidade de produto
+    keywords:
+      - qa
+      - quality assurance
+      - teste
+      - testes
+      - regressao
+      - automacao
+      - playwright
+      - api
+      - bug
+      - jira
+      - ci
+      - postman
+      - sql
+      - cypress
+      - selenium
+
+  - id: suporte
+    name: Suporte Técnico
+    summary: Atendimento técnico, SLA e documentação
+    keywords:
+      - suporte
+      - atendimento
+      - chamado
+      - sla
+      - documentacao
+      - help desk
+      - base de conhecimento

@@ -1,12 +1,24 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync, mkdirSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-export const DB_PATH = join(ROOT, "db", "curriculos.db");
-export const MIGRATIONS_DIR = join(ROOT, "db", "migrations");
-export const PROJECT_ROOT = ROOT;
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+/**
+ * Raiz dos DADOS do sistema: db/, config/, profile/ e output/ penduram daqui.
+ * Sobrescrevível por CURRICULOS_ROOT para que a suíte de testes rode numa
+ * sandbox descartável sem nunca encostar no banco e no perfil reais.
+ * Em produção a variável nunca é setada — o comportamento é idêntico ao anterior.
+ */
+export const PROJECT_ROOT = process.env.CURRICULOS_ROOT
+  ? resolve(process.env.CURRICULOS_ROOT)
+  : REPO_ROOT;
+
+export const DB_PATH = join(PROJECT_ROOT, "db", "curriculos.db");
+
+/** Migrations vêm SEMPRE do repositório — nunca de uma cópia de sandbox. */
+export const MIGRATIONS_DIR = join(REPO_ROOT, "db", "migrations");
 
 let db: DatabaseSync | null = null;
 

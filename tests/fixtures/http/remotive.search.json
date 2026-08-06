@@ -1,0 +1,19 @@
+{
+  "jobs": [
+    {
+      "id": 9001,
+      "url": "https://remotive.com/remote-jobs/qa/analista-de-qa-junior-9001",
+      "title": "Analista de QA Júnior",
+      "company_name": "Nimbus Labs",
+      "candidate_required_location": "Brazil",
+      "salary": "R$ 5.000 - R$ 7.000",
+      "description": "<p>Você vai atuar com <strong>quality assurance</strong> em um time de produto. A vaga é para quem tem conhecimento de testes manuais, teste de regressão e automação com Playwright. Trabalho remoto, com uso diário de Jira e Postman para validação de API. Não exigimos experiência prévia com CI, mas é um diferencial.</p>"    },
+    {
+      "id": 9002,
+      "url": "https://remotive.com/remote-jobs/qa/senior-qa-engineer-9002",
+      "title": "Senior QA Engineer",
+      "company_name": "Vertex Systems",
+      "candidate_required_location": "Worldwide",
+      "description": "<p>We are looking for a senior engineer with strong quality assurance background. You will work with API testing, automation and CI pipelines. The job requires knowledge of SQL and Playwright.</p>"    }
+  ]
+}

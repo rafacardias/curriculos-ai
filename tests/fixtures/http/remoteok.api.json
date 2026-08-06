@@ -1,0 +1,16 @@
+[
+  {
+    "legal": "RemoteOK API — o primeiro elemento do array NÃO é uma vaga. O adapter faz .slice(1) para descartá-lo. Este item existe na fixture justamente para provar que o slice acontece."
+  },
+  {
+    "id": 8801,
+    "url": "https://remoteok.com/remote-jobs/8801-quality-assurance-analyst-orbital",
+    "position": "Quality Assurance Analyst",
+    "company": "Orbital Data",
+    "location": "Remote",
+    "salary_min": 40000,
+    "salary_max": 60000,
+    "tags": ["qa", "testing", "api"],
+    "description": "<p>You will own the quality assurance process end to end. The job involves API testing with Postman, automation with Playwright, bug triage in Jira and some SQL. We are a remote team and you work with engineers daily.</p>"
+  }
+]

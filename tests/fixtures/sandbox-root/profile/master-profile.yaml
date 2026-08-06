@@ -1,0 +1,59 @@
+# PERFIL SINTÉTICO — só para a suíte de testes.
+# Nenhum dado real do operador entra aqui. Os fact_ids são estáveis porque
+# tests/fixtures/kit/*.md os citam literalmente.
+identity:
+  name: Ana Teste
+  email: ana.teste@example.com
+  phone: "+55 11 90000-0000"
+  location: São Paulo, Brasil
+  linkedin: https://www.linkedin.com/in/ana-teste/
+  github: https://github.com/ana-teste
+  languages:
+    - Português (nativo)
+    - Inglês (avançado)
+
+experiences:
+  - id: exp-acme-qa
+    company: ACME Software
+    role: Analista de QA
+    start: "2023-01"
+    end: "2025-06"
+    track_tags: [qa]
+    facts:
+      - id: exp-acme-qa.f1
+        text: Estruturei a suíte de regressão manual do checkout, cobrindo 42 casos de teste críticos.
+        skills: [teste de regressão, checkout]
+      - id: exp-acme-qa.f2
+        text: Reduzi o tempo de triagem de bugs de 3 dias para 8 horas ao padronizar o template de reporte.
+        skills: [triagem de bugs, processo]
+      - id: exp-acme-qa.f3
+        text: Automatizei 18 cenários de teste de API com Playwright, integrados ao pipeline de CI.
+        skills: [Playwright, automação de testes, CI, API]
+
+  - id: exp-globex-suporte
+    company: Globex
+    role: Analista de Suporte Técnico
+    start: "2021-03"
+    end: "2022-12"
+    track_tags: [suporte, qa]
+    facts:
+      - id: exp-globex-suporte.f1
+        text: Atendi 120 chamados por mês com SLA de primeira resposta de 2 horas.
+        skills: [suporte, SLA]
+      - id: exp-globex-suporte.f2
+        text: Documentei 30 procedimentos operacionais na base de conhecimento interna.
+        skills: [documentação]
+
+education:
+  - institution: Universidade Exemplo
+    degree: Tecnólogo em Análise e Desenvolvimento de Sistemas
+    start: "2018"
+    end: "2021"
+
+certifications:
+  - CTFL — Certified Tester Foundation Level (ISTQB)
+
+skills:
+  hard: [teste de regressão, teste de API, automação de testes, SQL]
+  soft: [comunicação, documentação]
+  tools: [Playwright, Jira, Postman, Git]

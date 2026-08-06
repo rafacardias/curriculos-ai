@@ -38,14 +38,22 @@ export async function runSearch(
 
   const results = await Promise.all(
     adapters.map(async (adapter) => {
-      const timeout = new Promise<{ jobs: RawJob[]; errors: string[] }>((resolve) =>
-        setTimeout(() => resolve({ jobs: [], errors: [`timeout ${ADAPTER_TIMEOUT_MS}ms`] }), ADAPTER_TIMEOUT_MS)
-      );
+      // O timer precisa ser limpo: sem isso o Promise.race vencido pelo adapter
+      // deixa um setTimeout de 30s vivo, segurando o event loop até o fim do prazo.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<{ jobs: RawJob[]; errors: string[] }>((resolve) => {
+        timer = setTimeout(
+          () => resolve({ jobs: [], errors: [`timeout ${ADAPTER_TIMEOUT_MS}ms`] }),
+          ADAPTER_TIMEOUT_MS
+        );
+      });
       try {
         const result = await Promise.race([adapter.search(params), timeout]);
         return { adapterId: adapter.id, ...result };
       } catch (err) {
         return { adapterId: adapter.id, jobs: [] as RawJob[], errors: [String(err)] };
+      } finally {
+        clearTimeout(timer);
       }
     })
   );

@@ -1,0 +1,15 @@
+# CANDIDATE FACTS SINTÉTICOS — respostas canônicas de formulário ATS.
+# O bundle do kit expõe apenas as CHAVES, nunca os valores; o smoke test assere isso.
+facts:
+  - key: work_authorization
+    language: pt
+    value: Cidadã brasileira, autorizada a trabalhar no Brasil sem necessidade de patrocínio.
+  - key: salary_expectation_brl
+    language: pt
+    value: R$ 6.000 a R$ 8.000 mensais (CLT)
+  - key: notice_period
+    language: pt
+    value: Disponibilidade imediata
+  - key: location_flexibility
+    language: pt
+    value: Remoto ou híbrido na Grande São Paulo

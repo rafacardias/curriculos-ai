@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>We Work Remotely</title>
+    <item>
+      <title><![CDATA[Helios Systems: Quality Assurance Engineer]]></title>
+      <link>https://weworkremotely.com/remote-jobs/helios-systems-quality-assurance-engineer</link>
+      <description><![CDATA[<p>Helios is hiring a quality assurance engineer. The job covers API testing, test automation with Playwright, bug tracking in Jira and light SQL work. You are expected to work with the product team.</p>]]></description>
+      <pubDate></pubDate>
+      <region>Anywhere</region>
+    </item>
+    <item>
+      <title><![CDATA[Umbrella Co: Backend Developer]]></title>
+      <link>https://weworkremotely.com/remote-jobs/umbrella-co-backend-developer</link>
+      <description><![CDATA[<p>We need a backend developer with Go and Postgres experience. The job is fully remote.</p>]]></description>
+      <pubDate></pubDate>
+      <region>Anywhere</region>
+    </item>
+  </channel>
+</rss>
