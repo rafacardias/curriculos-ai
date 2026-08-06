@@ -5,75 +5,72 @@ auto_search: on
 auto_search_hour: 9 # hora local do dia para a busca automática
 
 # Buscas rodadas pelo /buscar (e pelo modo automático)
-# Estratégia: queries PT → Gupy/LinkedIn BR; queries EN → boards remotos internacionais.
-# LinkedIn (guest) fica só nas 3 apostas principais para não estressar o endpoint.
+#
+# Trilha-alvo: ai-builder (automação · IA aplicada · growth/funil).
+# Reescritas em 2026-08-06 — as anteriores eram de QA/Produto, herdadas de quando
+# essa era a trilha, e por isso o acervo tinha 199 vagas de `product` contra 73 de
+# `ai-builder`. O scorer já pontuava bem a trilha nova; ninguém ia buscá-la.
+#
+# Regra de forma: a Gupy busca por `jobName`, ou seja, casa contra o TÍTULO da
+# vaga. Query tem de parecer título ("Analista de Automação"), não descrição de
+# habilidade ("vibe coder", que não é cargo em lugar nenhum). Termos como
+# `vibe coding`, `claude`, `n8n` e `manychat` moram no LÉXICO da trilha
+# (profile/tracks.yaml), onde ranqueiam a vaga depois que ela chega.
+#
+# Roteamento: query em PT → Gupy/LinkedIn BR. Query em EN → boards remotos
+# internacionais. Senioridade NÃO entra na query — quem faz esse corte é
+# `filters.exclude_seniority`, que é mais confiável que a redação do anúncio.
 searches:
-  - query: QA Assistant Analist Junior associate
-    sources:
-      - remotive
-      - remoteok
-      - wwr
-      - gupy
-      - linkedin
-    remote_only: true
-  - query: quality assurance junior  associate
-    sources:
-      - remotive
-      - remoteok
-      - wwr
-      - gupy
-      - linkedin
-    remote_only: true
-  - query: Product Manager junior estágio
-    sources:
-      - gupy
-      - linkedin
+  # ─── PT · Brasil ────────────────────────────────────────────────────────────
+  - query: Analista de Automação
+    sources: [gupy, linkedin]
     location: Brazil
     remote_only: false
-  - query: Product Owner estágio
-    sources:
-      - gupy
-      - linkedin
-    location: Belo Horizonte
+  - query: Automação de Marketing
+    sources: [gupy, linkedin]
+    location: Brazil
     remote_only: false
-  - query: associate product manager
-    sources:
-      - gupy
-      - linkedin
-    location: Belo Horizonte
+  - query: Analista de CRM
+    sources: [gupy, linkedin]
+    location: Brazil
     remote_only: false
-  - query: Scrum Master estágio
-    sources:
-      - gupy
-      - linkedin
-    location: Belo Horizonte
+  - query: Analista de Growth
+    sources: [gupy, linkedin]
+    location: Brazil
     remote_only: false
+  - query: Engenheiro de IA
+    sources: [gupy, linkedin]
+    location: Brazil
+    remote_only: false
+  - query: Chatbot
+    sources: [gupy, linkedin]
+    location: Brazil
+    remote_only: false
+  - query: No-Code
+    sources: [gupy, linkedin]
+    location: Brazil
+    remote_only: false
+
+  # ─── EN · remoto internacional ──────────────────────────────────────────────
   - query: n8n
-    sources:
-      - remotive
-      - remoteok
-      - wwr
-      - gupy
-      - linkedin
+    sources: [remotive, remoteok, wwr]
     remote_only: true
   - query: AI automation
-    sources:
-      - remotive
-      - remoteok
-      - wwr
-      - gupy
-      - linkedin
+    sources: [remotive, remoteok, wwr]
     remote_only: true
-  - query: vibe coder
-    sources:
-      - remotive
-      - remoteok
-      - wwr
-      - gupy
-      - linkedin
+  - query: automation engineer
+    sources: [remotive, remoteok, wwr]
+    remote_only: true
+  - query: AI agent
+    sources: [remotive, remoteok, wwr]
+    remote_only: true
+  - query: marketing automation
+    sources: [remotive, remoteok, wwr]
+    remote_only: true
+  - query: no code developer
+    sources: [remotive, remoteok, wwr]
     remote_only: true
 
-# Threshold para uma vaga entrar na fila (score 0-100)
 queue_threshold: 40
 
 # Filtros duros — vaga filtrada NÃO entra na fila (motivo fica no policy_action)
