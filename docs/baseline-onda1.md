@@ -140,3 +140,106 @@ delta contra esta baseline. Metas:
 para que o delta isole o efeito da mudança de algoritmo. Uma busca ao vivo depois disso mede
 o efeito nas medidas 5–6 e traz vagas novas — mas ela insere linhas no banco real, então
 acontece só com seu aval.
+
+---
+
+# Adendo — 1.2a `rescore`: medição do dry-run (2026-08-06)
+
+O comando `rescore` foi construído antes de qualquer mudança no scorer, para que o efeito de
+cada mudança fosse mensurável no acervo já coletado (o score é congelado no insert, então sem
+ele nenhuma melhoria alcançaria a fila que o operador abre). O primeiro dry-run rodou com o
+scorer **inalterado** — e é justamente por isso que ele mede algo.
+
+## Resultado
+
+`374` vagas elegíveis (375 no banco, 1 excluída por ter candidatura registrada).
+
+| Cenário | Fila | Título relevante | Precisão | p50 | p90 | max |
+|---|---:|---:|---:|---:|---:|---:|
+| Hoje, score congelado | 84 | 53 | 63% | 45.8 | 60.4 | 69.7 |
+| `rescore`, `preference` em 0.10 | 24 | 21 | 88% | 45.7 | 60.2 | 60.3 |
+| `rescore`, `preference` em 0 (`keyword_overlap` 0.65) | 32 | 28 | 88% | 50.3 | 64.5 | 68.8 |
+
+"Título relevante" = título casa `qa|quality|test|product owner|product manager|scrum|po|pm|automation`.
+É uma proxy grosseira de relevância, mas é a mesma proxy nas três linhas, então o delta vale.
+
+## Três achados que mudam o plano
+
+**1. Dois dos cinco componentes estão mortos ou contra o operador.**
+
+A queda que domina o diff (~22 pontos, uniforme) **não é ganho de scorer**. Decompõe em:
+
+- `recency` → 0 para todas as 374 vagas. O decaimento é de 21 dias e o sistema ficou 3,5
+  semanas parado. O componente (peso 0.15) deixou de discriminar qualquer coisa.
+- `preference` → 0 para as vagas que antes pontuavam ~9.4/10. Não por decaimento: por sinal.
+
+Aritmética do caso `Firefighter ARFF` (45.5 → 23.7): −12.4 de recência −9.4 de preferência = −21.8.
+
+**2. `preference_weights` está anti-correlacionado com o objetivo declarado.**
+
+98 chaves aprendidas de 70 eventos de feedback. Os extremos:
+
+| Negativos | | Positivos | |
+|---|---:|---|---:|
+| `kw:product manager` | −9.50 | `source:remoteok` | +3.61 |
+| `kw:qa` | −7.65 | `kw:claude` | +2.85 |
+| `kw:scrum master` | −7.60 | `source:wwr` | +2.85 |
+| `source:gupy` | −5.65 | `kw:ai agents` | +2.85 |
+| `kw:product owner` | −5.65 | `kw:llm` · `kw:rag` | +1.90 |
+| `kw:playwright` · `cypress` · `istqb` | −2.85 | `kw:n8n` | +1.90 |
+| `seniority:junior` | −1.90 | | |
+
+Todo termo que descreve as trilhas do operador carrega peso negativo; `source:remoteok` — a
+fonte que produziu `Firefighter ARFF` e `Health Navigator I` — é o maior peso positivo do banco.
+
+**Causa raiz: atribuição de culpa, não captura invertida nem ruído.** O aprendizado credita a
+rejeição a *todos* os termos do JD, inclusive aos que fizeram a vaga ser um match. Rejeitar
+"QA Senior" (rejeitada por ser sênior) ensinou que `qa` é ruim. Com uma fila 94% abaixo do
+`generate_min_score`, 70 rejeições foram suficientes para inverter o vocabulário inteiro.
+
+Com peso 0.10 contra 0.55 do `keyword_overlap`, o componente não decide sozinho — mas em vagas
+cujo overlap é baixo (a maioria), ele decide.
+
+**3. O `--commit` com a `preference` como está removeria vagas boas da fila.**
+
+31 vagas de título relevante saem da fila, entre elas:
+
+| Vaga | Antes | Depois |
+|---|---:|---:|
+| QA Automation Pleno - REMOTO | 60.1 | 38.3 |
+| QA Automation Engineer \| Mid-Level (Remoto) | 52.8 | 31.0 |
+| QA (Quality Assurance) Pleno \| Mobile \| Remoto | 52.8 | 31.0 |
+| Technical Product Manager (Plataforma de Dados) | 45.8 | 35.8 |
+
+Com `preference` em 0, esse número cai de 31 para 24 e o p50 sobe 4.6 pontos.
+
+## Consequência para a ordem da onda
+
+O 1.7 deixa de ser diagnóstico opcional no fim e passa a **bloquear** o primeiro `--commit`:
+aplicar o rescore com o componente invertido gravaria a inversão sobre 374 linhas.
+
+Correção recomendada, em duas partes separadas:
+
+- **Agora, reversível e não destrutivo:** `scoring.preference: 0.10 → 0` e
+  `scoring.keyword_overlap: 0.55 → 0.65` em `config/config.yaml`. Torna os pesos envenenados
+  inertes **sem apagá-los** — eles seguem no banco para quando a regra de aprendizado for
+  corrigida. Zerar a tabela `preference_weights` é destrutivo e não é necessário para desarmar
+  o componente.
+- **Roadmap:** consertar a atribuição de culpa (rejeição precisa creditar o *motivo* — nível,
+  localidade, empresa — não o vocabulário inteiro do JD). Enquanto isso não existir, religar o
+  componente reintroduz o problema.
+
+## Nota de incomparabilidade de escala
+
+Mudar `preference` para 0 e `keyword_overlap` para 0.65 mantém o denominador em 1.00, mas
+**muda a semântica do número**: 45.5 na escala antiga e 45.5 na nova não são a mesma coisa.
+`queue_threshold: 40` e `generate_min_score: 65` ficam descalibrados **por construção** — é
+exatamente para isso que o item 1.6 (calibração final) existe. Nenhuma comparação de score
+entre commits anteriores e posteriores a essa mudança é válida; use `score_previous` (migration
+002) para reconstruir a escala antiga quando precisar comparar.
+
+## Limite honesto do `rescore`
+
+Ele é idempotente **na mesma leitura de relógio**, não ao longo do tempo: `recency` depende de
+`Date.now()`, então rodar amanhã dá scores menores. Isso é correto (uma vaga de 40 dias não
+pode manter a recência do dia 1) e está declarado aqui para não ser lido como bug depois.
