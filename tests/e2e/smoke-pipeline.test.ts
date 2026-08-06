@@ -136,6 +136,10 @@ describe("smoke e2e — pipeline completo", () => {
     const fx = join(REPO_ROOT, "tests/fixtures/kit");
     copyFileSync(join(fx, "resume.ok.md"), join(kitDir, "resume.md"));
     copyFileSync(join(fx, "cover-letter.md"), join(kitDir, "cover-letter.md"));
+    // Os quatro entregáveis: desde os gates da Onda 2 o finalize cobra
+    // `expected_files` inteiro, e não só o currículo.
+    copyFileSync(join(fx, "answers.md"), join(kitDir, "answers.md"));
+    copyFileSync(join(fx, "outreach.md"), join(kitDir, "outreach.md"));
 
     const r = runCli("src/cli/kit.ts", ["finalize", alvo.jobId]);
     assert.equal(r.status, 0, `finalize falhou: ${r.stderr}`);
@@ -180,5 +184,7 @@ describe("smoke e2e — pipeline completo", () => {
 
   // LIMITAÇÃO HONESTA: provar que o PDF tem camada de texto extraível por um ATS
   // exigiria um parser de PDF, ou seja, uma dependência nova. Ver KNOWN-BUGS.md.
-  it("8. PDF tem camada de texto extraível por ATS", { todo: "exige parser de PDF (dependência nova)" }, () => {});
+  // 8. "PDF tem camada de texto extraível por ATS" era um `todo` aqui (LIM-001).
+  //    Fechado: a prova vive em tests/e2e/kit-ats-gate.test.ts, com parser de
+  //    verdade, agora que `unpdf` entrou como devDependency.
 });

@@ -18,7 +18,8 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | [BUG-001](#bug-001) | Média | Congelado | os 5 adapters |
 | [BUG-003](#bug-003) | Média | **Corrigido** | `src/core/pipeline.ts:41-45` |
 | [BUG-004](#bug-004) | Baixa | Sem cobertura | `src/submit/linkedin-easyapply.ts` |
-| [LIM-001](#lim-001) | — | Limitação aceita | `tests/e2e/smoke-pipeline.test.ts` |
+| [BUG-008](#bug-008) | **Alta** | **Corrigido** | `src/cli/kit.ts` (gates de conteúdo) |
+| [LIM-001](#lim-001) | — | **FECHADO** | `tests/e2e/kit-ats-gate.test.ts` |
 
 ---
 
@@ -310,10 +311,63 @@ testá-lo exigiria mockar `playwright-core` — prova de mock, não de comportam
 
 ---
 
-## LIM-001
+## BUG-008 — CORRIGIDO
 
-**O smoke test não prova que o PDF tem camada de texto extraível por um ATS.**
+**`[CONFIRMAR: ...]` sobrevivia até o envio, e o `finalize` só olhava o `resume.md`.**
 
-Assere que o arquivo existe, tem mais de 5 KB e começa com `%PDF-`. Provar extração de texto
-exigiria um parser de PDF, ou seja, uma dependência nova — o projeto se compromete com zero
-dependências. Registrado como `todo` no `tests/e2e/smoke-pipeline.test.ts`.
+O prompt do pipeline de aprovação (`src/server/index.ts:204`) instrui, literalmente: *"Se faltar
+um candidate_fact, escreva `[CONFIRMAR: ...]` no answers.md e prossiga"*. A instrução está certa —
+é assim que o sistema evita inventar pretensão salarial. O defeito era não haver nada barrando
+depois.
+
+**Não era hipótese.** O único kit em `output/` tinha **dois marcadores vivos** no `answers.md`,
+linhas 4 e 28, um deles pedindo pretensão salarial. Em `full_auto` isso iria literalmente no
+formulário da empresa.
+
+Agravante: `answers.md` e `outreach.md` estavam em `expected_files` desde sempre e o `finalize`
+**nunca os lia — nem checava se existiam**. `cover-letter.md` era renderizado se existisse, sem
+validação nenhuma.
+
+**Corrigido:** gates de conteúdo em `src/core/gates.ts`, aplicados aos quatro entregáveis, com
+`process.exit(3)`. O código é distinto do 2 de propósito — a prova de que "exit 2 é específico do
+truthcheck" não pode ser diluída, e a ordem importa: veracidade reprova primeiro.
+
+**Congelado em:** `tests/unit/gates.test.ts` e `tests/e2e/truthcheck-exit2.test.ts`, incluindo o
+caso de precedência (currículo com citação falsa **e** placeholder sai 2, não 3).
+
+---
+
+## LIM-001 — FECHADO em 2026-08-06
+
+**Era:** "o smoke test não prova que o PDF tem camada de texto extraível por um ATS. Assere que
+o arquivo existe, tem mais de 5 KB e começa com `%PDF-`. Provar extração exigiria um parser de
+PDF, ou seja, uma dependência nova — e o projeto se compromete com zero dependências."
+
+A limitação era real: um PDF feito só de imagem satisfaz header e tamanho.
+
+**Fechado com um recorte da regra, não com uma exceção a ela.** O parser (`unpdf`) entrou como
+**devDependency**, importado *lazy* e usado só no gate e nos testes. O que a regra de zero-dep
+protege é o runtime de produção do futuro SaaS: `src/core/` continua sem dependência nenhuma, e
+por isso o gate de PDF mora em `src/render/pdf-text.ts` — a camada onde o Chrome já vive.
+
+Se o parser não puder ser carregado, o gate **lança**. Um gate que se desliga sozinho quando a
+ferramenta some é pior que gate nenhum: cria a impressão de que foi verificado.
+
+**A prova são três verificações que não se substituem** (`src/cli/kit.ts`, exit 4):
+
+| Verificação | O que prova |
+|---|---|
+| `checkAtsHostileHtml` | o HTML não tem `<table>`, `<img>`, `column-count` nem `position:absolute` |
+| `checkTextFidelity` | toda linha significativa do markdown sobreviveu até o texto extraído do PDF |
+| `checkReadingOrder` | o `innerText` (ordem do DOM) e o texto do PDF (ordem visual) casam em **sequência** |
+
+A terceira é a que o parser sozinho não daria. Ela compara as duas extrações **entre si**: num
+layout coluna única elas coincidem, e é a coincidência que prova que nada embaralhou a leitura.
+
+Detalhe de implementação que custou um falso positivo: o casamento é por **subsequência**, com o
+cursor avançando até o fim da âncora anterior. Buscar sempre do início fazia o heading
+`CERTIFICAÇÕES` casar com a palavra "certificações" citada num bullet acima, e o gate acusava
+desordem num documento correto. Congelado em `tests/unit/gates.test.ts` como teste de regressão.
+
+**Coberto por:** `tests/e2e/kit-ats-gate.test.ts` (tabela → exit 4 com o PDF removido; PDF válido
+→ extração confere linha a linha; parser indisponível → lança) e `tests/unit/gates.test.ts`.

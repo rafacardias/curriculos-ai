@@ -6,12 +6,17 @@
  * damos spawn no `kit.ts finalize` e assertamos o código de saída — em vez de
  * extrair a função e testá-la, o que provaria outra coisa.
  *
- * Bônus: o process.exit(2) acontece ANTES do render de PDF, então este arquivo
- * não depende do Chrome.
+ * Bônus: os exits 1, 2 e 3 acontecem ANTES do render de PDF, então este arquivo
+ * não depende do Chrome. O exit 4 (gates de ATS) depende, e por isso mora em
+ * tests/e2e/kit-ats-gate.test.ts.
+ *
+ * O valor destes testes é a ESPECIFICIDADE: cada código prova uma coisa
+ * diferente, e um gate novo não pode canibalizar o código de outro.
+ *   1 resume.md ausente · 2 truthcheck · 3 conteúdo · 4 ATS
  */
 import { describe, it, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { copyFileSync, readdirSync, existsSync, rmSync } from "node:fs";
+import { copyFileSync, readdirSync, existsSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT, SANDBOX_ROOT, resetSandboxData, runCli } from "../helpers/sandbox.js";
 import { insertJob } from "../../src/db/repo/jobs.js";
@@ -23,6 +28,17 @@ let kitDir: string;
 /** Copia uma fixture de currículo para o kit como resume.md. */
 function useResume(fixture: string): void {
   copyFileSync(join(KIT_FIXTURES, fixture), join(kitDir, "resume.md"));
+}
+
+/** Copia os outros três entregáveis, que o finalize passou a cobrar. */
+function useDeliverables(answers = "answers.md"): void {
+  for (const [fixture, alvo] of [
+    ["cover-letter.md", "cover-letter.md"],
+    [answers, "answers.md"],
+    ["outreach.md", "outreach.md"],
+  ] as const) {
+    copyFileSync(join(KIT_FIXTURES, fixture), join(kitDir, alvo));
+  }
 }
 
 before(() => {
@@ -54,6 +70,8 @@ before(() => {
 beforeEach(() => {
   rmSync(join(kitDir, "resume.pdf"), { force: true });
   rmSync(join(kitDir, "coverage-report.md"), { force: true });
+  useResume("resume.ok.md");
+  useDeliverables(); // estado limpo: só o que o teste alterar deve falhar
 });
 
 describe("kit.ts finalize — exit code do guardrail de veracidade", () => {
@@ -99,5 +117,45 @@ describe("kit.ts finalize — exit code do guardrail de veracidade", () => {
     useResume("resume.ok.md");
     const r = runCli("src/cli/kit.ts", ["finalize", jobId]);
     assert.notEqual(r.status, 2, `truthcheck barrou um currículo válido. stderr: ${r.stderr}`);
+  });
+});
+
+describe("kit.ts finalize — gates de conteúdo (exit 3)", () => {
+  it("[CONFIRMAR: ...] sobrevivente no answers.md → exit 3", () => {
+    // Defeito REAL, não hipotético: o único kit em output/ tinha dois destes
+    // vivos, um pedindo pretensão salarial. Sem este gate ele iria no formulário.
+    useDeliverables("answers.confirmar.md");
+    const r = runCli("src/cli/kit.ts", ["finalize", jobId]);
+
+    assert.equal(r.status, 3, `esperava exit 3, veio ${r.status}. stderr: ${r.stderr}`);
+    assert.match(r.stderr, /GATES DE CONTEÚDO FALHARAM/);
+    assert.match(r.stderr, /answers\.md:4/);
+    assert.equal(existsSync(join(kitDir, "resume.pdf")), false, "não pode render PDF de kit reprovado");
+  });
+
+  it("entregável ausente → exit 3, com o nome do arquivo", () => {
+    rmSync(join(kitDir, "outreach.md"), { force: true });
+    const r = runCli("src/cli/kit.ts", ["finalize", jobId]);
+
+    assert.equal(r.status, 3, `esperava exit 3, veio ${r.status}. stderr: ${r.stderr}`);
+    assert.match(r.stderr, /outreach\.md\s+— ausente/);
+  });
+
+  it("entregável vazio conta como ausente → exit 3", () => {
+    writeFileSync(join(kitDir, "answers.md"), "\n   \n", "utf-8");
+    const r = runCli("src/cli/kit.ts", ["finalize", jobId]);
+
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /answers\.md\s+— vazio/);
+  });
+
+  it("o truthcheck vem ANTES: currículo com citação falsa E placeholder sai 2, não 3", () => {
+    // Ordem importa. Veracidade é a Regra nº 1; ela reprova primeiro, e o
+    // operador vê o problema mais grave em vez do mais superficial.
+    useResume("resume.bad-citation.md");
+    useDeliverables("answers.confirmar.md");
+    const r = runCli("src/cli/kit.ts", ["finalize", jobId]);
+
+    assert.equal(r.status, 2, `esperava exit 2 (truthcheck tem precedência), veio ${r.status}`);
   });
 });

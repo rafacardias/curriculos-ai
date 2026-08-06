@@ -2,9 +2,16 @@
  * kit — prepara o contexto e finaliza o kit de aplicação de uma vaga.
  *
  *   npx tsx src/cli/kit.ts prepare <job_id>   # emite bundle JSON p/ o Claude redigir
- *   npx tsx src/cli/kit.ts finalize <job_id>  # truthcheck + coverage + PDFs + registros
+ *   npx tsx src/cli/kit.ts finalize <job_id>  # gates + coverage + PDFs + registros
+ *
+ * Códigos de saída do finalize — distintos de propósito, porque cada um prova
+ * uma coisa diferente e os testes asseram isso:
+ *   1  resume.md ausente
+ *   2  truthcheck (citação inexistente ou bullet sem citação)
+ *   3  conteúdo ([CONFIRMAR: ...] sobrevivente, entregável ausente ou vazio)
+ *   4  ATS (HTML hostil, ou o PDF não devolve o texto que deveria)
  */
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { PROJECT_ROOT, getDb } from "../db/client.js";
 import { getJob } from "../db/repo/jobs.js";
@@ -18,6 +25,16 @@ import { loadConfig } from "../core/config.js";
 import { extractKeywords } from "../core/keywords.js";
 import { truthcheck, stripCitations } from "../core/truthcheck.js";
 import { coverageReport, renderCoverageMd } from "../core/coverage.js";
+import {
+  checkExpectedFiles,
+  checkPlaceholders,
+  checkAtsHostileHtml,
+  checkTextFidelity,
+  checkReadingOrder,
+  formatGateFailures,
+  type GateFailure,
+} from "../core/gates.js";
+import { extractPdfText } from "../render/pdf-text.js";
 import { decidePolicy } from "../core/policy.js";
 import { assignVariant } from "../core/experiments.js";
 import { normalize } from "../core/dedup.js";
@@ -104,15 +121,42 @@ if (cmd === "prepare") {
     process.exit(2);
   }
 
-  // 2. Coverage report
+  // 2. Gates de CONTEÚDO (exit 3) — valem para os QUATRO entregáveis, não só o
+  //    currículo. Até aqui o finalize nunca lia answers.md nem outreach.md,
+  //    apesar de os dois estarem em expected_files.
+  const EXPECTED = ["resume.md", "cover-letter.md", "answers.md", "outreach.md"];
+  const entregaveis: Record<string, string | null> = {};
+  for (const nome of EXPECTED) {
+    const p = join(kitDir, nome);
+    entregaveis[nome] = existsSync(p) ? readFileSync(p, "utf-8") : null;
+  }
+  const presentes = Object.fromEntries(
+    Object.entries(entregaveis).filter(([, v]) => v != null)
+  ) as Record<string, string>;
+
+  const falhasConteudo = [
+    checkExpectedFiles(EXPECTED, entregaveis),
+    checkPlaceholders(presentes),
+  ].filter((f): f is GateFailure => f != null);
+
+  if (falhasConteudo.length) {
+    console.error("GATES DE CONTEÚDO FALHARAM:");
+    console.error(formatGateFailures(falhasConteudo));
+    console.error("\n[CONFIRMAR: ...] é correto DURANTE a geração — é assim que o sistema evita");
+    console.error("inventar dado. O defeito é ele sobreviver até o envio. Preencha e rode de novo.");
+    process.exit(3);
+  }
+
+  // 3. Coverage report
   const cleanMd = stripCitations(resumeMd);
   const jdText = `${job.title}\n${job.description ?? ""}`;
   const report = coverageReport(jdText, cleanMd);
   writeFileSync(join(kitDir, "coverage-report.md"), renderCoverageMd(report), "utf-8");
 
-  // 3. Render PDFs
+  // 4. Render PDFs
+  const resumeHtml = wrapAtsHtml(cleanMd, `${profile.identity.name} — ${job.title}`);
   const resumePdf = join(kitDir, "resume.pdf");
-  await htmlToPdf(wrapAtsHtml(cleanMd, `${profile.identity.name} — ${job.title}`), resumePdf);
+  const { innerText } = await htmlToPdf(resumeHtml, resumePdf);
   const coverPath = join(kitDir, "cover-letter.md");
   if (existsSync(coverPath)) {
     await htmlToPdf(
@@ -121,7 +165,28 @@ if (cmd === "prepare") {
     );
   }
 
-  // 4. Registros
+  // 5. Gates de ATS (exit 4) — o que a máquina do outro lado vai conseguir ler.
+  //    Três verificações que não se substituem: o HTML não pode ter construção
+  //    hostil; o texto extraído do PDF prova o que o ATS de fato lê; e o
+  //    innerText comparado ao PDF prova que a ORDEM DE LEITURA sobreviveu — é a
+  //    parte que o parser sozinho não pega.
+  const pdfText = await extractPdfText(resumePdf);
+  const falhasAts = [
+    checkAtsHostileHtml(resumeHtml),
+    checkTextFidelity(cleanMd, pdfText.text, "pdf"),
+    checkReadingOrder(innerText, pdfText.text),
+  ].filter((f): f is GateFailure => f != null);
+
+  if (falhasAts.length) {
+    console.error("GATES DE ATS FALHARAM:");
+    console.error(formatGateFailures(falhasAts));
+    console.error(`\nPDF: ${pdfText.pages} página(s), ${pdfText.text.length} chars extraídos.`);
+    rmSync(resumePdf, { force: true });
+    console.error("O resume.pdf foi removido — um PDF que o ATS não lê não deve ficar no kit.");
+    process.exit(4);
+  }
+
+  // 6. Registros
   const policy = decidePolicy(config, job, job.score ?? 0, job.track_hint);
   let app = getApplicationByJob(jobId);
   if (!app) app = createApplication(jobId, job.track_hint, kitDir, policy.submissionMode);
