@@ -175,6 +175,60 @@ habilitou**, e agora está medido em vez de suposto. Não há flag de TTL na CLI
 Ambos param em exit 3 pelos mesmos 2 `[CONFIRMAR:` — pretensão salarial (prescrita pelo próprio
 fato) e escolaridade (indefinida de verdade). O primeiro é o que a fase F4 resolve.
 
+## Não-regressão (F2) — **REPROVOU**. O `--via=cli` não virou default
+
+Critério do operador, em código: nenhuma vaga pode piorar mais de **5 pontos de cobertura**, e
+**zero reprovações novas de truthcheck**. Uma vaga boa não autoriza troca de padrão.
+
+**A amostra pretendida eram 5 vagas; saíram 3.** Duas (`E — Analista de Automação` e
+`10x Advisory`) foram recusadas pelo `prepare` com **exit 5**: modalidade não confirmada. O gate
+funcionou como projetado — mas encolheu a amostra, e isso é parte do resultado.
+
+| vaga | cobertura | ATS | exit | `[CONFIRMAR:` | páginas |
+|---|---|---|---|---|---|
+| unimed — fluxo conversacional | 50% → 50% | 60 → 60 | 0 → 3 | 0 → 1 | 2 → 2 |
+| tsa — analista de automação | 30% → **43%** | 44 → **54** | 0 → 3 | 0 → 2 | 2 → 2 |
+| techne — chatbot junior | 30% → **17%** | 44 → **34** | 0 → 3 | 0 → 1 | 2 → 2 |
+
+**Veredicto: reprovado por −13 pontos na Techne junior.** `--via` passou a ser **obrigatória**,
+sem default, e `agentic` continua o caminho validado.
+
+### Por que a Techne junior caiu — e por que isso acusa a métrica também
+
+As 5 keywords que o caminho novo perdeu: `analista`, `junior`, `chatbot junior`, `areas`,
+`organizacao`. Ganhou `assistentes virtuais`.
+
+- **Três são o título da vaga.** O agêntico ecoa o título no Resumo porque `SKILL.md:61` manda
+  ("título do Resumo sintonizado com o título da vaga"). As `REGRAS` destiladas em
+  `portable-prompt.ts` só dizem "2-3 linhas ajustadas ao título da vaga" — mais fraco, e o
+  modelo não ecoou. **Essa é uma deficiência real e barata de corrigir no prompt portátil.**
+- **Duas são ruído institucional** (`areas`, `organizacao`) — REQ-002, `extractKeywords` é
+  frequência de n-grama pura, já registrado no `KNOWN-BUGS.md`.
+
+Ou seja: 4 dos 5 pontos perdidos são eco de título e ruído, e o único ganho é substantivo. A
+correção do prompt é legítima, mas re-medir depois de ajustar **para a métrica** exige o aval do
+operador — senão vira otimização do termômetro.
+
+### O que a comparação mostrou de graça: o exit 0 → 3 em TODAS as três
+
+Nenhuma reprovação nova de truthcheck (essa metade do critério passou). Mas as três vagas saíram
+de exit 0 para exit 3, com 1–2 `[CONFIRMAR:` cada. **O exit 0 do agêntico vinha, em parte, de o
+modelo ir pesquisar o que faltava** — pretensão salarial, sobretudo. O disparo único marca em vez
+de pesquisar, que é o comportamento correto e é exatamente o que a fase **F4** (passo de busca
+salarial separado) endereça. Sem F4, nenhuma via sem web fecha em exit 0.
+
+### Custo medido nas três
+
+| vaga | disparo | revisão | total | entrada |
+|---|---:|---:|---:|---:|
+| unimed | $0,2707 | $0,0828 | $0,3536 | 16.104 tok |
+| tsa | $0,3377 | $0,1546 | $0,4923 | 16.330 tok |
+| techne junior | $0,3251 | $0,0952 | $0,4203 | 16.772 tok |
+
+A revisão **subiu a cobertura nas três** (37→50, 33→43, 10→17) e a regra "compara e fica com o
+melhor" nunca precisou descartar. Média ~$0,42 e ~16,4k tokens de entrada por kit, contra
+$1,96 e ~2,4M do caminho agêntico.
+
 ## Correções de números que circularam antes desta medição
 
 | afirmação anterior | medido | onde apareceu |

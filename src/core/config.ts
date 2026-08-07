@@ -92,12 +92,16 @@ export const ConfigSchema = z.object({
         .record(
           z.object({
             model: z.string().min(1), // sem .default() — de propósito
-            tools: z.array(z.string()).default([]),
+            // idem: sem default. `"all"` carrega 150 tools e 80.824 tokens de
+            // prefixo — tem de ser uma escolha escrita, não uma omissão.
+            tools: z.union([z.array(z.string()), z.literal("all")]),
+            allowed_tools: z.array(z.string()).optional(),
             strict_mcp: z.boolean().default(true),
             disable_slash_commands: z.boolean().default(true),
             isolate_settings: z.boolean().default(true),
             max_budget_usd: z.number().positive(),
             effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+            timeout_min: z.number().positive().default(15),
           })
         )
         .default({}),

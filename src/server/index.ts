@@ -17,6 +17,7 @@ import { z } from "zod";
 import { getDb, nowIso, PROJECT_ROOT } from "../db/client.js";
 import { loadConfig, CONFIG_PATH, SearchSpec } from "../core/config.js";
 import { applySchedule, describeSchedule } from "../local/schedule-ctl.js";
+import { runHarness, SessionLimitError, AuthError } from "../local/generate-runner.js";
 import { runSearch } from "../core/pipeline.js";
 import { resolveAdapters } from "../adapters/index.js";
 import { scoreNewJobs, decayPreferenceWeights, hardFilterReason } from "../core/scoring.js";
@@ -213,68 +214,50 @@ let pipelineBusy = false;
 
 const TSX_BIN = join(PROJECT_ROOT, "node_modules", ".bin", "tsx");
 
-function runClaudeGenerate(jobId: string): Promise<void> {
+/**
+ * Geração pelo caminho agêntico.
+ *
+ * O argv NÃO é montado aqui — vem de `buildHarnessArgv`, o mesmo construtor que
+ * o CLI usa. Antes esta função montava a linha de comando à mão, sem `--model`
+ * (o modelo saía das settings do usuário) e sem teto de custo. Um teste falha se
+ * qualquer arquivo fora de `src/local/harness.ts` voltar a montar argv de
+ * `claude`.
+ */
+async function runClaudeGenerate(jobId: string): Promise<void> {
   const prompt =
     `Execute o fluxo do skill /gerar (arquivo .claude/skills/gerar/SKILL.md) de ponta a ponta para a vaga ${jobId}, ` +
     `de forma 100% autônoma, sem fazer nenhuma pergunta. A REGRA Nº 1 (veracidade, citações [exp:id]) vale integralmente. ` +
     `Se faltar um candidate_fact, escreva [CONFIRMAR: ...] no answers.md e prossiga. ` +
     `Só termine depois que "npx tsx src/cli/kit.ts finalize ${jobId}" passar. NÃO execute /submeter. ` +
     `Rode comandos Bash um por um (sem encadear com && ou ;) — comandos compostos são bloqueados pela permissão headless.`;
-  const GENERATE_TIMEOUT_MS = 45 * 60_000; // /gerar completo passa fácil de 20 min (skill + plugins no headless)
-  return new Promise((resolve, reject) => {
-    mkdirSync(join(PROJECT_ROOT, "logs"), { recursive: true });
-    const logPath = join(PROJECT_ROOT, "logs", `pipeline-${jobId}.log`);
-    const log = openSync(logPath, "w");
-    // stream-json + verbose: 1 evento JSON por linha, escrito no log conforme acontece —
-    // dá visibilidade do progresso e sobrevive a kill por timeout (execFile só entregava stdout no fim)
-    const child = spawn(
-      process.env.CLAUDE_BIN ?? "claude",
-      [
-        "-p", prompt,
-        "--output-format", "stream-json", "--verbose",
-        "--allowedTools",
-        "Read", "Write", "Edit", "Glob", "Grep", "Skill", "WebSearch", "WebFetch",
-        // o hook global do RTK reescreve "npx tsx …" para "rtk npx tsx …" — as duas formas precisam passar
-        "Bash(npx tsx:*)", "Bash(ls:*)", "Bash(rtk npx tsx:*)", "Bash(rtk ls:*)",
-      ],
-      { cwd: PROJECT_ROOT, env: process.env, stdio: ["ignore", "pipe", "pipe"] }
-    );
-    let tail = ""; // últimos bytes do output — suficiente p/ classificar o erro sem reler o log
-    const onData = (buf: Buffer) => {
-      writeSync(log, buf);
-      tail = (tail + buf.toString()).slice(-8192);
-    };
-    child.stdout.on("data", onData);
-    child.stderr.on("data", onData);
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, GENERATE_TIMEOUT_MS);
-    child.on("error", (e) => {
-      clearTimeout(timer);
-      closeSync(log);
-      reject(new Error(`não consegui iniciar o claude: ${e.message}`));
+
+  const perfil = loadConfig().harness.profiles["agentic"];
+  if (!perfil) throw new Error('perfil de harness "agentic" não existe em config/config.yaml');
+
+  const logPath = join(PROJECT_ROOT, "logs", `pipeline-${jobId}.log`);
+  let run;
+  try {
+    run = await runHarness("agentic", perfil, {
+      prompt,
+      // stream-json + verbose: 1 evento por linha, escrito conforme acontece —
+      // dá visibilidade do progresso e sobrevive a kill por timeout.
+      outputFormat: "stream-json",
+      verbose: true,
+      logPath,
     });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      closeSync(log);
-      if (timedOut) {
-        reject(new Error(`geração excedeu ${GENERATE_TIMEOUT_MS / 60_000} min e foi abortada — veja até onde foi em logs/pipeline-${jobId}.log`));
-      } else if (code !== 0) {
-        const limitMatch = tail.match(/hit your (?:session|usage) limit[^"\\]*/i);
-        if (limitMatch) {
-          reject(new Error(`limite de uso da assinatura Claude atingido (${limitMatch[0].trim()}) — clique Aplicar de novo após o reset`));
-        } else if (/failed to authenticate|oauth|token.*(expired|revoked)|invalid.*api key|please run \/login/i.test(tail)) {
-          reject(new Error(
-            `sessão do Claude Code expirada — rode "claude /login" no terminal e clique Aplicar de novo (logs/pipeline-${jobId}.log)`
-          ));
-        } else {
-          reject(new Error(`geração falhou (exit ${code}) — logs/pipeline-${jobId}.log`));
-        }
-      } else resolve();
-    });
-  });
+  } catch (e) {
+    if (e instanceof SessionLimitError) {
+      throw new Error(`${e.message} — clique Aplicar de novo após o reset`);
+    }
+    if (e instanceof AuthError) {
+      throw new Error(`${e.message} e clique Aplicar de novo (logs/pipeline-${jobId}.log)`);
+    }
+    throw e;
+  }
+
+  if (!run.ok) {
+    throw new Error(`geração falhou (${run.erro}) — logs/pipeline-${jobId}.log`);
+  }
 }
 
 function spawnSubmit(jobId: string): void {

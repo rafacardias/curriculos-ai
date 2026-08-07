@@ -226,9 +226,38 @@ harness:
       model: claude-sonnet-5
       tools: [WebSearch]
       max_budget_usd: 0.15
+    # O caminho ANTIGO, preservado e funcional — não é código morto. Se o
+    # disparo único falhar numa vaga que este resolve, o caminho de volta é uma
+    # flag (`--via=agentic`), não um revert. Reproduz o argv que rodava antes,
+    # mais duas coisas que faltavam: --model explícito e um teto de custo (o
+    # pior caso observado na frota foi $3,32).
+    agentic:
+      model: claude-sonnet-5
+      tools: all # 150 tools, ~81k de prefixo — é o preço deste caminho
+      allowed_tools:
+        - Read
+        - Write
+        - Edit
+        - Glob
+        - Grep
+        - Skill
+        - WebSearch
+        - WebFetch
+        # o hook global do RTK reescreve "npx tsx …" para "rtk npx tsx …" —
+        # as duas formas precisam passar
+        - "Bash(npx tsx:*)"
+        - "Bash(ls:*)"
+        - "Bash(rtk npx tsx:*)"
+        - "Bash(rtk ls:*)"
+      strict_mcp: false
+      disable_slash_commands: false # precisa carregar a skill /gerar
+      isolate_settings: false
+      max_budget_usd: 5.00
+      timeout_min: 45
+
     chrome: # /linkedin* — único que precisa de MCP e das settings do usuário
       model: claude-sonnet-5
-      tools: [Read, Write, Bash]
+      tools: all
       strict_mcp: false
       disable_slash_commands: false
       isolate_settings: false

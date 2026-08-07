@@ -17,6 +17,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { parseArgs } from "node:util";
 import { PROJECT_ROOT, getDb } from "../db/client.js";
 import { getJob } from "../db/repo/jobs.js";
 import {
@@ -42,20 +43,39 @@ import { extractPdfText } from "../render/pdf-text.js";
 import { blocksGeneration } from "../core/modality.js";
 import { buildPortablePrompt, parsePortableResponse } from "../core/portable-prompt.js";
 import { resolveLocality } from "../core/locality.js";
+import { gerarKit, parseVia } from "../local/generate-kit.js";
 import { decidePolicy } from "../core/policy.js";
 import { assignVariant } from "../core/experiments.js";
 import { normalize } from "../core/dedup.js";
 import { wrapAtsHtml } from "../render/template.js";
 import { htmlToPdf } from "../render/pdf.js";
 
-const [cmd, jobId, arg3] = process.argv.slice(2);
-if (!cmd || !jobId || !["prepare", "finalize", "prompt", "ingest"].includes(cmd)) {
+// parseArgs, não aritmética sobre indexOf: ver CLASSE-01 instância 6 no
+// KNOWN-BUGS.md — `argv[argv.indexOf("--x") + 1]` lê a flag ausente como o
+// primeiro argumento posicional, e isso já estornou 60 rejeições por engano.
+const { values: flags, positionals } = parseArgs({
+  allowPositionals: true,
+  options: {
+    via: { type: "string" },
+    out: { type: "string" },
+    revise: { type: "boolean", default: false },
+  },
+});
+const [cmd, jobId, arg3] = positionals;
+if (!cmd || !jobId || !["prepare", "finalize", "prompt", "ingest", "generate"].includes(cmd)) {
   console.error(`uso: kit <comando> <job_id>
 
   prepare  <job_id>            monta o bundle JSON para a LLM redigir
   finalize <job_id>            gates + coverage + PDFs + registros
   prompt   <job_id>            escreve PROMPT.md autocontido para colar em QUALQUER LLM
-  ingest   <job_id> <arquivo>  quebra a resposta da LLM nos 4 arquivos do kit`);
+  ingest   <job_id> <arquivo>  quebra a resposta da LLM nos 4 arquivos do kit
+  generate <job_id>            redige o kit pela via escolhida
+
+    --via cli|agentic|external   OBRIGATÓRIA. agentic = o laço com /gerar (validado)
+                                 cli = disparo único, 6x mais barato, reprovou a
+                                 não-regressão em 1 de 3 vagas — ver docs/custo-geracao.md
+    --revise                     segunda passada se a cobertura ficar abaixo do limiar (máx. 1)
+    --out <dir>                  escreve noutro diretório e NÃO registra nada (medição)`);
   process.exit(1);
 }
 
@@ -172,6 +192,54 @@ Para ver as pistas do próprio anúncio:
 5. npx tsx src/cli/kit.ts finalize ${jobId}
 
 O finalize roda os MESMOS gates — citação inexistente reprova igual (exit 2).`);
+} else if (cmd === "generate") {
+  if (!existsSync(join(kitDir, "bundle.json"))) {
+    console.error(`bundle.json não existe em ${kitDir} — rode 'kit prepare ${jobId}' antes.`);
+    process.exit(1);
+  }
+  let via;
+  try {
+    via = parseVia(flags.via);
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    process.exit(1);
+  }
+  const outDir = flags.out ?? kitDir;
+  const jdText = `${job.title}\n${job.description ?? ""}`;
+  const r = await gerarKit({
+    via,
+    config,
+    kitDir,
+    outDir,
+    jobId,
+    jdText,
+    revisar: flags.revise,
+    limiarCobertura: 100, // sempre revisa quando --revise; o limiar fino é decisão de policy
+    logPath: join(PROJECT_ROOT, "logs", `pipeline-${jobId}.log`),
+  });
+
+  for (const d of r.disparos) {
+    console.log(
+      `  disparo: ${d.turns} turno(s) · entrada ${d.usage.prefixo.toLocaleString("pt-BR")} tok · ` +
+        `saída ${d.usage.output.toLocaleString("pt-BR")} · $${d.costUsd.toFixed(4)} · ${(d.durationMs / 1000).toFixed(0)}s`
+    );
+  }
+  console.log(
+    `via ${r.via} · entrada total ${r.prefixoTotal.toLocaleString("pt-BR")} tok · $${r.custoTotal.toFixed(4)}`
+  );
+  if (r.revisaoNota) console.log(`  ${r.revisaoNota}`);
+  if (!r.ok) {
+    console.error(`geração falhou: ${r.erro}`);
+    process.exit(1);
+  }
+  if (via === "external") {
+    console.log(`PROMPT.md pronto em ${join(kitDir, "PROMPT.md").replace(PROJECT_ROOT + "/", "")}`);
+    console.log(`  cole numa LLM, salve a resposta e rode: kit ingest ${jobId} <arquivo>`);
+  } else if (via === "cli") {
+    console.log(`4 arquivos em ${outDir.replace(PROJECT_ROOT + "/", "")}`);
+    if (flags.out) console.log("  --out: nada foi registrado no banco. Pontue com scripts/measure-kit.ts");
+    else console.log(`  agora: npx tsx src/cli/kit.ts finalize ${jobId}`);
+  }
 } else if (cmd === "ingest") {
   if (!arg3) {
     console.error(`uso: kit ingest ${jobId} <arquivo com a resposta da LLM>`);

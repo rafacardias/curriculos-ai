@@ -36,21 +36,39 @@
  */
 export interface HarnessProfile {
   model: string;
-  tools?: string[];
+  /**
+   * Lista de built-in liberadas, ou `"all"` para não passar `--tools`.
+   *
+   * NÃO tem default de propósito: um perfil que esquece o campo receberia as 35
+   * built-in e os 115 tools de MCP em silêncio — 80.824 tokens de prefixo. Seria
+   * a CLASSE-01 outra vez. `"all"` é uma escolha que alguém escreveu.
+   */
+  tools: string[] | "all";
+  /** Allowlist de permissão (`--allowedTools`). Só o perfil agêntico precisa. */
+  allowed_tools?: string[];
   strict_mcp?: boolean;
   disable_slash_commands?: boolean;
   isolate_settings?: boolean;
   max_budget_usd: number;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /** Minutos até abortar. */
+  timeout_min?: number;
 }
 
 export interface HarnessOptions {
-  /** Substitui o system prompt inteiro. */
-  systemPrompt: string;
-  /** `text` (default) | `json` | `stream-json`. */
+  /**
+   * Substitui o system prompt inteiro (`--system-prompt`, nunca `--append-`).
+   *
+   * Omitido no perfil agêntico, que PRECISA do prompt default do harness — é
+   * ele que ensina o modelo a usar as ferramentas e a carregar a skill.
+   */
+  systemPrompt?: string;
+  /** `text` | `json` (default) | `stream-json`. */
   outputFormat?: "text" | "json" | "stream-json";
   /** Prompt posicional. Omitido = o `claude` lê de stdin. */
   prompt?: string;
+  /** `--verbose`, exigido pelo `stream-json`. */
+  verbose?: boolean;
 }
 
 export class HarnessProfileError extends Error {}
@@ -81,17 +99,28 @@ export function buildHarnessArgv(
     );
   }
 
+  if (perfil.tools === undefined) {
+    throw new HarnessProfileError(
+      `perfil de harness "${nome}" não declara \`tools\`. Use \`[]\` para desligar todas, ` +
+        'uma lista, ou `"all"` — que carrega as 35 built-in e os 115 tools de MCP, 80.824 ' +
+        "tokens de prefixo. Não há default: essa escolha tem de estar escrita."
+    );
+  }
+
   const argv = ["-p"];
   if (opts.prompt != null) argv.push(opts.prompt);
 
   argv.push("--output-format", opts.outputFormat ?? "json");
+  if (opts.verbose) argv.push("--verbose");
   argv.push("--model", perfil.model);
   argv.push("--max-budget-usd", String(perfil.max_budget_usd));
-  argv.push("--system-prompt", opts.systemPrompt);
+
+  if (opts.systemPrompt != null) argv.push("--system-prompt", opts.systemPrompt);
 
   // `--tools ""` desliga TODAS as built-in. É o corte que vale 63.926 tokens —
   // maior que MCP (4.830) e que skills/comandos (11.876) somados.
-  argv.push("--tools", (perfil.tools ?? []).join(","));
+  if (perfil.tools !== "all") argv.push("--tools", perfil.tools.join(","));
+  if (perfil.allowed_tools?.length) argv.push("--allowedTools", ...perfil.allowed_tools);
 
   if (perfil.strict_mcp !== false) argv.push("--strict-mcp-config");
   if (perfil.disable_slash_commands !== false) argv.push("--disable-slash-commands");
