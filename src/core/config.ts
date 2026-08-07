@@ -29,6 +29,12 @@ const ConfigSchema = z.object({
       // Idiomas que, exigidos em nível NATIVO pelo JD, eliminam a candidatura.
       // Dado versionado, não regex embutido: quem sabe que idiomas fala é o operador.
       blocking_native_languages: z.array(z.string()).default([]),
+      // Tecnologias que o operador NÃO tem e que, exigidas, eliminam a vaga.
+      // Lista dele, temporária por natureza — sai quando ele aprender.
+      blocking_technologies: z.array(z.string()).default([]),
+      // Filtra vaga EXPLICITAMENTE presencial/híbrida fora da UF-base. Só explícita:
+      // remote_type nulo é ausência de informação, não prova de presencial.
+      exclude_onsite_outside_home_uf: z.boolean().default(false),
     })
     .default({}),
   scoring: z

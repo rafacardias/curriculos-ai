@@ -174,6 +174,11 @@ export function hardFilterReason(config: AppConfig, job: JobRow): string | null 
   if (badKeyword) return `filtrado: título contém "${badKeyword}"`;
   const idioma = blockingNativeLanguage(config, job);
   if (idioma) return `filtrado: exige ${idioma} nativo`;
+  const tech = blockingTechnology(config, job);
+  if (tech) return `filtrado: exige ${tech} (não está no perfil)`;
+  if (config.filters.exclude_onsite_outside_home_uf && isOnsiteOutsideHome(job)) {
+    return `filtrado: ${job.remote_type} fora de ${resolveLocality(job.location).uf ?? "MG"}`;
+  }
   if (config.filters.max_years_required != null) {
     const years = detectRequiredYears(`${job.title}\n${job.description ?? ""}`);
     if (years != null && years > config.filters.max_years_required) {
@@ -312,6 +317,60 @@ export function blockingNativeLanguage(config: AppConfig, job: JobRow): string |
     if (new RegExp(`${nivel}\\s+${l}`, "i").test(texto)) return lang;
   }
   return null;
+}
+
+/** Marcadores de obrigatoriedade perto da menção. Sem um destes, é menção solta. */
+const OBRIGATORIO =
+  /(obrigat[óo]ri|essencia|imprescind[íi]ve|requisito|required|must have|s[óo]lid[ao]|forte|avan[çc]ad|profundo|\d+\s*(?:\+|ou mais)?\s*anos?)/i;
+/** "Noções de", "básico", "desejável" — menção fraca, não elimina. */
+const FRACO = /(no[çc][õo]es|b[áa]sic|desej[áa]ve|diferencial|nice to have|plus|preferencia|familiaridade)/i;
+/**
+ * Lista de alternativas: "(Node.js, Python ou PHP)" — se ele tem uma, qualifica.
+ * O `(?!mais|more)` é obrigatório: sem ele, "3 **ou mais** anos de experiência com
+ * Python" era lido como lista de alternativas e a vaga escapava do filtro.
+ */
+const ALTERNATIVA = /[(,;/]\s*[^(),;]{0,40}\s+(?:ou|or|\/)\s+(?!mais|more)/i;
+
+/**
+ * O JD exige, DE VERDADE, uma tecnologia que o operador não tem?
+ *
+ * Menção não é exigência. Medido em 2026-08-07, amostra de 6 vagas: "Noções de
+ * Python" numa lista (a vaga nº 1 da fila) e "Backend para orquestração (Node.js,
+ * Python ou PHP)" — onde ele qualifica pelo Node — davam falso positivo num filtro
+ * de keyword simples. Dois em seis, e um deles era o topo da fila.
+ *
+ * Por isso a janela: exige marcador de obrigatoriedade perto, recusa marcador
+ * fraco, e ignora quando a tecnologia aparece dentro de uma lista de alternativas.
+ * É segmentação pobre — a boa é o REQ-002 — mas é a que cabe sem inventar parser.
+ */
+export function blockingTechnology(config: AppConfig, job: JobRow): string | null {
+  const techs = config.filters.blocking_technologies;
+  if (!techs.length || !job.description) return null;
+  const texto = `${job.title}\n${job.description}`;
+  for (const tech of techs) {
+    const re = new RegExp(`\\b${tech.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
+    for (const m of texto.matchAll(re)) {
+      const janela = texto.slice(Math.max(0, m.index - 140), m.index + 90);
+      if (FRACO.test(janela)) continue;
+      if (ALTERNATIVA.test(texto.slice(Math.max(0, m.index - 60), m.index + 40))) continue;
+      if (OBRIGATORIO.test(janela)) return tech;
+    }
+  }
+  return null;
+}
+
+/**
+ * Vaga EXPLICITAMENTE presencial ou híbrida fora da UF do operador.
+ *
+ * O "explicitamente" é o ponto todo. `remote_type` nulo significa que o adapter
+ * não informou — e tratar ausência como prova é o mesmo erro do BUG-006 pelo
+ * avesso. Medido: das 24 vagas fora de MG sem flag de remoto, 16 eram NULL do
+ * LinkedIn e 5 delas diziam ser remotas no texto do JD.
+ */
+export function isOnsiteOutsideHome(job: JobRow): boolean {
+  if (job.remote_type !== "onsite" && job.remote_type !== "hybrid") return false;
+  const loc = resolveLocality(job.location);
+  return loc.level !== "unknown" && !loc.isHomeUf;
 }
 
 /** Primeira keyword excluída presente no título (palavra inteira, normalizada), ou null. */

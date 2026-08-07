@@ -2,7 +2,7 @@ import { describe, it, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { resetDb } from "../helpers/sandbox.js";
 import { loadConfig, type AppConfig } from "../../src/core/config.js";
-import { scoreJob, scoreNewJobs } from "../../src/core/scoring.js";
+import { scoreJob, scoreNewJobs, hardFilterReason } from "../../src/core/scoring.js";
 import { insertJob, getJob } from "../../src/db/repo/jobs.js";
 import type { RawJob } from "../../src/core/types.js";
 
@@ -171,5 +171,65 @@ describe("scoreNewJobs — filtros duros", () => {
     const b = insertJob(raw({ url: "https://x/21", title: "Vaga Presencial Fora", remoteType: "onsite", location: "Berlin" }))!;
     const r = scoreNewJobs(config, [b.id, a.id]);
     assert.ok(r[0]!.score >= r[1]!.score);
+  });
+});
+
+describe("filtros de elegibilidade — idioma nativo e tecnologia ausente", () => {
+  beforeEach(() => resetDb());
+
+  const cfg = (over: Partial<AppConfig["filters"]>): AppConfig => ({
+    ...config,
+    filters: { ...config.filters, exclude_seniority: [], max_years_required: null, ...over },
+  });
+
+  it("BUG-009: 'Russian: native' filtra — e as duas ordens de escrita", () => {
+    // A vaga da Freedom24 recebeu kit completo e ~$3 de geração antes de alguém
+    // ler o requisito eliminatório que estava no JD desde o começo.
+    const c = cfg({ blocking_native_languages: ["russian"] });
+    for (const d of ["We assess rigorously. Russian: native. Nice to have: fintech.", "Looking for a native Russian speaker."]) {
+      const job = insertJob(raw({ url: `https://x/${d.length}`, title: `Dev ${d.length}`, description: d }))!;
+      assert.match(hardFilterReason(c, getJob(job.id)!) ?? "", /exige russian nativo/);
+    }
+  });
+
+  it("português, inglês e espanhol não entram na lista — não são bloqueio", () => {
+    const c = cfg({ blocking_native_languages: ["russian"] });
+    const job = insertJob(raw({ description: "Native Portuguese and fluent English required." }))!;
+    assert.equal(hardFilterReason(c, getJob(job.id)!), null);
+  });
+
+  // Casos REAIS do acervo, com o texto que produziu cada veredito. Dois deles
+  // eram falsos positivos de um filtro de keyword simples, e um era o topo da fila.
+  const PY: Array<[string, string, boolean]> = [
+    ["obrigatório explícito", "Requisitos obrigatórios: Experiência sólida em Python e desenvolvimento backend de APIs.", true],
+    ["conhecimento essencial", "Requisitos e qualificações. Conhecimentos essenciais - Python; SQL; Modelagem de dados.", true],
+    ["anos de experiência", "3 ou mais anos de experiência com Python; Experiência sólida na construção de agentes.", true],
+    ["apenas noções", "Conhecimento de APIs. Noções de Python. Familiaridade com GitHub. Perfil autodidata.", false],
+    ["lista de alternativas", "Backend para orquestração (Node.js, Python ou PHP). Integração com APIs internas.", false],
+    ["desejável", "Desejável conhecimento em Python. Diferencial: experiência com cloud.", false],
+  ];
+
+  for (const [nome, descricao, deveFiltrar] of PY) {
+    it(`python — ${nome} → ${deveFiltrar ? "filtra" : "PASSA"}`, () => {
+      const c = cfg({ blocking_technologies: ["python"] });
+      const job = insertJob(raw({ url: `https://x/${encodeURIComponent(nome)}`, title: nome, description: descricao }))!;
+      const r = hardFilterReason(c, getJob(job.id)!);
+      if (deveFiltrar) assert.match(r ?? "", /exige python/, `deveria filtrar: ${descricao}`);
+      else assert.equal(r, null, `NÃO deveria filtrar (${nome}): ${descricao}`);
+    });
+  }
+
+  it("presencial fora da UF-base filtra; remote_type nulo NÃO", () => {
+    // `remote_type` nulo é ausência de informação, não prova de presencial: das 24
+    // vagas fora de MG sem flag, 16 eram NULL do LinkedIn e 5 diziam ser remotas.
+    const c = cfg({ exclude_onsite_outside_home_uf: true });
+    const fora = insertJob(raw({ url: "https://x/sp", title: "Vaga SP", remoteType: "onsite", location: "São Paulo, SP" }))!;
+    assert.match(hardFilterReason(c, getJob(fora.id)!) ?? "", /onsite fora de SP/);
+
+    const semFlag = insertJob(raw({ url: "https://x/nf", title: "Vaga sem flag", location: "São Paulo, SP" }))!;
+    assert.equal(hardFilterReason(c, getJob(semFlag.id)!), null, "sem flag não pode ser filtrada");
+
+    const emCasa = insertJob(raw({ url: "https://x/bh", title: "Vaga BH", remoteType: "onsite", location: "Belo Horizonte, MG" }))!;
+    assert.equal(hardFilterReason(c, getJob(emCasa.id)!), null);
   });
 });

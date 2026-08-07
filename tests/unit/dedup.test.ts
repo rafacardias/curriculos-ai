@@ -118,3 +118,22 @@ describe("detectRequiredYears", () => {
     assert.equal(detectRequiredYears("99 anos de experiência"), undefined);
   });
 });
+
+describe("detectRequiredYears — formas de escrever o requisito", () => {
+  it("pega 'N ou mais anos' e 'N or more years'", () => {
+    // Escapavam do teto: "3 ou mais anos de experiência com Python" passava direto,
+    // e é a forma mais comum em JD brasileiro depois do "N+".
+    assert.equal(detectRequiredYears("3 ou mais anos de experiência com Python"), 3);
+    assert.equal(detectRequiredYears("3 or more years of experience"), 3);
+  });
+
+  it("as formas que já funcionavam continuam", () => {
+    assert.equal(detectRequiredYears("5+ anos de experiência"), 5);
+    assert.equal(detectRequiredYears("3 a 5 anos de experiência"), 3);
+    assert.equal(detectRequiredYears("mínimo de 4 anos de experiência"), 4);
+  });
+
+  it("não confunde idade de empresa com requisito", () => {
+    assert.equal(detectRequiredYears("empresa com 20 anos de mercado"), undefined);
+  });
+});

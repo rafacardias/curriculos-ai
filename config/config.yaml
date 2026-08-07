@@ -90,6 +90,21 @@ filters:
   # sistema não deve gastar uma geração nela. Medido em 2026-08-06: 2 vagas em 641,
   # ambas na fila, uma delas já com kit gerado ($3 e uma carta escrita à toa).
   # Português, inglês e espanhol ficam de fora da lista de propósito.
+  # Tecnologias que você não tem hoje. Exigidas pelo JD = vaga eliminada.
+  # Medido em 2026-08-07: `python` sozinho tira 20 das 33 vagas da fila. É uma
+  # troca consciente — some a maior parte da fila, some também o retrabalho de
+  # gerar kit para vaga que pede uma linguagem que você não escreve. Tire da lista
+  # no dia em que aprender; é uma linha.
+  blocking_technologies:
+    - python
+
+  # Presencial/híbrido fora de MG. Só filtra quando o adapter diz EXPLICITAMENTE
+  # onsite/hybrid — `remote_type` nulo é ausência de informação, não prova de
+  # presencial. Das 24 vagas "fora de MG e não-remotas" medidas em 2026-08-07, 16
+  # eram NULL do LinkedIn e 5 delas mencionavam trabalho remoto no próprio texto.
+  # Filtrar por ausência mataria vaga boa por falta de dado.
+  exclude_onsite_outside_home_uf: true
+
   blocking_native_languages:
     - russian
     - russo

@@ -52,7 +52,10 @@ export function detectSeniority(title: string): string | undefined {
  */
 export function detectRequiredYears(text: string): number | undefined {
   const t = text.toLowerCase();
-  const re = /(\d{1,2})\s*(?:\+|\s*(?:a|-|to)\s*\d{1,2})?\s*(?:anos?|years?)(?:\s+(?:de|of))?\s+experi[êe]nc/g;
+  // "ou mais"/"or more" precisam estar aqui: sem eles, "3 ou mais anos de
+  // experiência com Python" escapava do teto de anos — e é a forma mais comum
+  // de escrever o requisito em JD brasileiro depois do "N+".
+  const re = /(\d{1,2})\s*(?:\+|ou mais|or more|\s*(?:a|-|to)\s*\d{1,2})?\s*(?:anos?|years?)(?:\s+(?:de|of))?\s+experi[êe]nc/g;
   let max: number | undefined;
   for (const m of t.matchAll(re)) {
     const n = parseInt(m[1] ?? "0", 10);
