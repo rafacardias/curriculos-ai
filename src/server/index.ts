@@ -19,7 +19,8 @@ import { loadConfig, CONFIG_PATH, SearchSpec } from "../core/config.js";
 import { applySchedule, describeSchedule } from "../local/schedule-ctl.js";
 import { runSearch } from "../core/pipeline.js";
 import { resolveAdapters } from "../adapters/index.js";
-import { scoreNewJobs, decayPreferenceWeights } from "../core/scoring.js";
+import { scoreNewJobs, decayPreferenceWeights, hardFilterReason } from "../core/scoring.js";
+import { funnelCounts } from "../core/funnel.js";
 import { buildDashboard, DASHBOARD_PATH } from "../dashboard/build.js";
 import { setJobStatus, getJob } from "../db/repo/jobs.js";
 import { getApplicationByJob, createApplication, setApplicationStatus } from "../db/repo/applications.js";
@@ -61,12 +62,15 @@ function apiSummary() {
   const lastRun = db
     .prepare("SELECT started_at, mode, per_source FROM search_runs ORDER BY started_at DESC LIMIT 1")
     .get() as any;
+  // Uma definição só, em src/core/funnel.ts. Antes, este endpoint contava
+  // `withdrawn` como aplicada e `queued` sem excluir as que já viraram kit.
+  const f = funnelCounts();
   return {
-    queued: one("SELECT COUNT(*) AS n FROM jobs WHERE status='queued'"),
-    kits: one("SELECT COUNT(*) AS n FROM applications WHERE status='kit_ready'"),
+    queued: f.queued,
+    kits: f.kitReady,
     awaiting: one("SELECT COUNT(*) AS n FROM submissions WHERE status='awaiting_user'"),
-    applied: one("SELECT COUNT(*) AS n FROM applications WHERE status NOT IN ('kit_ready','submitting')"),
-    interviews: one("SELECT COUNT(*) AS n FROM applications WHERE status IN ('interview','offer')"),
+    applied: f.applied,
+    interviews: f.interviews,
     lastRun: lastRun
       ? { at: lastRun.started_at, mode: lastRun.mode, perSource: lastRun.per_source ? JSON.parse(lastRun.per_source) : null }
       : null,
@@ -97,7 +101,8 @@ function apiQueue(limit: number) {
 
 function apiApplications() {
   const db = getDb();
-  return db
+  const config = loadConfig();
+  const rows = db
     .prepare(
       `SELECT a.id, a.job_id, a.status, a.applied_at, a.kit_dir, a.submission_mode, a.track_id, a.notes,
               j.title, j.company_name, j.url, j.source, j.ats_platform
@@ -105,6 +110,17 @@ function apiApplications() {
        ORDER BY a.updated_at DESC`
     )
     .all() as any[];
+
+  // Kit gerado ANTES de um filtro existir não é confiável só porque está no
+  // disco — mesma família da nota de invalidação do 8441497. Quatro dos nove
+  // kits atuais são de vagas que as regras de hoje recusam (Python, presencial
+  // fora de MG). O selo é CALCULADO na leitura, não gravado: se o operador tirar
+  // `python` do config, ele some sozinho — um marcador estático mentiria.
+  return rows.map((r) => {
+    const job = getJob(r.job_id);
+    const stale = job ? hardFilterReason(config, job) : null;
+    return { ...r, stale };
+  });
 }
 
 function apiCompanies() {

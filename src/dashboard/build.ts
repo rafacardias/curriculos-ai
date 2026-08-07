@@ -1,6 +1,10 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { getDb, PROJECT_ROOT } from "../db/client.js";
+import { funnelCounts, APLICADAS } from "../core/funnel.js";
+
+/** Mesma definição de "aplicada" do funil, em forma de literal SQL. */
+const APLICADAS_SQL = APLICADAS.map((s) => `'${s}'`).join(",");
 
 export const DASHBOARD_PATH = join(PROJECT_ROOT, "dashboard", "index.html");
 
@@ -17,39 +21,44 @@ export function buildDashboard(): string {
   const q = (sql: string) => db.prepare(sql).all() as unknown as Row[];
   const one = (sql: string) => (db.prepare(sql).get() as Row | undefined) ?? {};
 
-  const totals = one(`SELECT
-    (SELECT COUNT(*) FROM jobs) AS jobs,
-    (SELECT COUNT(*) FROM jobs WHERE status='queued') AS queued,
-    (SELECT COUNT(*) FROM applications WHERE status='kit_ready') AS kit_ready,
-    (SELECT COUNT(*) FROM applications WHERE status='applied') AS applied,
-    (SELECT COUNT(*) FROM applications WHERE status IN ('screening','interview','offer')) AS responded,
-    (SELECT COUNT(*) FROM applications WHERE status='interview') AS interviews,
-    (SELECT COUNT(*) FROM applications WHERE status='offer') AS offers`);
+  // Contagem canônica — src/core/funnel.ts. Este painel e o card do topo da UI
+  // discordavam entre si e de si mesmos; agora leem a mesma função.
+  const f = funnelCounts();
+  const totals = { jobs: (one(`SELECT COUNT(*) AS n FROM jobs`).n as number) ?? 0 };
 
   const funnel: Array<[string, number]> = [
-    ["Na fila", Number(totals.queued ?? 0)],
-    ["Kit pronto", Number(totals.kit_ready ?? 0)],
-    ["Aplicadas", Number(totals.applied ?? 0)],
-    ["Com resposta", Number(totals.responded ?? 0)],
-    ["Entrevistas", Number(totals.interviews ?? 0)],
-    ["Ofertas", Number(totals.offers ?? 0)],
+    ["Na fila", f.queued],
+    ["Kit pronto", f.kitReady],
+    ["Aplicadas", f.applied],
+    ["Com resposta", f.responded],
+    ["Entrevistas", f.interviews],
+    ["Ofertas", f.offers],
+  ];
+
+  // `withdrawn` fica FORA do funil e visível à parte: é desistência, não progresso.
+  // Contá-la como aplicada foi o que fez o card do topo dizer "1 aplicada" quando
+  // o número certo era zero.
+  const foraDoFunil: Array<[string, number]> = [
+    ["Retiradas", f.withdrawn],
+    ["Recusadas", f.rejected],
+    ["Sem resposta", f.ghosted],
   ];
 
   const bySource = q(`SELECT j.source AS seg, COUNT(a.id) AS apps,
       SUM(CASE WHEN a.status IN ('screening','interview','offer') THEN 1 ELSE 0 END) AS resp,
       SUM(CASE WHEN a.status IN ('interview','offer') THEN 1 ELSE 0 END) AS interviews
     FROM applications a JOIN jobs j ON j.id=a.job_id
-    WHERE a.status != 'kit_ready' GROUP BY j.source ORDER BY apps DESC`);
+    WHERE a.status IN (${APLICADAS_SQL}) GROUP BY j.source ORDER BY apps DESC`);
 
   const byTrack = q(`SELECT COALESCE(a.track_id,'?') AS seg, COUNT(a.id) AS apps,
       SUM(CASE WHEN a.status IN ('screening','interview','offer') THEN 1 ELSE 0 END) AS resp,
       SUM(CASE WHEN a.status IN ('interview','offer') THEN 1 ELSE 0 END) AS interviews
-    FROM applications a WHERE a.status != 'kit_ready' GROUP BY a.track_id ORDER BY apps DESC`);
+    FROM applications a WHERE a.status IN (${APLICADAS_SQL}) GROUP BY a.track_id ORDER BY apps DESC`);
 
   const byMode = q(`SELECT COALESCE(a.submission_mode,'manual') AS seg, COUNT(a.id) AS apps,
       SUM(CASE WHEN a.status IN ('screening','interview','offer') THEN 1 ELSE 0 END) AS resp,
       SUM(CASE WHEN a.status IN ('interview','offer') THEN 1 ELSE 0 END) AS interviews
-    FROM applications a WHERE a.status != 'kit_ready' GROUP BY a.submission_mode ORDER BY apps DESC`);
+    FROM applications a WHERE a.status IN (${APLICADAS_SQL}) GROUP BY a.submission_mode ORDER BY apps DESC`);
 
   const byCoverage = q(`SELECT
       CASE WHEN json_extract(rv.keyword_report,'$.coveragePct') >= 70 THEN '70-100%'
@@ -59,14 +68,14 @@ export function buildDashboard(): string {
       SUM(CASE WHEN a.status IN ('screening','interview','offer') THEN 1 ELSE 0 END) AS resp,
       SUM(CASE WHEN a.status IN ('interview','offer') THEN 1 ELSE 0 END) AS interviews
     FROM applications a JOIN resume_versions rv ON rv.application_id=a.id
-    WHERE a.status != 'kit_ready' GROUP BY seg ORDER BY seg DESC`);
+    WHERE a.status IN (${APLICADAS_SQL}) GROUP BY seg ORDER BY seg DESC`);
 
   const byVariant = q(`SELECT COALESCE(json_extract(rv.variant,'$.id'),'—') AS seg,
       COUNT(DISTINCT a.id) AS apps,
       SUM(CASE WHEN a.status IN ('screening','interview','offer') THEN 1 ELSE 0 END) AS resp,
       SUM(CASE WHEN a.status IN ('interview','offer') THEN 1 ELSE 0 END) AS interviews
     FROM applications a JOIN resume_versions rv ON rv.application_id=a.id
-    WHERE a.status != 'kit_ready' GROUP BY seg ORDER BY apps DESC`);
+    WHERE a.status IN (${APLICADAS_SQL}) GROUP BY seg ORDER BY apps DESC`);
 
   const weekly = q(`SELECT strftime('%Y-W%W', applied_at) AS seg, COUNT(*) AS apps
     FROM applications WHERE applied_at IS NOT NULL GROUP BY seg ORDER BY seg DESC LIMIT 8`);
@@ -147,6 +156,17 @@ export function buildDashboard(): string {
 <div class="tiles">
   ${funnel.map(([l, v]) => `<div class="tile"><div class="n">${v}</div><div class="l">${l}</div></div>`).join("\n  ")}
 </div>
+
+${
+  foraDoFunil.some(([, v]) => v > 0)
+    ? `<section><h2>Fora do funil</h2>
+<p class="muted">Saídas, não progresso. Ficam aqui para não sumirem nem inflarem "Aplicadas".</p>
+<table><tbody>${foraDoFunil
+        .filter(([, v]) => v > 0)
+        .map(([l, v]) => `<tr><th scope="row">${l}</th><td>${v}</td></tr>`)
+        .join("")}</tbody></table></section>`
+    : ""
+}
 
 <section>
   <h2>Funil</h2>

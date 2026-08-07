@@ -131,6 +131,13 @@
   .col h4 b { color: var(--signal); }
   .app { border: 1px solid var(--line); background: var(--ink-2); padding: 10px 12px; margin-bottom: 10px; font-size: 13px; }
   .app .c { font-family: var(--mono); font-size: 10px; color: var(--bone-dim); margin: 2px 0 8px; }
+  .app.stale { border-left: 3px solid var(--signal); }
+  .app .staletag { font-family: var(--mono); font-size: 10px; color: var(--signal);
+                   text-transform: uppercase; letter-spacing: .04em; margin: 0 0 8px; }
+  .app .links { display: flex; gap: 12px; margin: 0 0 8px; }
+  .app .links a { font-family: var(--mono); font-size: 10px; color: var(--bone-dim);
+                  text-decoration: underline; text-underline-offset: 2px; }
+  .app .links a:hover { color: var(--signal); }
   .app select {
     width: 100%; background: var(--ink-3); color: var(--bone); border: 1px solid var(--line);
     font-family: var(--mono); font-size: 10px; padding: 5px;
@@ -526,8 +533,13 @@ async function loadBoard() {
   $("#board").innerHTML = FUNNEL.map((st) => {
     const list = apps.filter((a) => a.status === st);
     return `<div class="col"><h4>${st.replace("_", " ")} <b>${list.length}</b></h4>` +
-      (list.map((a) => `<div class="app">
+      (list.map((a) => `<div class="app${a.stale ? " stale" : ""}">
           <div>${esc(a.title)}</div><div class="c">${esc(a.company_name)} · ${a.submission_mode || "manual"}</div>
+          ${a.stale ? `<div class="staletag">kit obsoleto — ${esc(a.stale.replace(/^filtrado: /, ""))}</div>` : ""}
+          <div class="links">
+            <a href="${esc(a.url)}" target="_blank" rel="noopener">abrir vaga ↗</a>
+            ${a.kit_dir ? `<a href="#" data-kit="${esc(a.kit_dir)}">copiar caminho do kit</a>` : ""}
+          </div>
           <select data-job="${a.job_id}">
             <option value="">mover para…</option>
             ${(NEXT[st] || []).map((n) => `<option value="${n}">${n}</option>`).join("")}
@@ -540,6 +552,13 @@ async function loadBoard() {
       await post("/api/status", { jobId: sel.dataset.job, status: sel.value });
       toast(`status → ${sel.value}`);
       loadBoard(); loadSummary();
+    })
+  );
+  $("#board").querySelectorAll("a[data-kit]").forEach((a) =>
+    a.addEventListener("click", async (e) => {
+      e.preventDefault();
+      await navigator.clipboard.writeText(`open "${a.dataset.kit}"`);
+      toast("copiado — cole no terminal para abrir a pasta do kit");
     })
   );
 }
