@@ -12,12 +12,18 @@
  * pelo mesmo gate** que reprovaria o Claude Code. A garantia é o gate, não o
  * gerador — e é por isso que abrir essa porta não é concessão.
  *
- * ECONOMIA. Medido na geração da Techne (2026-08-07): 13,3 milhões de tokens de
- * leitura de cache para 30,8 mil de saída — 97% do custo é o laço agêntico
- * relendo o prompt de sistema do harness a cada um dos 39 turnos. O conteúdo em
- * si é o bundle (~10k tokens) e a resposta (~8k). Num único disparo, sem laço,
- * é outra ordem de grandeza — e numa assinatura que o operador já paga, é zero
- * marginal.
+ * ECONOMIA. Medido na geração da Techne (2026-08-07, `docs/custo-geracao.md`):
+ * 4.726.166 tokens de leitura de cache e 125.787 de escrita, para 28.594 de
+ * saída — **83% do custo é lado-input**, o laço agêntico relendo 80.824 tokens
+ * de inventário de harness a cada um dos 38 turnos. O conteúdo que importa é o
+ * bundle (~13k) e a resposta (~3k).
+ *
+ * (Uma versão anterior deste comentário dizia "13,3 milhões, 97%". Era um número
+ * citado de memória, não medido — ver a lição de método no KNOWN-BUGS.md.)
+ *
+ * Medido ponta a ponta: disparo único + 1 revisão custa $0,40 e 18.010 tokens de
+ * entrada, contra $2,63 e 4.851.953. Mas **não é default**: a não-regressão em
+ * 3 vagas reprovou (uma caiu 13 pontos de cobertura), e `--via` é obrigatória.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -51,6 +57,16 @@ comportamento correto, não uma falha. Não estique um fato para fingir cobertur
 Um validador automático confere cada \`[exp:id]\` contra o perfil e REPROVA o kit se a citação
 não existir. Inventar não passa; só atrasa.
 
+## Trilha e variante — dois campos do bundle que você TEM de usar
+
+**Trilha:** parta de \`job.track_hint\` e do bloco \`tracks\` do bundle, mas decida você — pode
+misturar experiências de outras trilhas se elas cobrirem keywords que a dominante não cobre.
+
+**Variante do experimento:** o bundle traz \`variant\` (A = metric-first, B = role-first). Siga as
+\`variant.instructions\` na estrutura do Resumo e na ordenação dos bullets. Isso alimenta uma
+comparação de conversão real — ignorar contamina o experimento. Se \`variant\` for null, use seu
+julgamento.
+
 ## resume.md — currículo ATS
 
 Idioma: o mesmo do JD (campo job.language). Coluna única, sem tabelas, sem ícones, sem imagens.
@@ -65,7 +81,8 @@ Estrutura:
     <cidade> · <email> · <telefone> · <linkedin> · <github>
 
     ## Resumo                          (ou "Summary" em inglês)
-    <2-3 linhas ajustadas ao título da vaga, com as keywords principais>
+    <2-3 linhas SINTONIZADAS com o título da vaga — use o título EXATO como o
+     anúncio o escreve, e as keywords principais do JD>
 
     ## Experiência Profissional        (ou "Professional Experience")
     ### <Cargo> — <Empresa>
@@ -83,10 +100,15 @@ Bullets em CAR (Contexto → Ação → Resultado):
   - contexto curto + ação específica com as keywords do JD na sintaxe natural da frase + resultado;
   - resultado quantificado sempre que o FATO tiver número. Sem número no fato, resultado
     qualitativo. NUNCA inventar métrica;
-  - 1 linha cada (máx. 2), 3–6 bullets por experiência, ordenados pela relevância ao JD;
-  - sem pronome "eu", sem adjetivo vazio ("proativo", "dinâmico").
+  - 1 linha cada (máx. 2), 3–6 bullets por experiência, ordenados pela relevância ao JD
+    (a variante A/B decide metric-first vs role-first);
+  - sem pronome "eu", sem adjetivo vazio ("proativo", "dinâmico"), sem jargão interno que o
+    recrutador não conhece.
 
-Ordem reverso-cronológica.
+Ordem reverso-cronológica; o título do Resumo sintonizado com o título da vaga.
+
+**STAR (Situação-Tarefa-Ação-Resultado) NÃO é para o currículo** — é o formato das respostas
+comportamentais, e vai no \`answers.md\`.
 
 ## cover-letter.md
 
@@ -96,10 +118,16 @@ do anúncio. Sem adjetivo vazio. Termina com call-to-action simples.
 ## answers.md — respostas de triagem
 
 Antecipe as perguntas prováveis do JD e as comuns: pretensão salarial, disponibilidade, por que
-esta empresa, modelo de trabalho. Reutilize \`known_screening_answers\` do bundle quando a
-pergunta for equivalente. Para dado canônico (salário, disponibilidade, autorização de
-trabalho), use os \`candidate_facts\`; se o dado NÃO existir no bundle, escreva
-\`[CONFIRMAR: <o que falta>]\` e siga — nunca invente.
+esta empresa, modelo de trabalho.
+
+**Pretensão salarial:** se o bundle trouxer \`salary_research\` preenchido, use a \`faixa\` dela como
+resposta — ela foi pesquisada num passo anterior, com fontes. Se \`salary_research\` for null,
+escreva \`[CONFIRMAR: pretensão salarial]\` e siga. NUNCA estime um valor você mesmo.
+
+Reutilize \`known_screening_answers\` do bundle quando a pergunta for equivalente. Para os demais
+dados canônicos (disponibilidade, autorização de trabalho, aviso prévio), use os
+\`candidate_facts\` — eles vêm com o VALOR, não só a chave. Se o dado NÃO existir no bundle,
+escreva \`[CONFIRMAR: <o que falta>]\` e siga — nunca invente.
 
 Perguntas comportamentais ("conte uma vez em que…") vão em STAR, montadas sobre fatos citáveis.
 

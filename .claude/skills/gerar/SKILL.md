@@ -82,7 +82,8 @@ Keyword certa em sintaxe fraca não converte. Cada bullet segue a estrutura CAR 
 
 - Detecte perguntas prováveis no JD (e as comuns: pretensão salarial, disponibilidade, por que a empresa, modelo de trabalho).
 - Reutilize `known_screening_answers` do bundle quando a pergunta for equivalente.
-- Para dados canônicos use os `candidate_facts` (o bundle lista as chaves existentes; se faltar uma, marque `[CONFIRMAR: <o que falta>]` — nunca invente pretensão salarial, disponibilidade ou autorização de trabalho).
+- **Pretensão salarial**: se o bundle trouxer `salary_research` preenchido, use a `faixa` dela (foi pesquisada por `src/cli/salary.ts`, com fontes). Se for null, escreva `[CONFIRMAR: pretensão salarial]` — não saia pesquisando por conta própria, é passo separado.
+- Para dados canônicos use os `candidate_facts` — desde 2026-08-07 o bundle traz **chave E valor**, então não vá buscar no disco. Se o dado não existir lá, marque `[CONFIRMAR: <o que falta>]` — nunca invente pretensão salarial, disponibilidade ou autorização de trabalho.
 
 ## outreach.md
 
