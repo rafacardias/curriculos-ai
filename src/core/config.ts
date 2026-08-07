@@ -11,7 +11,7 @@ export const SearchSpec = z.object({
   remote_only: z.boolean().default(false),
 });
 
-const ConfigSchema = z.object({
+export const ConfigSchema = z.object({
   auto_search: z.union([z.boolean(), z.enum(["on", "off"])]).transform((v) => v === true || v === "on"),
   auto_search_hour: z.number().int().min(0).max(23).default(9),
   // Dias da semana em que a busca automática roda (0=domingo … 6=sábado). Vazio/omitido = todos os dias.
@@ -76,6 +76,31 @@ const ConfigSchema = z.object({
     .object({
       max_weight: z.number().default(10),
       decay: z.number().default(0.95),
+    })
+    .default({}),
+  // Perfis de harness — o que cada invocação de `claude -p` carrega.
+  //
+  // `model` NÃO tem default e é obrigatório em todo perfil. Isso é P0, não
+  // estilo: `--setting-sources ""` derruba ~/.claude/settings.json inteiro,
+  // INCLUSIVE a chave `model`. Na medição M2 de 2026-08-07 o disparo caiu em
+  // `claude-opus-5` sem ninguém pedir — $0,4471 e uma medição invalidada. É a
+  // CLASSE-01 outra vez: ausência de configuração lida como default seguro.
+  // O acidente foi barato num disparo; num lote de 20 não seria.
+  harness: z
+    .object({
+      profiles: z
+        .record(
+          z.object({
+            model: z.string().min(1), // sem .default() — de propósito
+            tools: z.array(z.string()).default([]),
+            strict_mcp: z.boolean().default(true),
+            disable_slash_commands: z.boolean().default(true),
+            isolate_settings: z.boolean().default(true),
+            max_budget_usd: z.number().positive(),
+            effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+          })
+        )
+        .default({}),
     })
     .default({}),
 });

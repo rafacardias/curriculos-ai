@@ -198,3 +198,38 @@ auto_search_days:
   - 4
   - 5
   - 6
+
+# Perfis de harness — o que cada invocação de `claude -p` carrega.
+#
+# `model` é OBRIGATÓRIO em todo perfil e não tem default. `isolate_settings`
+# passa `--setting-sources ""`, que derruba ~/.claude/settings.json inteiro,
+# INCLUSIVE a chave `model` — sem `--model` explícito o disparo cai num default
+# arbitrário. Aconteceu em 2026-08-07: rodou em opus-5 sem ninguém pedir, $0,45.
+# Um teste falha se qualquer perfil daqui não produzir `--model` no argv.
+#
+# Medido (docs/custo-geracao.md): herdar tudo custa 80.824 tokens de prefixo por
+# invocação; com tools vazio + system prompt próprio, 192.
+#
+# NÃO usar `effort: low` em redação: medido, corta 43% do custo mas REPROVA no
+# truthcheck e derruba a cobertura de 30% para 20%. Barato e quebrado.
+harness:
+  profiles:
+    redacao:
+      model: claude-sonnet-5
+      tools: [] # `--tools ""` — o corte que vale 63.926 tokens
+      max_budget_usd: 1.00
+    revisao:
+      model: claude-sonnet-5
+      tools: []
+      max_budget_usd: 0.50
+    salario:
+      model: claude-sonnet-5
+      tools: [WebSearch]
+      max_budget_usd: 0.15
+    chrome: # /linkedin* — único que precisa de MCP e das settings do usuário
+      model: claude-sonnet-5
+      tools: [Read, Write, Bash]
+      strict_mcp: false
+      disable_slash_commands: false
+      isolate_settings: false
+      max_budget_usd: 1.00
