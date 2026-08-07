@@ -90,3 +90,63 @@ describe("remoteHints — evidência para o humano, nunca veredito", () => {
     assert.deepEqual(remoteHints("A empresa é a Remotech Ltda."), []);
   });
 });
+
+/**
+ * REGRESSÃO — pista nunca vira estado.
+ *
+ * Os dois casos abaixo são reais, medidos na fila de 2026-08-07, e são a razão de
+ * `remoteHints` existir separado de `resolveModality`:
+ *
+ *  - Foundever  → "hybrid AI solutions (NLU + LLM)"        — arquitetura de IA
+ *  - Raro Labs  → "Auxílio híbrido sem desconto na folha"  — benefício
+ *
+ * Nenhum dos dois fala de modalidade de trabalho, e um extrator que inferisse
+ * estado a partir do texto teria tirado a Foundever (61,9 — top 3 da fila) do ar
+ * por causa de uma sigla de arquitetura. É a CLASSE-01 forma B: menção lida como
+ * declaração.
+ *
+ * A defesa NÃO é filtrar essas duas frases — isso seria catálogo de vítimas, e a
+ * terceira frase ruim passaria. A defesa é ARQUITETURAL: não existe caminho de
+ * texto para estado. `resolveModality` só lê colunas afirmadas, e `ModalityInput`
+ * nem sequer tem campo de descrição. Este bloco congela essa separação.
+ */
+describe("REGRESSÃO — 'hybrid AI solutions' e 'auxílio híbrido' não produzem modalidade", () => {
+  const FOUNDEVER =
+    "Design best practices and recommendations for LLMs, Agentic AI, and hybrid AI solutions (NLU + LLM). Implement new integrations and backend services.";
+  const RARO_LABS =
+    "Benefícios: plano de saúde conforme sindicato; Assistência Funerária do Grupo Zelo; Auxílio híbrido sem desconto na folha; Licença paternidade de 15 dias.";
+
+  for (const [nome, texto] of [
+    ["Foundever — 'hybrid AI solutions' é arquitetura, não local de trabalho", FOUNDEVER],
+    ["Raro Labs — 'Auxílio híbrido' é linha de benefício, não regime", RARO_LABS],
+  ] as const) {
+    it(`${nome}: continua unknown`, () => {
+      // O estado é unknown ANTES e DEPOIS de o texto existir: `resolveModality`
+      // não recebe texto nenhum. Passar a descrição como propriedade extra não
+      // muda nada — é isso que precisa continuar verdade.
+      const semTexto = resolveModality({ remote_type: null });
+      const comTexto = resolveModality({ remote_type: null, ...({ description: texto } as object) });
+      assert.equal(semTexto.state, "unknown");
+      assert.equal(comTexto.state, "unknown", "texto não pode virar estado por nenhuma porta");
+      assert.equal(comTexto.source, null);
+    });
+
+    it(`${nome}: a pista aparece, e aparece rotulada como pista`, () => {
+      // Ela DEVE aparecer — o operador é quem descarta. Suprimir a pista trocaria
+      // um falso positivo visível por um falso negativo invisível.
+      const pistas = remoteHints(texto);
+      assert.ok(pistas.length > 0, "a pista continua sendo mostrada para o humano julgar");
+      assert.ok(pistas.every((p) => "snippet" in p && "kind" in p));
+      // E o trecho tem que trazer o contexto que denuncia o falso positivo.
+      assert.match(pistas[0]!.snippet, /AI solutions|desconto na folha/);
+    });
+  }
+
+  it("o tipo de estado afirmável não admite 'unknown' — pendência não é decisão", () => {
+    // Se um dia alguém tentar gravar o resultado de uma inferência, vai ter que
+    // escolher entre os três afirmáveis. Não existe "unknown confirmado".
+    assert.equal(parseModalityState("unknown"), null);
+    assert.equal(parseModalityState("hybrid AI solutions"), null);
+    assert.equal(parseModalityState("auxílio híbrido"), null);
+  });
+});
