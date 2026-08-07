@@ -224,7 +224,12 @@ harness:
       max_budget_usd: 0.50
     salario:
       model: claude-sonnet-5
+      # `tools` diz quais ferramentas EXISTEM; `allowed_tools` diz quais são
+      # PERMITIDAS. São flags diferentes e as duas são necessárias: com
+      # isolate_settings não há allowlist herdada, e medido em 2026-08-07 o
+      # WebSearch voltou em `permission_denials` com só `tools` declarado.
       tools: [WebSearch]
+      allowed_tools: [WebSearch]
       max_budget_usd: 0.15
     # O caminho ANTIGO, preservado e funcional — não é código morto. Se o
     # disparo único falhar numa vaga que este resolve, o caminho de volta é uma

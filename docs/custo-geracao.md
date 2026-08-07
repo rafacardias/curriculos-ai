@@ -175,6 +175,36 @@ habilitou**, e agora está medido em vez de suposto. Não há flag de TTL na CLI
 Ambos param em exit 3 pelos mesmos 2 `[CONFIRMAR:` — pretensão salarial (prescrita pelo próprio
 fato) e escolaridade (indefinida de verdade). O primeiro é o que a fase F4 resolve.
 
+## O que o critério de aceite NÃO prova
+
+`coveragePct` e `atsScoreHeuristic` são heurísticas **deste** sistema. O coverage sai de
+`extractKeywords`, frequência de n-grama pura — no JD da Stefanini, 13 das 30 "keywords" eram
+texto institucional (REQ-002). Usar isso como critério é aceitável e insuficiente, e a
+assimetria importa:
+
+- **Serve como alarme de regressão grande.** A queda de 13 pontos na Techne junior apontou para
+  uma causa real — uma regra perdida na destilação do prompt. O sinal foi verdadeiro apesar do
+  ruído.
+- **Não serve como placar de melhoria fina.** Quando o caminho novo ganhar por 3 pontos, esses 3
+  pontos não querem dizer nada — cabem dentro do ruído que o próprio `extractKeywords` injeta.
+
+Por isso o critério só pode ter a forma **"não pode piorar muito"**, nunca "tem de melhorar
+tanto". A nota longa vive junto do código que calcula os números, em `scripts/measure-kit.ts`.
+
+## Um custo de medição que eu não previ: o gate de modalidade encolhe a amostra
+
+A não-regressão pediu 5 vagas e rodou 3. `E — Analista de Automação` e `10x Advisory` foram
+recusadas pelo `prepare` com **exit 5** — modalidade não confirmada.
+
+**O gate agiu certo:** recusar antes de gastar é exatamente o que ele existe para fazer, e é a
+mesma regra que evita escrever carta aceitando um cargo presencial em São Paulo. Mas ele tem um
+efeito de segunda ordem que ninguém previu: **vagas pendentes de decisão humana também não podem
+ser medidas.** Uma amostra de 3 não decide troca de default.
+
+Registrado como custo real, não como defeito. A consequência operacional é que qualquer medição
+comparativa precisa checar a modalidade das vagas da amostra **antes** de começar, senão a
+amostra encolhe no meio.
+
 ## Não-regressão (F2) — **REPROVOU**. O `--via=cli` não virou default
 
 Critério do operador, em código: nenhuma vaga pode piorar mais de **5 pontos de cobertura**, e
@@ -228,6 +258,52 @@ salarial separado) endereça. Sem F4, nenhuma via sem web fecha em exit 0.
 A revisão **subiu a cobertura nas três** (37→50, 33→43, 10→17) e a regra "compara e fica com o
 melhor" nunca precisou descartar. Média ~$0,42 e ~16,4k tokens de entrada por kit, contra
 $1,96 e ~2,4M do caminho agêntico.
+
+## A varredura de paridade SKILL.md × REGRAS — 5 regras perdidas, não 1
+
+O eco do título era **defeito de transcrição**, não afinação de métrica: o `SKILL.md:63` já
+prescrevia ("título do Resumo sintonizado com o título da vaga") e a destilação enfraqueceu para
+"ajustadas ao título". O teste é se a correção seria aprovada sem olhar o resultado da Techne —
+seria, porque as duas frases deveriam dizer a mesma coisa e não diziam.
+
+A varredura item a item achou mais quatro, e **a pior não aparecia em cobertura nenhuma**:
+
+| regra do `SKILL.md` | estado nas `REGRAS` | gravidade |
+|---|---|---|
+| `variant` A/B (metric-first × role-first) | **ausente** | **alta** — o caminho novo ignorava a variante e contaminava o experimento de conversão do /painel, sem sintoma visível |
+| trilha / `track_hint` / bloco `tracks` | **ausente** | alta — o bundle carrega `tracks` e as REGRAS nunca mencionavam |
+| eco do título da vaga no Resumo | enfraquecido | média — os 13 pontos da Techne junior |
+| "sem jargão interno que o recrutador não conhece" | ausente | baixa |
+| "STAR NÃO é para o currículo" | ausente | baixa |
+
+**O que NÃO foi tocado:** `areas` e `organizacao`, as outras duas keywords perdidas. São ruído
+institucional do `extractKeywords`. Ajustar o redator para capturá-las seria escrever para o
+termômetro — o defeito está no termômetro (REQ-002).
+
+O guarda durável é `tests/unit/paridade-prompt.test.ts`: uma tabela de contrato item a item, com
+veredicto explícito em cada linha (compartilhado × divergência declarada com motivo). Tem
+controle positivo, e foi verificado contra a versão anterior do arquivo — teria reprovado as
+cinco, e o item de controle estava presente nos dois textos.
+
+## F4 — a busca de faixa salarial como passo próprio, e o que ela desbloqueou
+
+`npx tsx src/cli/salary.ts <job_id>` roda **uma** busca no perfil `salario` e grava
+`salary-research.json` no kit_dir; o `prepare` seguinte o inclui no bundle.
+
+Duas descobertas na implementação:
+
+1. **`--tools` e `--allowedTools` são coisas diferentes e as duas são necessárias.** Com só
+   `tools: [WebSearch]`, o modelo tentou buscar duas vezes e as duas voltaram em
+   `permission_denials` — `--tools` diz o que EXISTE, `--allowedTools` diz o que é PERMITIDO, e
+   com `isolate_settings` não há allowlist herdada de lugar nenhum.
+2. **A degradação funcionou por acidente antes de funcionar de propósito.** Na execução com
+   permissão negada, o modelo respondeu `FAIXA: Não disponível` e o comando devolveu erro dizendo
+   que o kit sairia com `[CONFIRMAR:` — que é exatamente o comportamento correto. Nenhum número
+   inventado chegou perto de um formulário.
+
+Resultado medido na Techne, com F4 ativa: **exit 0**, coverage 47%, ATS 58, contra exit 3 antes.
+Custo da busca: **$0,0839**. O kit saiu com **3 páginas** (era 2) — informação, não gate, mas
+vale olhar em vaga de entrada.
 
 ## Correções de números que circularam antes desta medição
 

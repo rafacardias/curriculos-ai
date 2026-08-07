@@ -44,6 +44,7 @@ import { blocksGeneration } from "../core/modality.js";
 import { buildPortablePrompt, parsePortableResponse } from "../core/portable-prompt.js";
 import { resolveLocality } from "../core/locality.js";
 import { gerarKit, parseVia } from "../local/generate-kit.js";
+import { lerSalaryResearch } from "../local/salary.js";
 import { decidePolicy } from "../core/policy.js";
 import { assignVariant } from "../core/experiments.js";
 import { normalize } from "../core/dedup.js";
@@ -140,6 +141,10 @@ Para ver as pistas do próprio anúncio:
     // YAML). É CLASSE-01 na camada de contexto: chave sem valor lida como
     // informação disponível — mesma família do `remote_type = NULL`.
     candidate_facts: loadCandidateFacts(),
+    // Resultado da busca de faixa salarial, se `src/cli/salary.ts` já rodou.
+    // Sem ela o redator marca [CONFIRMAR: pretensão] e o finalize sai 3 — a
+    // degradação correta. Ver src/local/salary.ts.
+    salary_research: lerSalaryResearch(kitDir),
     known_screening_answers: knownAnswers,
     expected_files: ["resume.md", "cover-letter.md", "answers.md", "outreach.md"],
     kit_dir: kitDir,

@@ -12,6 +12,32 @@
  * render + gates de ATS (4), coverage. Mesmas funções, mesma ordem, mesma
  * precedência — se divergir do finalize, o número não vale nada.
  *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * LIMITE DO QUE ESTES NÚMEROS PROVAM — leia antes de decidir qualquer coisa
+ * com eles.
+ *
+ * `coveragePct` e `atsScoreHeuristic` são heurísticas DESTE sistema, não
+ * medidas do mundo. Nenhum ATS real publica seus critérios, e o `coverage` sai
+ * de `extractKeywords`, que é frequência de n-grama pura: no JD da Stefanini,
+ * 13 das 30 "keywords" eram texto institucional (`clube vantagens`, `voce`).
+ * Está registrado como REQ-002 no KNOWN-BUGS.md.
+ *
+ * Consequência prática, e ela é assimétrica:
+ *
+ *   SERVE   para detectar REGRESSÃO GRANDE. Uma queda de 13 pontos, como a da
+ *           "Analista de Chatbot Junior" em 2026-08-07, aponta para alguma
+ *           coisa real — naquele caso, uma regra perdida na destilação do
+ *           prompt. O sinal foi verdadeiro mesmo com a métrica ruidosa.
+ *
+ *   NÃO SERVE para declarar MELHORIA FINA. Quando o caminho novo ganhar por 3
+ *           pontos, esses 3 pontos não querem dizer nada: cabem inteiros dentro
+ *           do ruído institucional que o próprio extractKeywords injeta.
+ *
+ * Ou seja: use como alarme, nunca como placar. Um critério de aceite construído
+ * sobre isto só pode ser da forma "não pode piorar muito", jamais "tem de
+ * melhorar tanto".
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
  *   npx tsx scripts/measure-kit.ts --job <job_id> --dir <caminho> [--json]
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
