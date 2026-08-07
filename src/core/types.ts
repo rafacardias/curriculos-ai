@@ -4,9 +4,14 @@ export type JobSource = "gupy" | "remotive" | "remoteok" | "wwr" | "linkedin" | 
 export type AtsPlatform = "greenhouse" | "lever" | "workday" | "gupy" | "linkedin" | "other";
 export type RemoteType = "remote" | "hybrid" | "onsite";
 export type JobStatus = "new" | "queued" | "rejected" | "expired" | "applied_elsewhere";
+// `submitting` existia aqui e NADA no sistema o escrevia — resto do caminho de
+// submissão automatizada que nunca chegou a usá-lo. Tipo que descreve estado
+// inexistente é a mesma classe de erro em outra camada: ele apareceu numa
+// exclusão de contagem (`status NOT IN ('kit_ready','submitting')`) e fez parecer
+// que havia um estado intermediário sendo tratado. Não havia.
+// A submissão em andamento vive em `submissions.status = 'pending'`.
 export type ApplicationStatus =
   | "kit_ready"
-  | "submitting"
   | "applied"
   | "screening"
   | "interview"

@@ -23,6 +23,28 @@
 export type FeedbackVerdict = "aprovar" | "rejeitar";
 
 /**
+ * Os tipos de chave que `preference_weights` pode conter — a POPULAÇÃO aprendida.
+ *
+ * `source` está deliberadamente FORA (item 3 do BUG-007). Uma fonte é canal de
+ * coleta, não gosto: rejeitar uma vaga do LinkedIn pelo tema não é informação
+ * sobre o LinkedIn. Aprender peso de canal foi como o sistema codificou "prefiro
+ * board internacional" a partir de rejeições que nada tinham a ver com o canal.
+ *
+ * Esta lista governa a escrita (`preferenceKeysFor`) E a leitura (`scoreJob`).
+ * Tirar de um só lado deixaria as chaves velhas vivas e voltando a pontuar no dia
+ * em que `scoring.preference` fosse religado — que é justamente o dia em que
+ * ninguém estaria olhando para isto.
+ */
+export const PREFERENCE_KINDS = ["kw", "company", "seniority"] as const;
+export type PreferenceKind = (typeof PREFERENCE_KINDS)[number];
+
+/** A chave pertence à população aprendida de hoje? */
+export function isLearnedKey(key: string): boolean {
+  const kind = key.split(":", 1)[0] ?? "";
+  return (PREFERENCE_KINDS as readonly string[]).includes(kind);
+}
+
+/**
  * Por que a vaga foi rejeitada. Vocabulário fechado, e é isso que o torna útil:
  * lista aberta viraria texto livre com outro nome.
  */

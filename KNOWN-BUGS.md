@@ -23,7 +23,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | [BUG-009](#bug-009) | Média | **Corrigido** | `src/core/scoring.ts` (filtro de idioma) |
 | [REQ-004](#req-004) | **Alta** | Medido; veredito pontual | `src/core/master-resume.ts` |
 | [REQ-003](#req-003) | **Alta** | Medido; correção é do operador | `profile/tracks.yaml` |
-| [REQ-002](#req-002) | — | **Pré-requisito** da Fase 2 | `src/core/keywords.ts` |
+| [REQ-002](#req-002--segmentação-por-seção-implementada-em-2026-08-07) | — | **IMPLEMENTADO** (`src/core/jd-sections.ts`) — 92% do acervo segmentado | `src/core/jd-sections.ts` |
 | [REQ-001](#req-001) | — | Requisito aberto da Fase 2 | `src/core/master-resume.ts` |
 | [LIM-001](#lim-001) | — | **FECHADO** | `tests/e2e/kit-ats-gate.test.ts` |
 
@@ -37,7 +37,7 @@ achadas de novo, não redescobertas):
 | [Modalidade pendente](#modalidade-pendente--o-terceiro-estado) | `remote_type` NULL não é "tudo bem"; o terceiro estado e como resolvê-lo |
 | [ACHADO-05](#achado-05--o-10x-advisory-escapou-de-dois-filtros-e-nenhuma-das-hipóteses-estava-certa) | o filtro de tecnologia precisa de **seção**, não de marcador; e o detector de anos perde 37 vagas |
 | [CLASSE-01 inst. 6](#classe-01-instância-6--indexof-devolvendo-1-lido-como-índice-válido) | `indexOf` −1 lido como índice; dry-run e commit por caminhos diferentes |
-| [Erro só em memória](#erro-de-pipeline-que-só-existe-em-memória) | cartão de erro some no restart — a Fase 3 resolve |
+| [Erro só em memória](#erro-de-pipeline-que-só-existe-em-memória) | cartão de erro some no restart — [promovido](#prioridade-movida-generation_runs-sai-da-fase-3) para logo depois da segmentação |
 
 ---
 
@@ -685,8 +685,16 @@ grafia mais comum em JD brasileiro depois de "N+". O teto `max_years_required: 2
 furado **silenciosamente desde o começo**: nenhum erro, nenhum log, apenas vagas que deveriam
 ter sido filtradas passando para a fila.
 
+**Correção de alcance (2026-08-07, depois de medir).** Eu registrei isto como se a correção
+tivesse fechado o buraco. **Não fechou** — fechou uma grafia. O padrão exige a palavra
+"experiência" **adjacente** à expressão de anos, e `"3+ years of professional software engineering
+experience"` tem três palavras no meio. Medido: o detector estrito enxerga **10% do acervo**
+(62 de 641). O buraco real era estrutural, não de grafia, e só foi fechado pela segmentação por
+seção (`src/core/jd-sections.ts`), que acrescentou 25 vagas.
+
 **Alcance.** Não é só a fila de hoje. Todo score calculado antes de `8441497` saiu de um detector
-cego, e toda vaga que entrou na fila por esse caminho entrou indevidamente. O `rescore --commit`
+cego para "N ou mais anos", e todo score anterior à segmentação saiu de um detector cego para
+"N anos de <palavras> experiência" dentro de seção de requisito. O `rescore --commit`
 de 2026-08-07 (backup `curriculos.2026-08-07T14-07-35Z.db`, sha256 `149eddcd…`) recalculou os
 305 registros repontuáveis com o detector corrigido.
 
@@ -831,14 +839,47 @@ Detectado na verificação pós-escrita (a soma de `preference_weights` saltou d
 310,53 e 8 chaves bateram no teto ±10), revertido pelo backup `curriculos.2026-08-07T15-25-30Z`
 restaurando só a tabela e o evento inseridos, e reaplicado corretamente.
 
-**Duas lições, não uma.**
+### A forma nova: **flag ausente lida como valor posicional**
 
-1. **Ausência lida como valor** — a forma A da classe, e a razão de o script passar a usar
-   `parseArgs` em vez de aritmética sobre `indexOf`, mais uma validação de formato do valor.
-2. **Dry-run e commit percorreram caminhos de argumento DIFERENTES.** Foi por isso que o dry-run
-   passou limpo e a escrita não. Um dry-run que não exercita exatamente os mesmos argumentos da
-   escrita não prova nada sobre ela — e o único motivo de o dano ter sido reversível é que o
-   `--commit` faz backup antes de escrever.
+É a forma A da classe (ausência lida como evidência) na camada de argumentos. `indexOf` devolve
+−1 para "não existe", e −1 + 1 = 0 é um índice perfeitamente válido — a ausência vira o primeiro
+argumento da linha de comando. O sintoma depende de qual flag o operador digitou, o que é a pior
+propriedade possível num comando destrutivo.
+
+### Invariante: dry-run tem de percorrer o MESMO caminho de argumento da escrita
+
+Foi por isso que o dry-run passou limpo e a escrita não: sem argumentos, `argv[0]` era `undefined`
+e o default entrava; com `--commit`, `argv[0]` era `"--commit"`. **Um dry-run que não exercita
+exatamente os mesmos argumentos da escrita não prova nada sobre a escrita.** Vale para todo
+comando com `--commit` no repositório, não só para este.
+
+### Auditoria de `argv` (2026-08-07) — havia outra
+
+| ponto | forma | veredito |
+|---|---|---|
+| `scripts/revert-eligibility-feedback.ts` | `indexOf("--since") + 1` | **explodiu** — corrigido para `parseArgs` + validação de formato |
+| `src/cli/rescore.ts:38` | `Number(argv[argv.indexOf("--top") + 1]) \|\| 10` | **mesma bomba, benigna por acidente**: `Number("--commit")` é `NaN` e o `\|\| 10` engolia. Num campo de texto teria apagado o filtro igual. Corrigido |
+| `company` · `feedback` · `job-url` · `kit` · `master` · `track-status` · `schedule` · `ui-service` | destructuring posicional puro, sem flags | ok — não misturam posição com flag |
+| `modality` · `dashboard` | `parseArgs` / `includes` | ok |
+
+**Regra:** comando que lê flag usa `parseArgs` e valida o formato do valor. Aritmética sobre
+`indexOf` está proibida.
+
+### Pré-condição: backup antes de escrita em massa
+
+O que tornou o dano reversível não foi cuidado — foi o backup automático feito segundos antes.
+Isso deixa de ser conveniência e passa a ser pré-condição, com uma função só
+(`src/db/backup.ts`) para que "quem faz backup" seja grep por um nome.
+
+| comando | backup |
+|---|---|
+| `rescore --commit` | ✅ |
+| `revert-eligibility-feedback --commit` | ✅ |
+
+**Uma escrita em massa fica de fora e não tem dry-run nem backup:**
+`decayPreferenceWeights` (`src/core/scoring.ts`) roda a cada busca, multiplica todos os pesos por
+`0.95` e **apaga** as chaves abaixo de |0,05|. É intencional, mas significa que as 145 chaves
+guardadas como "registro de época" encolhem sozinhas a cada rodada. Registrado, não alterado.
 
 ---
 
@@ -859,3 +900,97 @@ sistema já tem dois detectores de crash — `submissions.status='pending'` e
 Evidência do que a Fase 3 precisa tratar: em 2026-08-06 18h14, sete gerações dispararam em rajada,
 a primeira bateu no limite de sessão e as outras seis levaram HTTP 429 em ~1 segundo cada, com
 zero tokens consumidos. **Limite de sessão encerra a noite; nunca vira retry.**
+
+---
+
+## REQ-002 — segmentação por seção: IMPLEMENTADA em 2026-08-07
+
+Três aparições e uma causa só. `src/core/jd-sections.ts`.
+
+**O eixo era o errado.** O filtro de tecnologia decidia por PROXIMIDADE — procurava marcador de
+obrigatoriedade numa janela ao redor da menção. Funciona em JD brasileiro ("Python (obrigatório)")
+e falha em JD em inglês estruturado por seção, porque **a seção já é o marcador**: *"Develop
+scalable backend services using Python"* sob *Responsibilities* não precisa de "required" para ser
+exigência.
+
+| peso | cabeçalhos | efeito |
+|---|---|---|
+| `obligation` | Requisitos · Qualifications · Required/Minimum · Must have · Responsibilities · O que buscamos · What you'll do | a seção é o marcador |
+| `weak` | Diferenciais · Desejável · Preferred Qualifications · Nice to have · Bonus | não filtra |
+| `context` | Sobre nós · Quem somos · Benefícios · What we offer | não fala do candidato |
+| `neutral` | nenhum cabeçalho reconhecido | **comportamento anterior**, janela de proximidade |
+
+`FRACO` ("noções de", "básico") e `ALTERNATIVA` ("Node.js, Python ou PHP") **vencem em qualquer
+seção**: o anúncio enfraqueceu explicitamente, e nenhuma seção sobrepõe uma declaração direta.
+
+### O texto chega achatado — e foi onde a primeira versão falhou
+
+`stripHtml` colapsa a estrutura: o cabeçalho vem grudado na frase anterior, *"…Azure OpenAI
+Anthropic **Preferred Qualifications** 3+ years…"*. Sem ponto e sem quebra. A primeira versão
+exigia fronteira à esquerda e classificou **as três** menções da 10x Advisory como
+*Responsibilities*, inclusive a que está declaradamente sob *Preferred*.
+
+O que sobrevive ao achatamento é a **capitalização**: um `<h3>` vira Title Case no meio da frase, e
+prosa corrida não faz isso. `"Preferred Qualifications"` abre seção; `"we have preferred
+qualifications"` não. Conservador de propósito — perder um cabeçalho devolve o trecho ao
+comportamento anterior; inventar um reclassifica texto que ninguém marcou.
+
+*(Segundo erro do dia na mesma família: a lista sem-fronteira era derivada por
+`re.source.replace(...)`, e a substituição falhava em silêncio por causa do `\]` dentro da classe
+de caracteres — as duas listas ficavam idênticas. Agora as duas variantes são construídas a partir
+da mesma string de frases, nunca por cirurgia num `source` já montado.)*
+
+### Medido
+
+| | antes | depois |
+|---|---:|---:|
+| vagas com ao menos uma seção reconhecida | — | **591 / 641 (92%)** |
+| anos exigidos detectados | 62 (10%) | **87** (+25) |
+| fila aberta filtrada a mais | — | 2 de 11 |
+
+**O caso nomeado, nos dois sentidos** (`tests/unit/jd-sections.test.ts`):
+
+| menção | seção | veredito |
+|---|---|---|
+| "Develop scalable backend services **using Python**" | Responsibilities | **filtra** |
+| "…experience with many of the following: … Python" | Qualifications | filtra |
+| "Experience building production applications using Python" | **Preferred** Qualifications | **não filtra** |
+
+**Correção de premissa.** Ficou registrado que `"3+ years of professional software engineering
+experience"` estaria sob *Requirements*. Está sob **Preferred Qualifications** — medido no texto
+real. Portanto o teto de anos corretamente **não** dispara nessa vaga; ela é filtrada pela menção
+sob *Responsibilities*, e só por ela.
+
+### As duas vagas que entraram no filtro, conferidas uma a uma
+
+| # | vaga | trecho | seção | veredito |
+|---|---|---|---|---|
+| 65 | Ajinomoto | "Requisitos … Conhecimentos técnicos **Programação em Python**" | Requisitos | exigência real |
+| 62 | Foundever | "**Python for all the AI part**" | Qualifications | exigência real |
+
+Nenhum falso positivo na amostra. A primeira menção da Foundever (`Python / JavaScript /
+Typescript`) é corretamente ignorada como lista de alternativas; o que filtra é a segunda.
+
+### Anos: dois consumidores, um segmentador
+
+`blockingTechnology` e `requiredYears` chamam `matchesInSections`. Não são dois detectores
+independentes — foi a duplicação de cascata que fez `scoreNewJobs` e `rescoreAll` divergirem antes.
+
+O padrão largo (até 6 palavras entre "anos" e "experiência") só conta **dentro de seção de
+obrigatoriedade**, o que resolve as duas pontas de uma vez: ganha `"4 years of professional
+non-academic writing experience"` sob *Requirements* e continua ignorando `"30 anos de atuação"`
+sob *Sobre nós*.
+
+---
+
+## Prioridade movida: `generation_runs` sai da Fase 3
+
+O reinício do serviço de 2026-08-07 apagou os 7 cartões de erro ao vivo — a melhor evidência
+possível de que o defeito é real.
+
+O que isso mudou não é a gravidade, é a **frequência**: reinício não é exceção, é rotina. Toda
+mudança de código aprovada reinicia o serviço e apaga o histórico de falha junto. Um defeito que
+some quando a ferramenta é usada normalmente não é um caso de borda.
+
+`generation_runs` (migration aditiva `004`, já que a `003` virou modalidade) passa a ser **a
+próxima coisa depois da segmentação**, antes do resto da Fase 3.

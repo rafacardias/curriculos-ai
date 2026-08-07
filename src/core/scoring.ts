@@ -11,6 +11,8 @@ import {
 } from "../db/repo/jobs.js";
 import { resolveLocality, declaresEligibleRegion } from "./locality.js";
 import { resolveModality } from "./modality.js";
+import { isLearnedKey } from "./feedback.js";
+import { matchesInSections } from "./jd-sections.js";
 import { nowIso } from "../db/client.js";
 import type { AppConfig } from "./config.js";
 
@@ -111,12 +113,17 @@ export function scoreJob(config: AppConfig, job: JobRow): { score: number; detai
   if (prefRows.length) {
     const textNorm = text.toLowerCase();
     for (const { key, weight } of prefRows) {
+      // `isLearnedKey` filtra `source:*` — que saiu da população em 2026-08-07,
+      // item 3 do BUG-007. O filtro é na LEITURA também, e não só na escrita,
+      // porque as chaves `source:*` antigas continuam na tabela: sem isto, elas
+      // voltariam a pontuar no dia em que `scoring.preference` fosse religado,
+      // que é exatamente o dia em que ninguém estaria olhando para isto.
+      if (!isLearnedKey(key)) continue;
       const [kind, value] = key.split(":", 2);
       if (!value) continue;
       const match =
         (kind === "kw" && textNorm.includes(value)) ||
         (kind === "company" && job.company_name.toLowerCase().includes(value)) ||
-        (kind === "source" && job.source === value) ||
         (kind === "seniority" && job.seniority === value);
       if (match) prefSum += weight;
     }
@@ -183,7 +190,7 @@ export function hardFilterReason(config: AppConfig, job: JobRow): string | null 
     return `filtrado: ${state}${quem} fora de ${resolveLocality(job.location).uf ?? "MG"}`;
   }
   if (config.filters.max_years_required != null) {
-    const years = detectRequiredYears(`${job.title}\n${job.description ?? ""}`);
+    const years = requiredYears(job);
     if (years != null && years > config.filters.max_years_required) {
       return `filtrado: exige ${years}+ anos de experiência`;
     }
@@ -352,14 +359,61 @@ export function blockingTechnology(config: AppConfig, job: JobRow): string | nul
   const texto = `${job.title}\n${job.description}`;
   for (const tech of techs) {
     const re = new RegExp(`\\b${tech.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
-    for (const m of texto.matchAll(re)) {
+    for (const m of matchesInSections(texto, re)) {
       const janela = texto.slice(Math.max(0, m.index - 140), m.index + 90);
+      // FRACO vence em qualquer seção: "Noções de Python" sob *Requirements*
+      // continua sendo noções. O anúncio enfraqueceu explicitamente, e nenhuma
+      // seção sobrepõe uma declaração direta.
       if (FRACO.test(janela)) continue;
+      // Lista de alternativas também vence em qualquer seção: "(Node.js, Python
+      // ou PHP)" sob *Responsibilities* segue sendo alternativa, e ele qualifica
+      // pelo Node.
       if (ALTERNATIVA.test(texto.slice(Math.max(0, m.index - 60), m.index + 40))) continue;
-      if (OBRIGATORIO.test(janela)) return tech;
+
+      switch (m.section.weight) {
+        case "weak":
+        case "context":
+          continue; // preferencial, benefício ou texto sobre a empresa
+        case "obligation":
+          return tech; // a seção É o marcador — não se procura marcador de novo
+        case "neutral":
+          if (OBRIGATORIO.test(janela)) return tech; // sem seção: janela, como antes
+      }
     }
   }
   return null;
+}
+
+/**
+ * Anos exigidos, lidos com a MESMA segmentação da tecnologia bloqueante.
+ *
+ * `detectRequiredYears` sozinho enxerga 10% do acervo, porque exige "experiência"
+ * adjacente à expressão de anos — "3+ years of professional software engineering
+ * experience" tem três palavras no meio e escapava. Alargar a tolerância sozinho
+ * trocaria falso negativo por falso positivo: no acervo, entre as 37 vagas acima
+ * do teto que o detector perde, estão "30 anos de atuação" e "31 anos de
+ * experiência", que são a IDADE DA EMPRESA.
+ *
+ * A seção resolve as duas pontas: o padrão largo só conta em seção de
+ * obrigatoriedade, e a idade da empresa vive em "Sobre nós" (`context`). Fora de
+ * seção reconhecida, só o detector estrito vale — é o comportamento anterior.
+ */
+export function requiredYears(job: JobRow): number | null {
+  const texto = `${job.title}\n${job.description ?? ""}`;
+  // Estrito: vale em qualquer lugar, porque "N anos de experiência" colado já é
+  // inequívoco. Foi o que sempre valeu.
+  const estrito = detectRequiredYears(texto);
+  let max = estrito ?? null;
+
+  // Largo: tolera até 6 palavras entre a expressão de anos e a de experiência,
+  // e SÓ conta dentro de seção de obrigatoriedade.
+  const LARGO = /\b(\d{1,2})\s*(?:\+|ou mais|or more)?\s*(?:anos?|years?)(?:\s+\S+){0,6}?\s+(?:experi[êe]nc\w*|atua[çc][ãa]o|viv[êe]nc\w*)/gi;
+  for (const m of matchesInSections(texto, LARGO)) {
+    if (m.section.weight !== "obligation") continue;
+    const n = parseInt(/\d{1,2}/.exec(m.text)?.[0] ?? "0", 10);
+    if (n > 0 && n <= 30 && (max == null || n > max)) max = n;
+  }
+  return max;
 }
 
 /**

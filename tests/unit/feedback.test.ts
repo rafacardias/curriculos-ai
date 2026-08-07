@@ -10,7 +10,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { resetDb } from "../helpers/sandbox.js";
-import { decideLearning, parseReasonClass, REASON_CLASSES } from "../../src/core/feedback.js";
+import { decideLearning, parseReasonClass, REASON_CLASSES, isLearnedKey } from "../../src/core/feedback.js";
 import { applyFeedback, hasLearnedFrom, preferenceKeysFor } from "../../src/db/repo/feedback.js";
 import { insertJob, getJob } from "../../src/db/repo/jobs.js";
 import { getDb } from "../../src/db/client.js";
@@ -100,9 +100,29 @@ describe("applyFeedback — o efeito no banco", () => {
   it("rejeição temática escreve -1 nas chaves da vaga", () => {
     const job = getJob(insertJob(raw())!.id)!;
     applyFeedback({ job, verdict: "rejeitar", reasonClass: "tema", via: "test" });
-    const p = pesos();
-    assert.equal(p["company:acme"], -1);
-    assert.equal(p["source:linkedin"], -1);
+    assert.equal(pesos()["company:acme"], -1);
+  });
+
+  it("`source:*` NUNCA é escrito — a fonte é canal, não preferência", () => {
+    // Item 3 do BUG-007. Rejeitar uma vaga do LinkedIn pelo TEMA dela não diz
+    // nada sobre o LinkedIn; 11 das 16 vagas da fila vêm de lá. Este teste
+    // substituiu um que assertava exatamente o contrário — era o comportamento
+    // que o bug produzia.
+    const job = getJob(insertJob(raw())!.id)!;
+    applyFeedback({ job, verdict: "rejeitar", reasonClass: "tema", via: "test" });
+    for (const k of Object.keys(pesos())) {
+      assert.ok(!k.startsWith("source:"), `chave de fonte vazou: ${k}`);
+    }
+  });
+
+  it("o scorer também IGNORA `source:*` — remoção na leitura, não só na escrita", () => {
+    // As chaves antigas continuam na tabela. Sem o filtro na leitura, elas
+    // voltariam a pontuar no dia em que `scoring.preference` fosse religado.
+    assert.equal(isLearnedKey("source:linkedin"), false);
+    assert.equal(isLearnedKey("source:gupy"), false);
+    assert.equal(isLearnedKey("kw:n8n"), true);
+    assert.equal(isLearnedKey("company:acme"), true);
+    assert.equal(isLearnedKey("seniority:junior"), true);
   });
 
   it("dois cliques em Aplicar na mesma vaga contam UMA aprovação", () => {
@@ -140,7 +160,6 @@ describe("applyFeedback — o efeito no banco", () => {
     const job = getJob(insertJob(raw())!.id)!;
     const k = preferenceKeysFor(job);
     assert.ok(k.includes("company:acme"));
-    assert.ok(k.includes("source:linkedin"));
     assert.deepEqual(k, preferenceKeysFor(job), "determinística");
   });
 });

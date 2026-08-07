@@ -18,14 +18,12 @@
  * durante o decremento, o estorno não devolve exatamente o que foi tirado. O
  * script detecta e avisa em vez de fingir precisão.
  */
-import { getDb, PROJECT_ROOT, DB_PATH } from "../src/db/client.js";
+import { getDb } from "../src/db/client.js";
 import { getJob } from "../src/db/repo/jobs.js";
 import { preferenceKeysFor, bumpPreferenceWeights } from "../src/db/repo/feedback.js";
 import { loadConfig } from "../src/core/config.js";
-import { copyFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { parseArgs } from "node:util";
-import { join } from "node:path";
+import { backupDb, printBackup } from "../src/db/backup.js";
 
 // `parseArgs`, não `indexOf`. A primeira versão deste script fazia
 // `argv[argv.indexOf("--since") + 1]`, e com a flag ausente o indexOf devolve -1:
@@ -103,15 +101,10 @@ if (!commit) {
   process.exit(0);
 }
 
-// Backup, mesma disciplina do rescore.
-db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-const dir = join(PROJECT_ROOT, "db", "backups");
-mkdirSync(dir, { recursive: true });
-const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + "Z";
-const path = join(dir, `curriculos.${stamp}.pre-revert.db`);
-copyFileSync(DB_PATH, path);
-console.log(`\nbackup: ${path.replace(PROJECT_ROOT + "/", "")}`);
-console.log(`sha256: ${createHash("sha256").update(readFileSync(path)).digest("hex")}  ·  ${(statSync(path).size / 1048576).toFixed(1)} MB`);
+// Backup é PRÉ-CONDIÇÃO de escrita destrutiva, não conveniência — src/db/backup.ts.
+const bkp = backupDb("pre-revert");
+printBackup(bkp);
+const stamp = bkp.path.split("curriculos.")[1]!.split(".")[0]!;
 
 for (const [k, delta] of estorno) bumpPreferenceWeights([k], delta);
 db.prepare(

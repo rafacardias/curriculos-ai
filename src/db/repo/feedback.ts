@@ -24,7 +24,17 @@ import { setJobStatus, type JobRow } from "./jobs.js";
  */
 export function preferenceKeysFor(job: JobRow): string[] {
   const db = getDb();
-  const keys = [`company:${job.company_name.toLowerCase()}`, `source:${job.source}`];
+  // `source:*` NÃO entra. Item 3 do BUG-007: a fonte é canal de coleta, não
+  // preferência. Rejeitar uma vaga do LinkedIn pelo tema dela não diz nada sobre
+  // o LinkedIn — 11 das 16 vagas da fila vêm de lá, e punir o mensageiro pelo
+  // conteúdo da mensagem foi como `source:gupy` (a única fonte 100% brasileira,
+  // para quem configurou `location: Brazil`) chegou a −5,65 enquanto
+  // `source:remoteok` — o board que devolveu bombeiro de aeroporto em Mangaluru
+  // — virou o maior peso positivo do banco.
+  //
+  // Removido da POPULAÇÃO, não zerado com peso: chave que não é escrita nem lida
+  // não volta por descuido. Ver `PREFERENCE_KINDS`.
+  const keys = [`company:${job.company_name.toLowerCase()}`];
   if (job.seniority) keys.push(`seniority:${job.seniority}`);
   const tracks = db.prepare("SELECT keywords FROM profile_tracks").all() as unknown as Array<{ keywords: string }>;
   const lexicon = tracks.flatMap((t) => JSON.parse(t.keywords) as string[]);

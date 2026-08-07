@@ -11,22 +11,31 @@
  *
  * O default é o dry-run por decisão: escrever é a exceção e precisa ser pedida.
  */
-import { copyFileSync, mkdirSync, statSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { getDb, DB_PATH, PROJECT_ROOT } from "../db/client.js";
+import { parseArgs } from "node:util";
 import { loadConfig } from "../core/config.js";
+import { backupDb, printBackup } from "../db/backup.js";
 import { rescoreAll, type RescoreChange, type RescorePlan } from "../core/scoring.js";
 
-const argv = process.argv.slice(2);
+// `parseArgs`, não aritmética sobre `indexOf`. A versão anterior fazia
+// `Number(argv[argv.indexOf("--top") + 1]) || 10`, e com a flag ausente o
+// indexOf devolve -1: `argv[0]` virava o valor. Aqui o dano ficou escondido
+// porque `Number("--commit")` é NaN e o `|| 10` engolia — seguro por acidente,
+// não por desenho. Num campo de texto, o mesmo código apagaria o filtro, que é
+// exatamente o que aconteceu no script de estorno. Ver KNOWN-BUGS, CLASSE-01
+// instância 6.
+const { values } = parseArgs({
+  options: {
+    commit: { type: "boolean", default: false },
+    top: { type: "string", default: "10" },
+    help: { type: "boolean", short: "h", default: false },
+  },
+});
 
-if (argv.includes("--help") || argv.includes("-h")) {
+if (values.help) {
   console.log(`rescore — repontua o acervo com o scorer e o config atuais
 
   --commit        escreve no banco (default: dry-run, não escreve nada)
   --top <n>       quantas variações individuais listar (default: 10)
-  --no-backup     pula o backup no --commit (NÃO recomendado)
   --help
 
 O dry-run é o default. O --commit faz um backup timestampado em db/backups/
@@ -34,31 +43,16 @@ antes de qualquer escrita e imprime o sha256 do arquivo.`);
   process.exit(0);
 }
 
-const commit = argv.includes("--commit");
-const topN = Number(argv[argv.indexOf("--top") + 1]) || 10;
+const commit = values.commit;
+const topN = Number.parseInt(values.top, 10);
+if (!Number.isInteger(topN) || topN < 1) {
+  console.error(`--top precisa ser um inteiro positivo (recebi ${JSON.stringify(values.top)})`);
+  process.exit(1);
+}
 
 const config = loadConfig();
 
-/** Backup completo do banco antes de qualquer escrita em massa. */
-function backupDb(): { path: string; sha256: string; bytes: number } {
-  // WAL primeiro: sem o checkpoint, parte dos dados vive no -wal e o .db copiado
-  // sairia incompleto — um backup que parece válido e não é.
-  getDb().exec("PRAGMA wal_checkpoint(TRUNCATE)");
-  const dir = join(PROJECT_ROOT, "db", "backups");
-  mkdirSync(dir, { recursive: true });
-  // ISO sem ':' — legal no APFS, mas ':' em nome de arquivo quebra ferramenta demais.
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + "Z";
-  const path = join(dir, `curriculos.${stamp}.db`);
-  copyFileSync(DB_PATH, path);
-  const sha256 = createHash("sha256").update(readFileSync(path)).digest("hex");
-  return { path, sha256, bytes: statSync(path).size };
-}
-
-if (commit) {
-  const b = backupDb();
-  console.log(`backup: ${b.path.replace(PROJECT_ROOT + "/", "")}  ·  ${(b.bytes / 1024 / 1024).toFixed(1)} MB`);
-  console.log(`sha256: ${b.sha256}\n`);
-}
+if (commit) printBackup(backupDb("pre-rescore"));
 
 const plan = rescoreAll(config, { commit });
 report(plan);
