@@ -10,6 +10,7 @@ import {
   type JobRow,
 } from "../db/repo/jobs.js";
 import { resolveLocality, declaresEligibleRegion } from "./locality.js";
+import { resolveModality } from "./modality.js";
 import { nowIso } from "../db/client.js";
 import type { AppConfig } from "./config.js";
 
@@ -177,7 +178,9 @@ export function hardFilterReason(config: AppConfig, job: JobRow): string | null 
   const tech = blockingTechnology(config, job);
   if (tech) return `filtrado: exige ${tech} (não está no perfil)`;
   if (config.filters.exclude_onsite_outside_home_uf && isOnsiteOutsideHome(job)) {
-    return `filtrado: ${job.remote_type} fora de ${resolveLocality(job.location).uf ?? "MG"}`;
+    const { state, source } = resolveModality(job);
+    const quem = source === "operator" ? " confirmado" : "";
+    return `filtrado: ${state}${quem} fora de ${resolveLocality(job.location).uf ?? "MG"}`;
   }
   if (config.filters.max_years_required != null) {
     const years = detectRequiredYears(`${job.title}\n${job.description ?? ""}`);
@@ -362,13 +365,19 @@ export function blockingTechnology(config: AppConfig, job: JobRow): string | nul
 /**
  * Vaga EXPLICITAMENTE presencial ou híbrida fora da UF do operador.
  *
- * O "explicitamente" é o ponto todo. `remote_type` nulo significa que o adapter
- * não informou — e tratar ausência como prova é o mesmo erro do BUG-006 pelo
- * avesso. Medido: das 24 vagas fora de MG sem flag de remoto, 16 eram NULL do
- * LinkedIn e 5 delas diziam ser remotas no texto do JD.
+ * O "explicitamente" é o ponto todo. Modalidade `unknown` significa que ninguém
+ * afirmou nada — nem o adapter nem o operador — e tratar ausência como prova é o
+ * mesmo erro do BUG-006 pelo avesso. Medido: das 24 vagas fora de MG sem flag de
+ * remoto, 16 eram NULL do LinkedIn e 5 delas diziam ser remotas no texto do JD.
+ *
+ * Lê o estado RESOLVIDO, não `remote_type`: quando o operador confirma a
+ * modalidade pelo `modality set`, o filtro passa a valer para aquela vaga na
+ * repontuação seguinte. É assim que resolver os pendentes na mão vira efeito real
+ * na fila, em vez de virar anotação decorativa.
  */
 export function isOnsiteOutsideHome(job: JobRow): boolean {
-  if (job.remote_type !== "onsite" && job.remote_type !== "hybrid") return false;
+  const { state } = resolveModality(job);
+  if (state !== "onsite" && state !== "hybrid") return false;
   const loc = resolveLocality(job.location);
   return loc.level !== "unknown" && !loc.isHomeUf;
 }

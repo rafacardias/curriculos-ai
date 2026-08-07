@@ -5,6 +5,7 @@ import { getDb, nowIso, PROJECT_ROOT } from "../client.js";
 import { jobFingerprint, detectAtsPlatform, detectSeniority } from "../../core/dedup.js";
 import { upsertCompany } from "./companies.js";
 import type { RawJob } from "../../core/types.js";
+import type { AssertedModality } from "../../core/modality.js";
 
 export interface JobRow {
   id: string;
@@ -34,6 +35,13 @@ export interface JobRow {
   /** Score original, do momento do insert. Escrito uma única vez, na 1ª repontuação. */
   score_previous: number | null;
   score_rescored_at: string | null;
+  /**
+   * Modalidade confirmada PELO OPERADOR. Separada de `remote_type` (o que o
+   * adapter afirmou) para não apagar a proveniência — ver `src/core/modality.ts`.
+   */
+  modality_confirmed: string | null;
+  modality_confirmed_at: string | null;
+  modality_note: string | null;
 }
 
 const SNAPSHOT_DIR = join(PROJECT_ROOT, "output", "_jd-snapshots");
@@ -86,6 +94,9 @@ export function insertJob(raw: RawJob): JobRow | null {
     status: "new",
     score_previous: null,
     score_rescored_at: null,
+    modality_confirmed: null,
+    modality_confirmed_at: null,
+    modality_note: null,
   };
 
   db.prepare(
@@ -149,6 +160,46 @@ export function listRescorableJobs(): JobRow[] {
         WHERE status IN ('new','queued','rejected')
           AND NOT EXISTS (SELECT 1 FROM applications a WHERE a.job_id = jobs.id)
         ORDER BY id`
+    )
+    .all() as unknown as JobRow[];
+}
+
+/**
+ * Registra a modalidade que o OPERADOR leu no anúncio.
+ *
+ * Nunca toca `remote_type`: o que o adapter afirmou fica intacto, e a divergência
+ * entre os dois é dado, não conflito. `state` null limpa a confirmação (desfaz um
+ * erro de digitação sem precisar de SQL na mão).
+ */
+export function confirmModality(
+  id: string,
+  state: AssertedModality | null,
+  note: string | null = null
+): void {
+  getDb()
+    .prepare(
+      `UPDATE jobs SET modality_confirmed = ?, modality_confirmed_at = ?, modality_note = ?
+        WHERE id = ?`
+    )
+    .run(state, state ? nowIso() : null, state ? note : null, id);
+}
+
+/**
+ * Vagas vivas na fila — `queued` e ainda SEM linha em `applications`.
+ *
+ * É esta a contagem que o operador vê como "a fila": `status = 'queued'` sozinho
+ * inclui as vagas que já viraram kit (a linha em `jobs` continua `queued` enquanto
+ * o funil vive em `applications`), e por isso devolve um número maior que o do
+ * `rescore`. Duas contagens diferentes para a mesma palavra é como se descobre
+ * tarde que se estava lendo a tabela errada.
+ */
+export function listOpenQueueJobs(): JobRow[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM jobs
+        WHERE status = 'queued'
+          AND NOT EXISTS (SELECT 1 FROM applications a WHERE a.job_id = jobs.id)
+        ORDER BY score DESC`
     )
     .all() as unknown as JobRow[];
 }

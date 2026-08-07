@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { resetDb } from "../helpers/sandbox.js";
 import { loadConfig, type AppConfig } from "../../src/core/config.js";
 import { scoreJob, scoreNewJobs, hardFilterReason } from "../../src/core/scoring.js";
-import { insertJob, getJob } from "../../src/db/repo/jobs.js";
+import { insertJob, getJob, confirmModality } from "../../src/db/repo/jobs.js";
 import type { RawJob } from "../../src/core/types.js";
 
 let config: AppConfig;
@@ -231,5 +231,38 @@ describe("filtros de elegibilidade — idioma nativo e tecnologia ausente", () =
 
     const emCasa = insertJob(raw({ url: "https://x/bh", title: "Vaga BH", remoteType: "onsite", location: "Belo Horizonte, MG" }))!;
     assert.equal(hardFilterReason(c, getJob(emCasa.id)!), null);
+  });
+
+  it("a confirmação do operador ATIVA o filtro numa vaga que o adapter deixou muda", () => {
+    // É o que faz resolver a pendência na mão valer alguma coisa: sem isto, a
+    // confirmação seria anotação decorativa e a vaga seguiria na fila.
+    const c = cfg({ exclude_onsite_outside_home_uf: true });
+    const j = insertJob(raw({ url: "https://x/conf-on", title: "Vaga muda", location: "São Paulo, SP" }))!;
+    assert.equal(hardFilterReason(c, getJob(j.id)!), null, "antes de confirmar, pendente não filtra");
+
+    confirmModality(j.id, "onsite", "li no anúncio");
+    assert.match(hardFilterReason(c, getJob(j.id)!) ?? "", /onsite confirmado fora de SP/);
+  });
+
+  it("a confirmação do operador SOBREPÕE um adapter errado e devolve a vaga à fila", () => {
+    const c = cfg({ exclude_onsite_outside_home_uf: true });
+    const j = insertJob(raw({ url: "https://x/conf-off", title: "Vaga SP híbrida", remoteType: "hybrid", location: "São Paulo, SP" }))!;
+    assert.match(hardFilterReason(c, getJob(j.id)!) ?? "", /hybrid fora de SP/);
+
+    confirmModality(j.id, "remote", "JD diz 100% remoto");
+    assert.equal(hardFilterReason(c, getJob(j.id)!), null);
+    // E o que o adapter disse não foi apagado.
+    assert.equal(getJob(j.id)!.remote_type, "hybrid");
+  });
+
+  it("clear devolve a vaga ao estado pendente", () => {
+    const c = cfg({ exclude_onsite_outside_home_uf: true });
+    const j = insertJob(raw({ url: "https://x/conf-clr", title: "Vaga engano", location: "São Paulo, SP" }))!;
+    confirmModality(j.id, "onsite");
+    assert.notEqual(hardFilterReason(c, getJob(j.id)!), null);
+
+    confirmModality(j.id, null);
+    assert.equal(hardFilterReason(c, getJob(j.id)!), null);
+    assert.equal(getJob(j.id)!.modality_confirmed_at, null, "a data também sai, senão fica órfã");
   });
 });

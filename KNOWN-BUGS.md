@@ -11,6 +11,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 
 | # | Gravidade | Estado | Onde |
 |---|---|---|---|
+| [CLASSE-01](#classe-01--critério-sem-contexto) | — | **Classe de defeito**, não instância. Leia antes de escrever filtro novo | — |
 | [BUG-007](#bug-007) | **Crítica** | Componente desarmado; causa não corrigida | `src/cli/feedback.ts` + `src/core/scoring.ts:70-85` |
 | [BUG-005](#bug-005) | **Alta** | **Corrigido** | `src/core/truthcheck.ts:31-50` |
 | [BUG-006](#bug-006) | **Alta** | Medido, sem teste ainda | `src/core/scoring.ts:63` |
@@ -25,6 +26,15 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | [REQ-002](#req-002) | — | **Pré-requisito** da Fase 2 | `src/core/keywords.ts` |
 | [REQ-001](#req-001) | — | Requisito aberto da Fase 2 | `src/core/master-resume.ts` |
 | [LIM-001](#lim-001) | — | **FECHADO** | `tests/e2e/kit-ats-gate.test.ts` |
+
+**Notas de decisão** (não são bugs — são custos assumidos e consequências que precisam ser
+achadas de novo, não redescobertas):
+
+| Nota | Assunto |
+|---|---|
+| [Consequência de `8441497`](#consequência-do-commit-8441497--a-série-histórica-de-score-quebra-aqui) | comparação histórica de fila só vale a partir deste commit |
+| [Custo do filtro de Python](#custo-assumido--o-filtro-de-python-é-a-fronteira-da-trilha-não-um-detalhe-de-config) | ~13 vagas "AI Engineer" a menos; **primeira alavanca a reconsiderar** se a fila piorar |
+| [Modalidade pendente](#modalidade-pendente--o-terceiro-estado) | `remote_type` NULL não é "tudo bem"; o terceiro estado e como resolvê-lo |
 
 ---
 
@@ -594,3 +604,118 @@ desordem num documento correto. Congelado em `tests/unit/gates.test.ts` como tes
 
 **Coberto por:** `tests/e2e/kit-ats-gate.test.ts` (tabela → exit 4 com o PDF removido; PDF válido
 → extração confere linha a linha; parser indisponível → lança) e `tests/unit/gates.test.ts`.
+
+---
+
+## CLASSE-01 — critério sem contexto
+
+**Ausência de sinal lida como sinal negativo, ou menção lida como exigência.**
+
+Não é um bug: é a família à qual quatro defeitos já pertenceram. Está registrada como classe
+porque o próximo filtro tende a cair aqui também, e reconhecer o padrão é mais barato que
+descobrir cada instância pela quinta vez.
+
+**As duas formas.**
+
+| Forma | O que o critério faz | O que o dado realmente diz |
+|---|---|---|
+| **A — ausência como evidência** | trata "campo vazio", "flag ausente" ou "termo não encontrado" como resposta negativa | ninguém mediu; o silêncio é do coletor, não do mundo |
+| **B — menção como exigência** | trata a presença de um token como requisito, sem ler o contexto de obrigatoriedade | menção fraca, alternativa e requisito obrigatório são a mesma string |
+
+**As quatro instâncias conhecidas, e o que cada uma custou.**
+
+| Instância | Forma | Sintoma medido |
+|---|---|---|
+| [BUG-006](#bug-006) | A | `location_fit` só via "Brasil" na string; 119 vagas da Gupy perdiam metade da pontuação de local — e a flag `remote` do RemoteOK, constante em 100% do catálogo, ganhava a nota cheia. Constante não carrega informação |
+| [REQ-002](#req-002) | B | `extractKeywords` é frequência de n-grama: 13 das 30 "keywords" do JD da Stefanini eram texto institucional (`clube vantagens`, `voce`). Toda métrica de cobertura só é comparável consigo mesma |
+| Falso positivo do `blocking_technologies` | B | filtro de keyword simples tirava 20 das 33 vagas da fila, com 2 falsos positivos em 6 amostradas — "Noções de Python" (a vaga nº 1) e "(Node.js, Python **ou** PHP)", onde ele qualifica pelo Node |
+| `detectRequiredYears` cego a "N ou mais" | B | "3 ou mais anos" passava direto pelo teto de 2 anos. Ver a nota de contaminação abaixo |
+| `remote_type` NULL | A | 138 vagas sem modalidade; filtrar por ausência mataria 16 onde ninguém verificou, 5 delas remotas segundo o próprio anúncio. Corrigido com um **terceiro estado**, não com um chute — `src/core/modality.ts` |
+
+**O teste que separa as duas.** Antes de escrever um critério novo, duas perguntas:
+
+1. *Se este campo estiver vazio, o que eu vou concluir?* Se a resposta for qualquer coisa
+   diferente de "nada, e isso fica visível", é a forma A. A saída costuma ser um terceiro
+   estado explícito, não um default.
+2. *Este token, sozinho, distingue exigência de menção?* Se não, é a forma B. A saída é janela
+   de contexto (obrigatoriedade / enfraquecimento / alternativa), ou não implementar.
+
+**O que NÃO resolve.** Estender lista de exceções. Foi tentado no `master gaps` — cada palavra
+genérica nova removia um caso e deixava o defeito de pé. A correção é sempre no critério, nunca
+no catálogo de vítimas.
+
+---
+
+## Consequência do commit `8441497` — a série histórica de score quebra aqui
+
+`detectRequiredYears` não conhecia a forma **"N ou mais anos"** (nem "N or more years") — a
+grafia mais comum em JD brasileiro depois de "N+". O teto `max_years_required: 2` estava sendo
+furado **silenciosamente desde o começo**: nenhum erro, nenhum log, apenas vagas que deveriam
+ter sido filtradas passando para a fila.
+
+**Alcance.** Não é só a fila de hoje. Todo score calculado antes de `8441497` saiu de um detector
+cego, e toda vaga que entrou na fila por esse caminho entrou indevidamente. O `rescore --commit`
+de 2026-08-07 (backup `curriculos.2026-08-07T14-07-35Z.db`, sha256 `149eddcd…`) recalculou os
+305 registros repontuáveis com o detector corrigido.
+
+**Regra prática:** comparação histórica de fila — precisão, p50, tamanho — só vale **a partir
+deste commit**. Números de antes descrevem outra régua. A baseline em `docs/baseline-onda1.md`
+continua válida como registro do que foi medido na época, não como termo de comparação com o
+estado atual.
+
+---
+
+## Custo assumido — o filtro de Python é a fronteira da trilha, não um detalhe de config
+
+**Decisão do operador em 2026-08-07, consciente e registrada para ser reconsiderada.**
+
+`filters.blocking_technologies: [python]` existe porque ele não programa em Python **ainda**. O
+efeito não é remover ruído: é escolher um subconjunto do mercado.
+
+**Medido no acervo de 305 vagas repontuáveis:**
+
+- ~13 vagas do tipo **"AI Engineer" / "Engenheiro de IA"** saem por exigência real de Python
+- entre as 8 que deixaram a fila neste rescore, **5 eram Python**, incluindo a nº 1 (BIX
+  Tecnologia, 68,4) e duas de 60,5 (Capgemini, ioasys)
+- o p50 da fila **caiu de 50,9 para 47,6** e o topo de 68,7 para 67,7 — o filtro tira de cima,
+  não de baixo
+- o que sobra pende para **"Analista de Automação / Chatbot / CRM / Growth"**: mesma trilha
+  `ai-builder`, teto salarial e senioridade diferentes
+
+**Por que fica.** Candidatar-se a vaga com exigência sólida de Python queima geração (~$3/kit),
+queima resposta e não converte. A escolha é dele e está tomada.
+
+**Quando reconsiderar — esta é a primeira alavanca.** Se em ~2 semanas a fila estiver ruim
+(poucas vagas, score baixo, nenhuma entrevista), o primeiro movimento é **religar Python** e
+medir, antes de mexer em threshold, em pesos ou em busca. Basta remover a entrada de
+`config/config.yaml` e rodar `rescore --commit`; o `--dry-run` mostra quantas voltam.
+
+**Não entraram na lista, e por quê.** `salesforce` e `hubspot` aparecem em 2 vagas cada
+(ACHADO-04) — volume de ruído, e Salesforce ele ainda consideraria dependendo do resto do JD.
+Filtro duro exige que a exclusão seja verdadeira em 100% dos casos, não na maioria.
+
+---
+
+## Modalidade pendente — o terceiro estado
+
+**Estado:** implementado (`src/core/modality.ts`, migration `003`, `src/cli/modality.ts`).
+
+`jobs.remote_type` guarda o que o **adapter** afirmou. Dois dos seis adapters não extraem
+modalidade em lugar nenhum do código: o `linkedin-guest` e o `manual-url` — que é o fallback
+universal `/vaga <url>`. Para essas fontes, NULL é o normal, não a exceção. **138 vagas no
+acervo, 14 na fila aberta.**
+
+O erro que isto previne é nomeado: *candidatar-se a um presencial em São Paulo achando que era
+remoto*. A pendência não pode virar aprovação por omissão.
+
+| | |
+|---|---|
+| **Não filtra** | ausência não é evidência (CLASSE-01, forma A). O filtro `exclude_onsite_outside_home_uf` só age sobre estado **afirmado** |
+| **Marca** | `unknown` aparece como `⚠ modalidade não verificada` na fila e no `modality` |
+| **Não infere** | `remoteHints()` devolve **trechos do anúncio** para o operador ler. Texto ambíguo devolve as duas pistas e não escolhe vencedor — a contradição é o que ele precisa ver |
+| **Registra** | `modality set <id> remote\|hybrid\|onsite --note "…"` grava com data e origem, em coluna **separada** de `remote_type`: a divergência entre fonte e operador fica inspecionável |
+| **Tem efeito** | o filtro lê o estado **resolvido**, então confirmar `onsite` numa vaga muda faz ela sair na repontuação seguinte. Resolver na mão não é anotação decorativa |
+
+**Coberto por:** `tests/unit/modality.test.ts`, `tests/unit/scoring.test.ts` (confirmação ativa e
+desativa o filtro; `remote_type` sobrevive) e `tests/unit/migration-002.test.ts` (a 003 é aditiva
+e nasce NULL para todo mundo).

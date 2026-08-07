@@ -7,6 +7,7 @@
 import { parseArgs } from "node:util";
 import { getDb } from "../db/client.js";
 import { listQueuedJobs } from "../db/repo/jobs.js";
+import { resolveModality, modalityLabel } from "../core/modality.js";
 
 const { values } = parseArgs({
   options: {
@@ -58,9 +59,13 @@ if (values.json) {
 } else {
   if (!jobs.length) console.log("fila vazia — rode /buscar.");
   for (const j of jobs) {
-    console.log(`[${j.score}] ${j.title} @ ${j.company_name}`);
+    // Modalidade fica na primeira linha, junto do score: é decisão de
+    // elegibilidade, não detalhe. Pendente aparece como pendente — nunca some.
+    const m = resolveModality(j);
+    const aviso = m.state === "unknown" ? "  ⚠ modalidade não verificada" : "";
+    console.log(`[${j.score}] ${j.title} @ ${j.company_name}${aviso}`);
     console.log(
-      `    id ${j.id} · ${j.source} · ${j.ats_platform} · trilha ${j.track_hint ?? "?"} · ${j.policy_action ?? ""}`
+      `    id ${j.id} · ${j.source} · ${j.ats_platform} · ${modalityLabel(m)} · ${j.location ?? "sem local"} · trilha ${j.track_hint ?? "?"} · ${j.policy_action ?? ""}`
     );
     if (j.score_detail) {
       const d = JSON.parse(j.score_detail) as Record<string, number>;

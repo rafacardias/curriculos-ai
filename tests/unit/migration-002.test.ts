@@ -10,7 +10,7 @@
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, mkdtempSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REPO_ROOT } from "../helpers/sandbox.js";
@@ -62,7 +62,13 @@ describe("migration 002 — aditiva sobre um banco no schema 001", () => {
 
   it("nenhuma migration contém comando destrutivo", () => {
     // E4 é uma regra, não uma intenção: aqui ela é mecânica.
-    for (const f of ["001_init.sql", "002_rescore_provenance.sql"]) {
+    //
+    // Lê o DIRETÓRIO, não uma lista literal: uma lista teria que ser lembrada a
+    // cada migration nova, e a que fosse esquecida seria justamente a que ninguém
+    // revisou. Cobertura por construção.
+    const todas = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql"));
+    assert.ok(todas.length >= 3, "o diretório de migrations sumiu ou está vazio");
+    for (const f of todas) {
       const body = sql(f)
         .split("\n")
         .filter((l) => !l.trim().startsWith("--"))
@@ -70,5 +76,43 @@ describe("migration 002 — aditiva sobre um banco no schema 001", () => {
       assert.doesNotMatch(body, /\bDROP\s+(TABLE|COLUMN)\b/i, `${f} contém DROP`);
       assert.doesNotMatch(body, /\bRENAME\b/i, `${f} contém RENAME`);
     }
+  });
+});
+
+describe("migration 003 — modalidade confirmada, aditiva sobre 001+002", () => {
+  it("um banco já povoado migra e a coluna do adapter fica intacta", () => {
+    const db = new DatabaseSync(join(tmp, "old3.db"));
+    db.exec("PRAGMA foreign_keys = ON");
+    db.exec(sql("001_init.sql"));
+    db.exec(sql("002_rescore_provenance.sql"));
+    db.exec(`
+      INSERT INTO companies (id, name, name_normalized, created_at, updated_at)
+        VALUES ('c1', 'ACME', 'acme', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+      INSERT INTO jobs (id, fingerprint, source, url, title, company_id, company_name,
+                        location, remote_type, seen_at, score, status)
+        VALUES ('j1', 'fp1', 'linkedin', 'https://x/1', 'AI Engineer', 'c1', 'ACME',
+                'São Paulo, SP', NULL, '2026-01-01T00:00:00Z', 61.0, 'queued'),
+               ('j2', 'fp2', 'gupy', 'https://x/2', 'Analista', 'c1', 'ACME',
+                'Recife, PE', 'hybrid', '2026-01-01T00:00:00Z', 47.0, 'queued');
+    `);
+
+    db.exec(sql("003_modality_confirmation.sql"));
+
+    // 1. As colunas novas nascem NULL — pendente é o estado inicial de todo mundo,
+    //    e nenhuma vaga é promovida a "verificada" pela migration.
+    const j1 = db.prepare("SELECT * FROM jobs WHERE id = 'j1'").get() as Record<string, unknown>;
+    assert.equal(j1.modality_confirmed, null);
+    assert.equal(j1.modality_confirmed_at, null);
+    assert.equal(j1.modality_note, null);
+
+    // 2. `remote_type` não foi tocado — a proveniência do adapter sobrevive.
+    assert.equal(j1.remote_type, null);
+    const j2 = db.prepare("SELECT * FROM jobs WHERE id = 'j2'").get() as Record<string, unknown>;
+    assert.equal(j2.remote_type, "hybrid");
+
+    // 3. E a coluna da 002 continua lá: migrations empilham, não se substituem.
+    assert.ok("score_previous" in j1);
+
+    db.close();
   });
 });
