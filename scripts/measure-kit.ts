@@ -14,13 +14,13 @@
  *
  *   npx tsx scripts/measure-kit.ts --job <job_id> --dir <caminho> [--json]
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { getJob } from "../src/db/repo/jobs.js";
 import { loadMasterProfile } from "../src/core/profile.js";
 import { truthcheck, stripCitations } from "../src/core/truthcheck.js";
-import { coverageReport } from "../src/core/coverage.js";
+import { coverageReport, renderCoverageMd } from "../src/core/coverage.js";
 import {
   checkExpectedFiles,
   checkPlaceholders,
@@ -44,6 +44,9 @@ const { values } = parseArgs({
     // precedência); aqui eu preciso comparar cobertura entre vias mesmo quando
     // o answers.md reprova. `exit` continua sendo o gate de maior precedência.
     all: { type: "boolean", default: false },
+    // Escreve o coverage-report.md no dir medido. A revisão (F3) precisa dele
+    // como entrada, e o `finalize` só o grava depois dos gates de ATS.
+    "write-report": { type: "boolean", default: false },
   },
 });
 
@@ -177,6 +180,14 @@ const falhasAts = [
 
 if (falhasAts.length) {
   falha(4, falhasAts.map((f) => f.gate).join("+"), falhasAts.flatMap((f) => f.detail));
+}
+
+if (values["write-report"]) {
+  writeFileSync(
+    join(dir, "coverage-report.md"),
+    renderCoverageMd(report, { pages: pdfText.pages, extractedChars: pdfText.text.length }),
+    "utf-8"
+  );
 }
 
 encerra();

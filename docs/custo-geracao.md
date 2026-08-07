@@ -107,17 +107,73 @@ ele ultrapassa o agêntico (43%/54 contra 40%/52), a 5,6× menos dólar e 152× 
 Isso confirma que a lacuna do disparo único é exatamente a que a segunda passada endereça — no
 agêntico, o ganho de ATS também veio de um laço `finalize → coverage → reescrever`.
 
-### O que ainda está caro, e é hipótese não medida
+## M2b — as três hipóteses viraram medição. Duas confirmaram, uma foi rejeitada
 
-1. **Raciocínio é ~62% do output** nas duas vias. `--effort low` não foi testado.
-2. **`cache_creation` no TTL de 1 hora ($6/MTok) para conteúdo que nunca é relido** — 32.003
-   tokens × $6/MTok = $0,19, **41% do custo do caminho novo**, puro desperdício num processo
-   de 2 minutos.
-3. **A revisão reenviou o `PROMPT.md` inteiro** (17.317 tokens). Ela precisa só do currículo
-   atual, do gap de cobertura e dos fatos — não do bundle todo de novo.
+### S1 · `--system-prompt` **substitui**, não acrescenta
 
-Se os três forem endereçados, há caminho crível para ~$0,15–0,20 o par de disparos. **É
-projeção, não medição** — ver a lição de método no `KNOWN-BUGS.md`.
+| system prompt | prefixo total |
+|---|---:|
+| curto (~13 tokens) | **206** |
+| curto + ~1.400 tokens de texto | 1.647 |
+
+Delta **1.441** para ~1.400 acrescentados. O prefixo é o system prompt e mais nada: **não sobra
+texto de harness nenhum** com `--tools ""`. Por isso o perfil usa `--system-prompt` e nunca
+`--append-system-prompt`.
+
+### S2 · `--effort low` — REJEITADO. Barato e quebrado
+
+| | default | `--effort low` |
+|---|---:|---:|
+| custo | $0,2871 | **$0,1634** (−43%) |
+| output | 12.518 | 4.272 (−66%) |
+| **exit** | 3 (placeholder) | **2 — TRUTHCHECK REPROVOU** |
+| coverage | 30% | **20%** |
+| ATS | 44 | **36** |
+
+Corta o raciocínio, corta a veracidade junto. **Nenhum perfil de redação usa `effort`**, e o
+motivo está escrito em `config/config.yaml` e no teste, para ninguém tentar de novo.
+
+### S3 · A revisão minimal é o maior ganho isolado da rodada
+
+Entrada: só `coverage-report.md` + `resume.md`. Sem bundle, sem perfil, sem JD.
+
+| | revisão com `PROMPT.md` inteiro | **revisão minimal** |
+|---|---:|---:|
+| prompt | 40.916 chars | **7.218 chars** |
+| tokens de entrada | 17.317 | **3.324** (5,2×) |
+| custo | $0,1861 | **$0,1131** |
+| coverage | 43% (13/30) | **53% (16/30)** |
+| ATS | 54/100 | **62/100** |
+| truthcheck | ok, 17 citações | **ok, 17 citações** |
+
+Mais barato **e melhor**. O contexto focado ajuda: vendo só o currículo e o gap, o modelo otimiza
+exatamente aquilo. E o truthcheck sobrevive sem o perfil no prompt porque a revisão só pode
+reformular, reordenar e cortar — as citações já estão no texto que ela recebeu.
+
+### S4 · O cache **sobrevive entre processos** — o TTL de 1h não é desperdício
+
+| | 1º disparo | 2º disparo, prompt idêntico |
+|---|---:|---:|
+| cache_creation | 14.686 (1h) | 0 |
+| cache_read | 0 | **14.686** |
+| custo | $0,2871 | $0,2159 |
+
+Isso inverte a hipótese: o `ephemeral_1h` não é queima, é **ativo**. Num lote, o prefixo estável
+— `REGRAS` + `profile` + `tracks` + `candidate_facts`, idêntico em toda vaga — é escrito uma vez
+e lido a $0,30/MTok em vez de $6/MTok. **É exatamente o que a reordenação de chaves do F1
+habilitou**, e agora está medido em vez de suposto. Não há flag de TTL na CLI; não precisa.
+
+## O caminho recomendado, medido ponta a ponta
+
+| via | turnos | tokens de entrada | custo | coverage | ATS |
+|---|---:|---:|---:|---:|---:|
+| agêntico (hoje) | 38 | 4.851.953 | $2,6264 | 40% | 52 |
+| **disparo único + revisão minimal** | **2** | **18.010** | **$0,4002** | **53%** | **62** |
+
+**6,6× mais barato em dólar · 269× em janela · +13 pontos de cobertura · +10 de ATS.**
+
+Ambos param em exit 3 pelos mesmos 2 `[CONFIRMAR:` — pretensão salarial (prescrita pelo próprio
+fato) e escolaridade (indefinida de verdade). O primeiro é o que a fase F4 resolve.
 
 ## Correções de números que circularam antes desta medição
 

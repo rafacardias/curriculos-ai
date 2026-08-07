@@ -139,6 +139,11 @@ describe("smoke e2e — pipeline completo", () => {
     // Esconder do redator o que o formulário vai receber não é privacidade, é
     // custo.
     //
+    // A garantia que substitui a antiga NÃO é este comentário: é
+    // `docs/fronteira-de-dados.md`, que declara o que sai da máquina, o que
+    // nunca sai, e por que mandar o bundle para uma LLM de terceiro é uma
+    // decisão diferente de mandá-lo para a Anthropic sob assinatura.
+    //
     // É reversível em uma linha (`.map(f => ({key: f.key, language: f.language}))`
     // em src/cli/kit.ts) se o operador discordar.
     assert.ok(bundle.candidate_facts.length > 0);
