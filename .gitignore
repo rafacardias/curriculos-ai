@@ -29,6 +29,8 @@ profile/masters/
 # relatório de descarte de sinônimo: DERIVADO dos fatos reais, mesma regra.
 # Não sobrevive a clone limpo por construção — regere com `master rejected <trilha>`.
 profile/synonyms-rejected*.md
+profile/gaps-*.md
+profile/review-*.md
 .env
 .env.local
 

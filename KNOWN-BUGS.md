@@ -19,6 +19,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | [BUG-003](#bug-003) | Média | **Corrigido** | `src/core/pipeline.ts:41-45` |
 | [BUG-004](#bug-004) | Baixa | Sem cobertura | `src/submit/linkedin-easyapply.ts` |
 | [BUG-008](#bug-008) | **Alta** | **Corrigido** | `src/cli/kit.ts` (gates de conteúdo) |
+| [REQ-002](#req-002) | — | **Pré-requisito** da Fase 2 | `src/core/keywords.ts` |
 | [REQ-001](#req-001) | — | Requisito aberto da Fase 2 | `src/core/master-resume.ts` |
 | [LIM-001](#lim-001) | — | **FECHADO** | `tests/e2e/kit-ats-gate.test.ts` |
 
@@ -142,6 +143,35 @@ Corolário de método: a primeira medição comparou 37% (`queued`) contra 35% (
 valor, a direção é a certa e forte — mediana de 2 anos nas `queued` contra 5 nas `rejected`,
 média 2.3 contra 5.5 — mas com **n=4** nas rejeitadas, pequeno demais para concluir. Registrado
 como direção plausível, não como evidência.
+
+### ACHADO-04 · As lacunas reais da trilha ai-builder — o que nenhuma fase do pipeline move
+
+Derivado do grupo "não tenho" depois de descontar ruído do anúncio, grafia diferente e variante
+morfológica, sobre as 32 vagas `queued` da trilha (2026-08-06).
+
+**Leitura curada, não saída de ferramenta.** O comando `master gaps ai-builder` produz a tabela de
+frequência bruta, mas ela é inutilizável sem segmentação (REQ-002): o topo dela é `voce` 13×,
+`solucoes` 12×, `dados` 10×. Estender a lista de palavras genéricas para limpar isso seria curar
+sintoma. O que segue é o sinal que sobrevive a leitura humana da tabela:
+
+| Falta em | Termo | Natureza |
+|---:|---|---|
+| 4 | **low-code / no-code como plataforma** | está no léxico da trilha em `tracks.yaml`, mas **nenhum fato o sustenta** — é keyword declarada sem lastro |
+| 3 | **machine learning** | lacuna real de domínio: o perfil é IA generativa e RAG, não ML clássico |
+| 2 | **Make / Zapier** | ferramenta. O perfil tem n8n, que é concorrente direto |
+| 2 | **Salesforce** | plataforma de CRM |
+| 2 | **HubSpot** | plataforma de CRM/marketing |
+| 2 | **Python** | linguagem. O perfil é TypeScript/JavaScript |
+
+**Por que isto importa mais que a Fase 2.** Estas seis linhas são as únicas coisas em todo o
+diagnóstico que nenhum sinônimo, reescrita de bullet, gate ou seleção determinística move. Se duas
+horas de tutorial de Make produzem um fato real, o teto de 2 vagas sobe de verdade — e nenhum
+trabalho de pipeline entrega isso.
+
+**Achado de brinde:** `low-code`/`no-code` estão no léxico de `profile/tracks.yaml` sem nenhum fato
+que os sustente. O léxico da trilha é usado no *scoring* de vaga (o que entra na fila), não no
+currículo, então isso não viola a Regra nº 1 — mas significa que a fila está sendo pontuada por
+uma competência que o perfil não comprova. Vale uma passada no `tracks.yaml` na mesma revisão.
 
 ### ACHADO-03 · `posted_at` com 1276 dias
 
@@ -335,6 +365,47 @@ truthcheck" não pode ser diluída, e a ordem importa: veracidade reprova primei
 
 **Congelado em:** `tests/unit/gates.test.ts` e `tests/e2e/truthcheck-exit2.test.ts`, incluindo o
 caso de precedência (currículo com citação falsa **e** placeholder sai 2, não 3).
+
+---
+
+## REQ-002 — segmentação do JD é PRÉ-REQUISITO da Fase 2, e invalida a comparação com o passado
+
+**`extractKeywords` não separa requisito de texto institucional, então o denominador de toda
+métrica de cobertura está sujo.**
+
+Contado no JD real da Stefanini (2026-08-06): das 30 "keywords" medidas, **13 não são requisito**.
+Três são o nome da empresa (`stefanini`, `owner stefanini`, `stefanini acreditamos`) e dez são
+copy de marketing (`clube vantagens`, `você`, `parceria`, `nossos clientes`, `acreditamos poder`,
+`poder colaboracao`, `colaboracao criamos`, `criamos solucoes`, `parceria nossos`, `nossos`).
+Na `Analista de Automação` a contaminação é menor mas existe: `criar`, `solucoes`, `apis nocoes`,
+`ingles leitura` são artefatos do extrator de bigramas, não pedidos do anunciante.
+
+A causa é estrutural, não parametrização: `extractKeywords` (`src/core/keywords.ts:21-36`) é
+frequência pura de unigrama e bigrama sobre o JD inteiro. Empresa que repete o próprio nome e
+escreve três parágrafos de "quem somos" empurra esse vocabulário para o topo do ranking.
+
+### Consequência para os números já produzidos
+
+**Toda métrica de cobertura anterior à segmentação é comparável entre si e com mais nada.**
+
+Isso inclui, explicitamente: o `coveragePct` e o `atsScoreHeuristic` de qualquer kit gerado até
+aqui; os tetos de `master ceiling`; os totais 36 (fatos crus) / 28 (bullets) / 42 (bullets +
+sinônimos) do adendo da Fase 1; o "+17%" derivado deles; e o "7 contra 8" da `Analista de
+Automação`. Nenhum desses números está errado como *medida do que mediu* — todos usam o mesmo
+denominador sujo, então o delta entre eles vale. O que não vale é lê-los como "quanto do que a
+vaga pede eu cubro", nem compará-los com qualquer número produzido depois da segmentação.
+
+**Não refazer a medição retroativamente.** Refazer com o denominador antigo não conserta nada, e
+refazer com o novo produz números que não conversam com o histórico. A regra é: quando a
+segmentação existir, a baseline recomeça, e o adendo da Fase 1 vira registro histórico rotulado
+como tal.
+
+### O que a segmentação precisa entregar
+
+Separar, dentro do JD, o bloco de **requisitos** (o que a pessoa precisa ter) do bloco
+**institucional** (quem é a empresa, benefícios, cultura). O `extractKeywords` passa a rodar só
+sobre o primeiro. Sem isso, nenhum gate de piso de cobertura pode existir — ele estaria reprovando
+currículo por não mencionar `clube vantagens`.
 
 ---
 

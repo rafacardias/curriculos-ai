@@ -5,6 +5,8 @@
  *   npx tsx src/cli/master.ts check <trilha>   # valida o YAML contra o perfil real
  *   npx tsx src/cli/master.ts ceiling <trilha> <job_id>   # teto de cobertura
  *   npx tsx src/cli/master.ts rejected <trilha> # regera o relatório de descarte
+ *   npx tsx src/cli/master.ts gaps <trilha>     # lacunas REAIS por vaga da fila
+ *   npx tsx src/cli/master.ts review <trilha>   # sinônimos ordenados por risco
  *
  * Mesmo sanduíche do `kit.ts`: o determinístico é script, o julgamento é do
  * Claude, e a palavra final é do operador — um mestre com `reviewed_at` nulo é
@@ -16,6 +18,7 @@ import { getDb, PROJECT_ROOT } from "../db/client.js";
 import { getJob } from "../db/repo/jobs.js";
 import { loadMasterProfile } from "../core/profile.js";
 import { extractKeywords, termsPresent } from "../core/keywords.js";
+import { normalizeForCompare } from "../core/gates.js";
 import {
   masterPath,
   parseMaster,
@@ -23,13 +26,14 @@ import {
   profileFactsHash,
   lostVocabulary,
   classifyDiscard,
+  GENERICO,
   type Discard,
   MASTERS_DIR,
 } from "../core/master-resume.js";
 
 const [cmd, track, jobId] = process.argv.slice(2);
-if (!cmd || !track || !["build", "check", "ceiling", "rejected"].includes(cmd)) {
-  console.error("uso: master build|check|rejected <trilha> · master ceiling <trilha> <job_id>");
+if (!cmd || !track || !["build", "check", "ceiling", "rejected", "gaps", "review"].includes(cmd)) {
+  console.error("uso: master build|check|rejected|gaps|review <trilha> · master ceiling <trilha> <job_id>");
   process.exit(1);
 }
 
@@ -175,6 +179,128 @@ if (cmd === "build") {
   console.log(`${descartes.length} descartes → ${destino}`);
   for (const m of ["verbo", "generico", "sem-demanda"] as const) {
     console.log(`  ${m.padEnd(12)} ${descartes.filter((d) => d.reason === m).length}`);
+  }
+} else if (cmd === "gaps" || cmd === "review") {
+  const master = parseMaster(readFileSync(masterPath(track), "utf-8"));
+  const corpusMestre =
+    master.bullets.map((b) => b.text).join(" \n ") +
+    " " +
+    master.bullets.flatMap((b) => b.synonyms.map((s) => s.term)).join(" ");
+  const corpusPerfil = [
+    ...profile.experiences.flatMap((e) => [e.role, ...e.facts.map((f) => `${f.text} ${f.skills.join(" ")}`)]),
+    ...profile.skills.hard, ...profile.skills.soft, ...profile.skills.tools,
+    ...profile.certifications,
+  ].join(" \n ");
+  const palavrasPerfil = new Set(normalizeForCompare(corpusPerfil).split(" ").filter((w) => w.length >= 4));
+
+  if (cmd === "gaps") {
+    // Lacuna REAL = o que sobra depois de tirar ruído do anúncio e grafia diferente.
+    // O que importa não é a lista por vaga: é a FREQUÊNCIA na fila. Um termo que
+    // falta em 8 vagas é uma tarde de estudo que destrava 8 candidaturas; um que
+    // falta em 1 é ruído com nome bonito.
+    const vagas = getDb()
+      .prepare("SELECT id,title,company_name,description FROM jobs WHERE status='queued' AND track_hint = ? ORDER BY score DESC")
+      .all(track) as Array<{ id: string; title: string; company_name: string; description: string | null }>;
+
+    const freq = new Map<string, { n: number; vagas: string[] }>();
+    for (const j of vagas) {
+      const empresa = normalizeForCompare(j.company_name).split(" ").filter((w) => w.length >= 3);
+      const kws = extractKeywords(`${j.title}\n${j.description ?? ""}`, 30).map((k) => k.term);
+      const cobre = new Set([...termsPresent(corpusMestre, kws), ...termsPresent(corpusPerfil, kws)]);
+      for (const k of kws) {
+        if (cobre.has(k)) continue;
+        const partes = k.split(" ");
+        if (partes.some((p) => empresa.includes(p))) continue;                    // ruído
+        // Toda parte genérica → é frase institucional, não requisito. Sem isto o
+        // topo da lista vira `voce`, `solucoes`, `dados` — o REQ-002 em ação.
+        if (partes.every((p) => GENERICO.test(p) || p.length < 4)) continue;
+        if (partes.every((p) => palavrasPerfil.has(p))) continue;                 // grafia
+        // Prefixo de 4 chars, não 5: `llms` contra `llm` estava escapando e virando
+        // "lacuna" quando é plural de algo que ele tem.
+        const vizinho = partes.some((p) => p.length >= 4 &&
+          [...palavrasPerfil].some((w) => w.startsWith(p.slice(0, 4)) || p.startsWith(w.slice(0, 4))));
+        if (vizinho) continue;                                                    // morfologia
+        const e = freq.get(k) ?? { n: 0, vagas: [] };
+        e.n++; if (e.vagas.length < 4) e.vagas.push(j.title.slice(0, 34));
+        freq.set(k, e);
+      }
+    }
+    const ranked = [...freq].filter(([, v]) => v.n >= 2).sort((a, b) => b[1].n - a[1].n);
+    const md = [
+      `# Lacunas candidatas — trilha ${track}`, "",
+      "**Arquivo DERIVADO e PROVISÓRIO.** Regere com `npx tsx src/cli/master.ts gaps " + track + "`.", "",
+      "> ⚠️ **Esta lista não é confiável hoje** — ver `KNOWN-BUGS.md` REQ-002. Sem segmentação do",
+      "> JD, o extrator devolve texto institucional como se fosse requisito, e o topo da tabela",
+      "> enche de `voce`, `solucoes`, `dados`. Tentar limpar isso estendendo a lista de palavras",
+      "> genéricas é curar sintoma: a causa é o denominador. A **leitura curada** das lacunas que",
+      "> de fato importam está em `KNOWN-BUGS.md`, seção ACHADO-04 — commitada e greppável.", "",
+      "O que sobra do JD depois de descontar ruído do anúncio, vocabulário que você tem com outra",
+      "grafia, e variantes morfológicas. Onde o sinal é real, **nenhum sinônimo, reescrita ou gate",
+      "move estas linhas** — só estudo ou projeto novo move.", "",
+      `Base: ${vagas.length} vagas \`queued\` da trilha. Listado o que falta em **2+ vagas** —`,
+      "abaixo disso é ruído do extrator com nome bonito.", "",
+      "> Ressalva do REQ-002: o denominador ainda não é segmentado, então parte do que aparece",
+      "> aqui pode ser artefato de bigrama, não pedido do anunciante. Leia a coluna de frequência",
+      "> como prioridade, não como verdade.", "",
+      "| falta em | termo | exemplos de vaga |", "|---:|---|---|",
+      ...ranked.map(([k, v]) => `| **${v.n}** | \`${k}\` | ${v.vagas.join(" · ")} |`),
+      "",
+      ranked.length ? "" : "_(nenhum termo falta em 2+ vagas)_",
+    ].join("\n");
+    const dest = join(PROJECT_ROOT, "profile", `gaps-${track}.md`);
+    writeFileSync(dest, md, "utf-8");
+    console.log(`${ranked.length} lacunas em 2+ vagas (de ${vagas.length} vagas) → ${dest}`);
+    for (const [k, v] of ranked.slice(0, 10)) console.log(`  ${String(v.n).padStart(3)}×  ${k}`);
+  } else {
+    // review — ordenado por RISCO, não por ordem de arquivo.
+    const lexico = new Set(
+      normalizeForCompare(
+        ((getDb().prepare("SELECT keywords FROM profile_tracks WHERE id = ?").get(track) as { keywords: string } | undefined)
+          ? JSON.parse((getDb().prepare("SELECT keywords FROM profile_tracks WHERE id = ?").get(track) as { keywords: string }).keywords).join(" ")
+          : "")
+      ).split(" ")
+    );
+    type Item = { fato: string; term: string; from: string; risco: number; tipo: string };
+    const itens: Item[] = [];
+    for (const b of master.bullets) {
+      for (const s of b.synonyms) {
+        const nt = normalizeForCompare(s.term), nf = normalizeForCompare(s.from);
+        if (nt === nf) continue; // os 77 mecânicos: from é a própria palavra
+        const tokT = new Set(nt.split(" ")), tokF = nf.split(" ");
+        const compartilha = tokF.some((w) => tokT.has(w));
+        const morfo = !compartilha && tokF.some((f) => f.length >= 5 &&
+          [...tokT].some((w) => w.startsWith(f.slice(0, 5)) || f.startsWith(w.slice(0, 5))));
+        const noLexico = nt.split(" ").every((w) => lexico.has(w));
+        const tipo = compartilha ? "derivado" : morfo ? "morfológico" : "inferido";
+        // Risco: inferido sem apoio do léxico da trilha é o topo.
+        const risco = (tipo === "inferido" ? 2 : tipo === "morfológico" ? 1 : 0) + (noLexico ? 0 : 1);
+        itens.push({ fato: b.fact_id, term: s.term, from: s.from, risco, tipo });
+      }
+    }
+    itens.sort((a, b) => b.risco - a.risco || a.fato.localeCompare(b.fato));
+    const mecanicos = master.bullets.reduce(
+      (n, b) => n + b.synonyms.filter((s) => normalizeForCompare(s.term) === normalizeForCompare(s.from)).length, 0);
+    const bloco = (r: number) => itens.filter((i) => i.risco === r);
+    const md = [
+      `# Revisão de sinônimos — trilha ${track}`, "",
+      "**Arquivo DERIVADO.** Regere com `npx tsx src/cli/master.ts review " + track + "`.", "",
+      `**${mecanicos} sinônimos mecânicos** (\`from\` é a própria palavra do fato) estão FORA desta`,
+      "lista. O risco deles é o mesmo de já ter aceito o fato — assinar em bloco é legítimo.", "",
+      `**${itens.length} sinônimos autorais**, ordenados por risco decrescente. O risco combina a`,
+      "distância do `from` (inferido > morfológico > derivado) com o apoio do léxico da trilha:",
+      "termo que você já declarou como seu em `tracks.yaml` é menos arriscado que um que eu inventei.", "",
+      ...[3, 2, 1, 0].flatMap((r) => {
+        const b = bloco(r);
+        if (!b.length) return [];
+        const rot = ["risco 0 — derivado e no léxico", "risco 1", "risco 2", "risco 3 — INFERIDO e fora do léxico da trilha"][r]!;
+        return [`## ${rot} (${b.length})`, "", "| fato | sinônimo | autorizado por | tipo |", "|---|---|---|---|",
+          ...b.map((i) => `| \`${i.fato}\` | **${i.term}** | \`${i.from}\` | ${i.tipo} |`), ""];
+      }),
+    ].join("\n");
+    const dest = join(PROJECT_ROOT, "profile", `review-${track}.md`);
+    writeFileSync(dest, md, "utf-8");
+    console.log(`${mecanicos} mecânicos (assináveis em bloco) · ${itens.length} autorais → ${dest}`);
+    for (const r of [3, 2, 1, 0]) console.log(`  risco ${r}: ${bloco(r).length}`);
   }
 } else {
   // ceiling — o número que a Fase 2 nunca pode superar
