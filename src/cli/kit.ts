@@ -106,7 +106,22 @@ Para ver as pistas do próprio anúncio:
 
   const variant = config.experiments.enabled ? assignVariant(job.track_hint, job.source) : null;
 
+  // ORDEM DAS CHAVES É DELIBERADA: primeiro o que é IDÊNTICO em toda vaga
+  // (profile, tracks, candidate_facts ≈ 6k tokens), depois o que muda por vaga.
+  // Prefixo estável primeiro é o que permite reuso de cache entre kits de um
+  // lote. Antes disso a ordem era `job` primeiro, o que destruía o reuso.
   const bundle = {
+    profile,
+    tracks: tracks.map((t) => ({ ...t, keywords: JSON.parse(t.keywords) })),
+    // VALOR, não só a chave. Passar `{key, language}` sem `value` fazia o
+    // redator ver o nome do dado e não o dado — e ir buscar no disco. Foram 7
+    // dos 38 turnos da geração da Techne (medido, 2026-08-07: 4 Greps por
+    // `candidate_facts`, mais profile.ts, mais CANDIDATE_FACTS_PATH, mais o
+    // YAML). É CLASSE-01 na camada de contexto: chave sem valor lida como
+    // informação disponível — mesma família do `remote_type = NULL`.
+    candidate_facts: loadCandidateFacts(),
+    known_screening_answers: knownAnswers,
+    expected_files: ["resume.md", "cover-letter.md", "answers.md", "outreach.md"],
     kit_dir: kitDir,
     variant,
     job: {
@@ -123,14 +138,17 @@ Para ver as pistas do próprio anúncio:
       description: job.description,
     },
     jd_keywords: jdKeywords,
-    tracks: tracks.map((t) => ({ ...t, keywords: JSON.parse(t.keywords) })),
-    profile,
-    candidate_facts: loadCandidateFacts().map((f) => ({ key: f.key, language: f.language })),
-    known_screening_answers: knownAnswers,
-    expected_files: ["resume.md", "cover-letter.md", "answers.md", "outreach.md"],
   };
-  writeFileSync(join(kitDir, "bundle.json"), JSON.stringify(bundle, null, 2), "utf-8");
-  console.log(JSON.stringify(bundle, null, 2));
+  writeFileSync(join(kitDir, "bundle.json"), JSON.stringify(bundle), "utf-8");
+  // NÃO despeja o bundle em stdout. Ele já está no arquivo, e despejar fazia o
+  // redator gastar um turno relendo o que o prepare acabou de gerar — 40 KB que
+  // entravam no prefixo e eram relidos em todos os turnos seguintes.
+  console.log(`bundle: ${join(kitDir, "bundle.json").replace(PROJECT_ROOT + "/", "")}`);
+  console.log(
+    `  ${jdKeywords.length} keywords do JD · ${tracks.length} trilhas · ` +
+      `${bundle.candidate_facts.length} candidate_facts · ${knownAnswers.length} respostas conhecidas`
+  );
+  console.log(`kit_dir: ${kitDir.replace(PROJECT_ROOT + "/", "")}`);
 } else if (cmd === "prompt") {
   // Caminho portátil: o mesmo bundle, embrulhado num prompt autocontido para
   // rodar em qualquer LLM. O `finalize` valida igual — ver src/core/portable-prompt.ts.
@@ -142,7 +160,10 @@ Para ver as pistas do próprio anúncio:
   const destino = join(kitDir, "PROMPT.md");
   writeFileSync(destino, texto, "utf-8");
   console.log(`prompt escrito: ${destino.replace(PROJECT_ROOT + "/", "")}`);
-  console.log(`  ${texto.length.toLocaleString("pt-BR")} caracteres  ≈ ${Math.round(texto.length / 4).toLocaleString("pt-BR")} tokens`);
+  // 2,6 chars/token, não 4. Medido em 2026-08-07 no PROMPT.md da Techne:
+  // 44.426 chars = 17.117 tokens de entrada reais. O `chars/4` que estava aqui
+  // subestimava em 54% — JSON tokeniza denso por causa da pontuação.
+  console.log(`  ${texto.length.toLocaleString("pt-BR")} caracteres  ≈ ${Math.round(texto.length / 2.6).toLocaleString("pt-BR")} tokens`);
   console.log(`
 1. copie:   pbcopy < "${destino}"
 2. cole numa LLM à sua escolha e mande rodar

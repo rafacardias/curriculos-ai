@@ -124,11 +124,27 @@ describe("smoke e2e — pipeline completo", () => {
     assert.equal(bundle.tracks.length, 2, "as 2 trilhas sintéticas");
     assert.ok(["A", "B"].includes(bundle.variant.id), "o experiment engine atribui variante");
 
-    // CONTRATO DE PRIVACIDADE: o bundle vai para o Claude com as CHAVES dos
-    // candidate_facts, nunca com os valores (pretensão salarial, PCD, etc).
+    // CONTRATO REVERTIDO EM 2026-08-07 — e a reversão fica escrita aqui, porque
+    // o contrato anterior era deliberado, não descuido.
+    //
+    // Antes: o bundle levava só as CHAVES dos candidate_facts, "nunca os valores
+    // (pretensão salarial, PCD, etc)". A intenção era privacidade.
+    //
+    // Por que caiu, medido: o redator via o NOME do dado e não o dado, e ia
+    // buscá-lo no disco — 7 dos 38 turnos da geração da Techne (4 Greps por
+    // `candidate_facts`, mais profile.ts, mais CANDIDATE_FACTS_PATH, mais o
+    // YAML). E a fronteira não protegia o que dizia proteger: o bundle já leva o
+    // `profile` inteiro (nome, e-mail, telefone, histórico), e os candidate_facts
+    // são justamente os dados que vão ser DIGITADOS no formulário do empregador.
+    // Esconder do redator o que o formulário vai receber não é privacidade, é
+    // custo.
+    //
+    // É reversível em uma linha (`.map(f => ({key: f.key, language: f.language}))`
+    // em src/cli/kit.ts) se o operador discordar.
     assert.ok(bundle.candidate_facts.length > 0);
     for (const f of bundle.candidate_facts) {
-      assert.deepEqual(Object.keys(f).sort(), ["key", "language"]);
+      assert.deepEqual(Object.keys(f).sort(), ["key", "language", "value"]);
+      assert.ok(typeof f.value === "string" && f.value.length > 0, "valor presente e não vazio");
     }
   });
 

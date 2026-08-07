@@ -7,7 +7,7 @@ description: Gera o kit completo de aplicação para uma vaga — currículo ATS
 
 ## Fluxo
 
-1. `npx tsx src/cli/kit.ts prepare <job_id>` — retorna o bundle JSON: vaga + JD, keywords ranqueadas, trilhas, perfil mestre completo (fatos com ids), candidate_facts disponíveis e respostas de triagem já conhecidas.
+1. `npx tsx src/cli/kit.ts prepare <job_id>` — grava `bundle.json` no `kit_dir` e imprime o caminho. **Leia o `bundle.json`**: vaga + JD, keywords ranqueadas, trilhas, perfil mestre completo (fatos com ids), candidate_facts **com valor** e respostas de triagem já conhecidas. Tudo que você precisa está nele — não vá procurar dado no disco.
 2. **Resolver a URL de aplicação direta** (só se a vaga veio de board agregador — `source` remoteok/remotive/wwr — ou se a URL atual é uma página de redirect/paywall do board): localize a vaga na página de carreiras da própria empresa (WebSearch/WebFetch: "<empresa> careers <título>"; priorize greenhouse/lever/workday/gupy). Se achar, grave: `npx tsx src/cli/job-url.ts <job_id> <url_direta>` — isso destrava o submission adapter certo. Se não achar, siga com a URL do board (a aplicação por lá é gratuita; paywalls como o "premium" do RemoteOK sempre têm caminho de skip — NUNCA pagar).
 3. Redija os 4 arquivos no `kit_dir` indicado no bundle (regras abaixo).
 4. `npx tsx src/cli/kit.ts finalize <job_id>` — roda truthcheck (falha se houver citação inválida), gera coverage report e renderiza os PDFs.
@@ -22,14 +22,16 @@ Cada bullet de experiência DEVE terminar com a citação `[exp:<fact_id>]` de u
 
 Você NUNCA pode adicionar skill, ferramenta, empregador, cargo, data, métrica ou conquista que não exista nos fatos. Se uma keyword do JD não tem fato que a sustente, ela fica de fora do currículo e aparecerá em "keywords não cobertas" — isso é o comportamento correto, não um defeito. Não estique um fato para fingir cobertura.
 
-## Reaproveitamento de kits anteriores (economia de tokens)
+## Não vá caçar kit anterior (medido: custava mais do que economizava)
 
-Os kits vivem em `output/<empresa>-<titulo>-<id6>/` (o `bundle.json` de cada um registra a trilha em `job.track_hint`). Antes de redigir do zero:
+Esta seção mandava listar `output/*/bundle.json`, grepar `track_hint` e partir do
+`resume.md` mais recente da mesma trilha. **Medido na geração da Techne
+(2026-08-07): 8 dos 38 turnos e ~$0,41 só para descobrir qual era o kit doador** —
+uma decisão que o `prepare` pode pré-computar e entregar pronta no bundle.
 
-1. Liste os kits existentes da MESMA trilha (`ls output/*/bundle.json` + grep do track_hint) e pegue o `resume.md` mais recente.
-2. Se a sobreposição entre as keywords do JD atual e esse currículo for alta (mesma família de vaga), **parta dele**: ajuste headline/Resumo ao título novo, reordene bullets pela relevância do JD atual e troque as grafias para as EXATAS do novo JD. Isso custa uma fração de gerar do zero.
-3. Se a sobreposição for baixa (outra família de vaga, mesmo dentro da trilha), gere do zero — adaptar um currículo errado sai pior que escrever certo.
-4. Reaproveitado ou não, TODAS as citações `[exp:id]` passam pelo mesmo `finalize` — reaproveitar texto nunca dispensa o truthcheck.
+Redija a partir do `bundle.json`. Ele já traz o perfil mestre inteiro, com os
+fatos e seus ids. Se um dia o bundle passar a nomear um kit doador, use o que ele
+nomear — não saia procurando.
 
 ## Variante do experimento
 

@@ -37,6 +37,9 @@ achadas de novo, não redescobertas):
 | [Modalidade pendente](#modalidade-pendente--o-terceiro-estado) | `remote_type` NULL não é "tudo bem"; o terceiro estado e como resolvê-lo |
 | [ACHADO-05](#achado-05--o-10x-advisory-escapou-de-dois-filtros-e-nenhuma-das-hipóteses-estava-certa) | o filtro de tecnologia precisa de **seção**, não de marcador; e o detector de anos perde 37 vagas |
 | [CLASSE-01 inst. 6](#classe-01-instância-6--indexof-devolvendo-1-lido-como-índice-válido) | `indexOf` −1 lido como índice; dry-run e commit por caminhos diferentes |
+| [CLASSE-01 inst. 7](#classe-01-instância-7--chave-sem-valor-lida-como-informação-disponível) | `candidate_facts` sem `value` custou 7 dos 38 turnos de uma geração — mais que escrever os entregáveis |
+| [Lição de método](#lição-de-método--número-não-medido-nesta-sessão-é-hipótese-não-premissa) | **terceira vez** que número citado de memória virou fundamento de plano. Nenhuma fase é autorizada por projeção |
+| [ACHADO-06](#achado-06--detectseniority-mapeia-especialistaspecialist--senior-e-filtra-51-do-acervo) | "Specialist" tratado como sênior filtra 5 vagas vivas de ai-builder. **Medido, não corrigido** |
 | [Erro só em memória](#erro-de-pipeline-que-só-existe-em-memória) | cartão de erro some no restart — [promovido](#prioridade-movida-generation_runs-sai-da-fase-3) para logo depois da segmentação |
 
 ---
@@ -158,6 +161,38 @@ Amostra de 15 rejeitadas para rótulo manual, com as limitações no topo:
 ## Achados medidos que não são bugs
 
 Registrados aqui porque foram medidos com rigor e mudam decisões, mas nenhum é defeito de código.
+
+### ACHADO-06 · `detectSeniority` mapeia "especialista/specialist" → `senior` e filtra 5,1% do acervo
+
+**Medido, não corrigido** — por instrução explícita do operador: *"quero medir quantas vagas isso
+atinge antes de mexer."*
+
+`src/core/dedup.ts:37` trata `especialista` e `specialist` como sinônimos de sênior. Com
+`exclude_seniority: ["mid","senior","lead","leadership"]`, isso filtra **33 de 642 vagas (5,1%)**.
+
+O volume é pequeno; a composição é que importa. Das 8 vivas (`status = new`), **5 são da trilha
+ai-builder**:
+
+| score | título |
+|---:|---|
+| 64,83 | AI & Automation Specialist (Full-Time) |
+| 60,50 | ESPECIALISTA I ENGENHARIA MACHINE LEARNING |
+| 59,00 | Especialista em Automação e IA *(Techne — a vaga que o operador adicionou à mão)* |
+| 38,83 | Especialista Engenheiro de IA |
+| 37,30 | Marketing & Automations Specialist |
+
+**Duas evidências de que o mapeamento está errado, não só apertado:**
+
+1. **Em inglês, "Specialist" não carrega senioridade nenhuma.** O filtro classificou como sênior
+   `Data Entry Specialist Assistant Administrator`, `Patient Care Specialist` e
+   `Product Sales Specialist — Pet Health`. São títulos de entrada.
+2. **Em português corporativo, "Especialista I" é banda, não topo.** Sete dos 33 casos são
+   `… Especialista I`, que na escada de carreira brasileira (Especialista I/II/III) é a **entrada**
+   da faixa, não o teto.
+
+É a forma B da CLASSE-01: um token lido como classificação sem o contexto que o qualificaria.
+A saída provável não é remover a palavra da regex — é a mesma que resolveu o REQ-002, ler o
+contexto (numeral de banda, e distinguir o uso EN do PT). **Nada foi alterado.**
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
@@ -663,6 +698,7 @@ descobrir cada instância pela quinta vez.
 | Falso positivo do `blocking_technologies` | B | filtro de keyword simples tirava 20 das 33 vagas da fila, com 2 falsos positivos em 6 amostradas — "Noções de Python" (a vaga nº 1) e "(Node.js, Python **ou** PHP)", onde ele qualifica pelo Node |
 | `detectRequiredYears` cego a "N ou mais" | B | "3 ou mais anos" passava direto pelo teto de 2 anos. Ver a nota de contaminação abaixo |
 | `remote_type` NULL | A | 138 vagas sem modalidade; filtrar por ausência mataria 16 onde ninguém verificou, 5 delas remotas segundo o próprio anúncio. Corrigido com um **terceiro estado**, não com um chute — `src/core/modality.ts` |
+| [`candidate_facts` sem `value`](#classe-01-instância-7--chave-sem-valor-lida-como-informação-disponível) | A | o bundle levava `{key, language}` e omitia `value`. O redator via o **nome** do dado e não o dado — e ia buscá-lo no disco: **7 dos 38 turnos** da geração da Techne, **$0,33**, mais caro que escrever os 4 entregáveis ($0,21) |
 
 **O teste que separa as duas.** Antes de escrever um critério novo, duas perguntas:
 
@@ -879,7 +915,80 @@ Isso deixa de ser conveniência e passa a ser pré-condição, com uma função 
 **Uma escrita em massa fica de fora e não tem dry-run nem backup:**
 `decayPreferenceWeights` (`src/core/scoring.ts`) roda a cada busca, multiplica todos os pesos por
 `0.95` e **apaga** as chaves abaixo de |0,05|. É intencional, mas significa que as 145 chaves
-guardadas como "registro de época" encolhem sozinhas a cada rodada. Registrado, não alterado.
+guardadas como "registro de época" encolhem sozinhas a cada rodada.
+**Deixou de ser "registrado, não alterado" em 2026-08-07:** o operador o moveu para dentro da
+fase F5 da Onda 2 — se backup é pré-condição de escrita em massa, o comando que roda **a cada
+busca e apaga chaves** não pode ser a exceção.
+
+---
+
+## CLASSE-01, instância 7 · chave sem valor lida como informação disponível
+
+**Forma A**, na camada de contexto — a mesma do `remote_type = NULL`, só que o dado ausente não
+está no banco, está no pacote que vai para o redator.
+
+`src/cli/kit.ts` montava o bundle assim:
+
+```ts
+candidate_facts: loadCandidateFacts().map((f) => ({ key: f.key, language: f.language })),
+```
+
+O redator recebia `{key: "salary_expectation_brl", language: "pt"}` — o **nome** do dado, sem o
+dado. Do ponto de vista dele isso é indistinguível de "o dado existe e está aqui": a chave está
+presente, a lista não está vazia, nada sinaliza omissão. Então ele foi buscar no disco.
+
+**Custo medido** (geração da Techne, 2026-08-07): turnos 12 a 18 — quatro `Grep` por
+`candidate_facts` em `src/`, mais `src/core/profile.ts`, mais `CANDIDATE_FACTS_PATH`, mais
+`profile/candidate-facts.yaml`. **7 dos 38 turnos, $0,332 de input — mais caro que os 4 turnos
+que escreveram os entregáveis ($0,208).** Zero informação nova: tudo já estava em disco a um
+`readFileSync` de distância do processo que montou o bundle.
+
+**Confirmação independente.** No disparo único (M2), que não tem acesso a disco, o mesmo bundle
+produziu **5 marcadores `[CONFIRMAR:`** — pretensão, aviso prévio, autorização de trabalho,
+experiência com HeyGen, escolaridade. Três desses **estavam em `candidate-facts.yaml`**
+(`notice_period`, `work_authorization`, `salary_expectation_brl`). Com o `value` no bundle,
+caíram para **2**, e os 2 restantes são legítimos: um é prescrito pelo próprio fato
+(`salary_expectation_brl` = *"A combinar [CONFIRMAR por vaga — estratégia: pesquisar a média
+local…]"*) e o outro é uma decisão de fato indefinida (diploma em curso).
+
+**Um contrato foi revertido, e isso não foi descuido de leitura.** O comportamento antigo era
+deliberado — `tests/e2e/smoke-pipeline.test.ts` o assertava como *"CONTRATO DE PRIVACIDADE: o
+bundle vai para o Claude com as CHAVES dos candidate_facts, nunca com os valores"*. Caiu porque
+a fronteira não protegia o que dizia proteger: o bundle já leva o `profile` inteiro (nome,
+e-mail, telefone, histórico), e os `candidate_facts` são exatamente os dados que vão ser
+**digitados no formulário do empregador**. Esconder do redator o que o formulário vai receber
+não é privacidade, é custo. A reversão e o motivo estão escritos no teste; desfazê-la é uma
+linha.
+
+**Generalização.** Ao montar contexto para um modelo, *chave sem valor* é pior que *chave
+ausente*: a chave ausente sinaliza a lacuna, a chave vazia a esconde. Se um campo é omitido de
+propósito, ele precisa dizer que foi omitido.
+
+---
+
+## Lição de método · número não medido nesta sessão é hipótese, não premissa
+
+**Terceira ocorrência. Por isso virou entrada.**
+
+| # | O número | O que ele fundamentou | Como caiu |
+|---|---|---|---|
+| 1 | "a correção do `8441497` fechou o buraco do teto de anos" | uma nota de alcance no próprio KNOWN-BUGS | medido: o detector via **10% do acervo**; o buraco era estrutural |
+| 2 | "`3+ years…` está sob **Requirements** no 10x Advisory" | a premissa de que o teto de anos falhava ali | medido: está sob **Preferred Qualifications** — o teto acertava |
+| 3 | "cache read 13.293.018, **97%** do custo" | **o brief inteiro** da Onda 2 de custo | medido no `result`: **4.726.166, 54%** (83% é lado-input) |
+
+Nos três casos o número foi citado de memória, soou plausível, e virou **fundamento** de uma
+decisão em vez de hipótese a verificar. Nos três a conclusão sobreviveu — o que é sorte, não
+método: um número errado por 2,8× poderia ter apontado para a alavanca errada.
+
+E a mesma sessão que registrou isto produziu duas instâncias novas: "M1 custa ~$0,20" (custou
+**$0,94** — não contei o cache write de 80k tokens a $6/MTok) e "o disparo único custa
+$0,09–0,17" (custou **$0,2871** — projetei 3.200 tokens de saída, vieram 12.518, dos quais ~62%
+raciocínio).
+
+**Regra:** número que não foi medido *nesta sessão*, com o comando à vista, entra no texto
+marcado como projeção — e nenhuma fase é autorizada por projeção. É por isso que M1 e M2 são
+aprovadas separadamente das fases de implementação, e por isso o gate de abandono da M1 é
+código (`m1-baseline.sh`, `exit 2`) e não intenção.
 
 ---
 
