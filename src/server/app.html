@@ -143,6 +143,18 @@
   .app .links a { font-family: var(--mono); font-size: 10px; color: var(--bone-dim);
                   text-decoration: underline; text-underline-offset: 2px; }
   .app .links a:hover { color: var(--signal); }
+  .app .links a.drop:hover { color: #d9534f; }
+  #dropped { margin-top: 26px; }
+  #dropped h4 { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+                color: var(--bone-dim); border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 8px; }
+  #dropped h4 b { color: var(--bone-dim); }
+  .droprow { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+             padding: 6px 0; border-bottom: 1px solid var(--ink-3); font-size: 12px; color: var(--bone-dim); }
+  .droprow i { font-style: normal; font-family: var(--mono); font-size: 10px; }
+  .droprow em { font-style: normal; font-family: var(--mono); font-size: 10px; color: var(--line); flex: 1; }
+  .droprow a { font-family: var(--mono); font-size: 10px; color: var(--bone-dim);
+               text-decoration: underline; text-underline-offset: 2px; }
+  .droprow a:hover { color: var(--signal); }
   .app select {
     width: 100%; background: var(--ink-3); color: var(--bone); border: 1px solid var(--line);
     font-family: var(--mono); font-size: 10px; padding: 5px;
@@ -258,7 +270,7 @@
     </div>
   </section>
 
-  <section id="apps"><div class="board" id="board"></div></section>
+  <section id="apps"><div class="board" id="board"></div><div id="dropped"></div></section>
 
   <section id="empresas">
     <table id="companies"><thead><tr><th>Empresa</th><th>Aplicações</th><th>Respostas</th><th>Entrevistas</th><th>Notas</th></tr></thead><tbody></tbody></table>
@@ -563,6 +575,7 @@ async function loadBoard() {
           <div class="links">
             <a href="${esc(a.url)}" target="_blank" rel="noopener">abrir vaga ↗</a>
             ${a.kit_dir ? `<a href="#" data-kit="${esc(a.kit_dir)}">copiar caminho do kit</a>` : ""}
+            <a href="#" class="drop" data-drop="${a.job_id}" data-title="${esc(a.title)}">descartar</a>
           </div>
           <select data-job="${a.job_id}">
             <option value="">mover para…</option>
@@ -570,6 +583,17 @@ async function loadBoard() {
           </select>
         </div>`).join("") || `<div class="empty" style="padding:16px 0">—</div>`) + `</div>`;
   }).join("");
+
+  // Descartadas fora do board, mas VISÍVEIS e reversíveis. O kit continua no
+  // disco — descartar marca a candidatura, não apaga arquivo.
+  const fora = apps.filter((a) => a.status === "withdrawn");
+  $("#dropped").innerHTML = !fora.length ? "" :
+    `<h4>descartadas <b>${fora.length}</b></h4>` +
+    fora.map((a) => `<div class="droprow">
+        <span>${esc(a.title)} <i>${esc(a.company_name)}</i></span>
+        ${a.notes ? `<em>${esc(a.notes)}</em>` : ""}
+        <a href="#" data-restore="${a.job_id}">restaurar</a>
+      </div>`).join("");
   $("#board").querySelectorAll("select").forEach((sel) =>
     sel.addEventListener("change", async () => {
       if (!sel.value) return;
@@ -583,6 +607,27 @@ async function loadBoard() {
       e.preventDefault();
       await navigator.clipboard.writeText(`open "${a.dataset.kit}"`);
       toast("copiado — cole no terminal para abrir a pasta do kit");
+    })
+  );
+
+  // Descartar: a candidatura vira `withdrawn`. Nada é apagado — nem a linha, nem
+  // o kit em output/. Sai do funil e aparece em "descartadas", de onde volta.
+  $("#board").querySelectorAll("a[data-drop]").forEach((a) =>
+    a.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const note = prompt(`Descartar o kit de "${a.dataset.title}"?\n\nEle sai do funil e vai para "descartadas", de onde dá para restaurar.\nOs arquivos em output/ continuam onde estão.\n\nmotivo (opcional):`, "");
+      if (note === null) return;
+      await post("/api/status", { jobId: a.dataset.drop, status: "withdrawn", note: note || "descartado na UI" });
+      toast("descartado — recuperável em \"descartadas\"");
+      loadBoard(); loadSummary();
+    })
+  );
+  $("#dropped").querySelectorAll("a[data-restore]").forEach((a) =>
+    a.addEventListener("click", async (e) => {
+      e.preventDefault();
+      await post("/api/status", { jobId: a.dataset.restore, status: "kit_ready", note: "restaurado na UI" });
+      toast("restaurado — voltou para kit ready");
+      loadBoard(); loadSummary();
     })
   );
 }
