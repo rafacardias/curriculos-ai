@@ -12,7 +12,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | # | Gravidade | Estado | Onde |
 |---|---|---|---|
 | [CLASSE-01](#classe-01--critério-sem-contexto) | — | **Classe de defeito**, não instância. Leia antes de escrever filtro novo | — |
-| [BUG-007](#bug-007) | **Crítica** | Componente desarmado; causa não corrigida | `src/cli/feedback.ts` + `src/core/scoring.ts:70-85` |
+| [BUG-007](#bug-007) | **Crítica** | **Parcialmente corrigido** (`f9378e6`): taxonomia ativa, componente segue desarmado, `source:*` ainda aprende | `src/core/feedback.ts` + `src/db/repo/feedback.ts` |
 | [BUG-005](#bug-005) | **Alta** | **Corrigido** | `src/core/truthcheck.ts:31-50` |
 | [BUG-006](#bug-006) | **Alta** | Medido, sem teste ainda | `src/core/scoring.ts:63` |
 | [BUG-002](#bug-002) | Média | **Mitigado por efeito colateral** (41.5 → 39.5) | `src/core/scoring.ts:50` |
@@ -35,6 +35,9 @@ achadas de novo, não redescobertas):
 | [Consequência de `8441497`](#consequência-do-commit-8441497--a-série-histórica-de-score-quebra-aqui) | comparação histórica de fila só vale a partir deste commit |
 | [Custo do filtro de Python](#custo-assumido--o-filtro-de-python-é-a-fronteira-da-trilha-não-um-detalhe-de-config) | ~13 vagas "AI Engineer" a menos; **primeira alavanca a reconsiderar** se a fila piorar |
 | [Modalidade pendente](#modalidade-pendente--o-terceiro-estado) | `remote_type` NULL não é "tudo bem"; o terceiro estado e como resolvê-lo |
+| [ACHADO-05](#achado-05--o-10x-advisory-escapou-de-dois-filtros-e-nenhuma-das-hipóteses-estava-certa) | o filtro de tecnologia precisa de **seção**, não de marcador; e o detector de anos perde 37 vagas |
+| [CLASSE-01 inst. 6](#classe-01-instância-6--indexof-devolvendo-1-lido-como-índice-válido) | `indexOf` −1 lido como índice; dry-run e commit por caminhos diferentes |
+| [Erro só em memória](#erro-de-pipeline-que-só-existe-em-memória) | cartão de erro some no restart — a Fase 3 resolve |
 
 ---
 
@@ -93,11 +96,40 @@ punindo a júnior. Sem **motivo estruturado**, o sinal é irrecuperável.
 4. Migration aditiva para a coluna de motivo; as 98 chaves atuais **ficam** no banco — quando
    houver motivo registrado, elas podem ser reprocessadas em vez de descartadas.
 
-### Estado
+### Estado — PARCIALMENTE CORRIGIDO em 2026-08-07 (`f9378e6`)
 
-**Desarmado, não corrigido.** `config/config.yaml` tem `scoring.preference: 0` (o peso migrou
-para `keyword_overlap: 0.65`). As chaves envenenadas seguem no banco, inertes. Voltar o peso
-para 0.10 sem os 4 itens acima reintroduz a inversão.
+O componente **continua desarmado** (`scoring.preference: 0`). O que mudou é que a tabela parou
+de ser envenenada.
+
+| Item exigido | Estado |
+|---|---|
+| 1. vocabulário fechado de motivo | ✅ `elegibilidade` · `tema` · `outro` (três, não cinco — as cinco propostas colapsam nessas) |
+| 2. só motivo temático alimenta `preference_weights` | ✅ `src/core/feedback.ts`; classe **ausente não aprende** |
+| 3. `source:*` deixar de ser chave aprendida | ❌ **não feito** — `source:linkedin` ainda é escrito |
+| 4. migration para a coluna de motivo | ~ a classe vive no payload do evento (`reason_class` + `learned`), auditável, mas não é coluna |
+
+**Extra que a recaída exigiu:** aprovação passou a ser idempotente por `job_id`. Um retry de vaga
+cuja geração morreu no limite de sessão contava como segunda aprovação.
+
+### A recaída de 2026-08-07 — o motivo estava lá e era ignorado
+
+Cinco rejeições em que o operador **digitou** o motivo: `"Hibridas em outras cidades"`. O sistema
+gravou o texto no evento e não olhou para ele ao aprender. Resultado, em 26 chaves:
+
+| | | | |
+|---|---:|---|---:|
+| `kw:orquestração` | −3,0 | `source:linkedin` | −3,5 |
+| `kw:integração` | −2,0 | `kw:agentes de ia` | −1,0 |
+| `kw:vector database` | −1,0 | `kw:openai` | −0,9 |
+
+LinkedIn é a fonte de 11 das 16 vagas da fila. As 26 chaves foram **estornadas** com
+`scripts/revert-eligibility-feedback.ts` (o estorno reconstrói as chaves pela mesma função que as
+escreveu, e devolveu exatamente os valores pré-rejeição). As 145 chaves anteriores à taxonomia
+ficam como registro de época.
+
+**Segunda condição para religar**, além da taxonomia: a tabela precisa ser auditável quanto à
+classe que gerou cada peso. Hoje só os pesos escritos a partir de `f9378e6` são — os de antes não
+têm classe e nunca terão.
 
 **Regra de captura, aprendida desta inversão:** motivo estrutural mora em campo estrutural.
 `"exige 5 anos"` nunca pode virar peso em `kw:*`.
@@ -719,3 +751,111 @@ remoto*. A pendência não pode virar aprovação por omissão.
 **Coberto por:** `tests/unit/modality.test.ts`, `tests/unit/scoring.test.ts` (confirmação ativa e
 desativa o filtro; `remote_type` sobrevive) e `tests/unit/migration-002.test.ts` (a 003 é aditiva
 e nasce NULL para todo mundo).
+
+---
+
+## ACHADO-05 · o 10x Advisory escapou de DOIS filtros, e nenhuma das hipóteses estava certa
+
+**Contexto.** O kit da 10x Advisory (score 82, o segundo maior) passou por `blocking_technologies:
+[python]`, e foi o **próprio `answers.md` gerado** que denunciou: *"nenhum fato registrado no perfil
+mestre documenta experiência profissional com Python/FastAPI/Flask"*. Primeiro falso negativo do
+filtro detectado pela geração.
+
+**As duas hipóteses eram:** (a) JD sem marcador de obrigatoriedade — refinamento estreito demais;
+(b) descrição não salva — filtro rodando sobre texto vazio, CLASSE-01 outra vez. **Nenhuma das duas.**
+
+A descrição está salva (3.933 caracteres) e o filtro encontrou as três menções a Python. O que
+falta não é marcador: é **seção**.
+
+| # | trecho | onde está | veredito do filtro |
+|---|---|---|---|
+| 1 | "Develop scalable backend services **using Python**" | Responsibilities | passou |
+| 2 | "Ideal candidates will have experience with **many of the following**: Programming Python FastAPI or Flask" | lista morna | passou |
+| 3 | "**Preferred Qualifications** … Experience building production applications using Python" | preferencial | passou |
+
+A #3 o filtro acertou: o próprio anúncio diz *preferred*. A #1 é o problema — **construir backend
+em Python é a descrição do trabalho**, e nenhuma palavra de obrigatoriedade aparece perto porque
+não precisa: está sob *Responsibilities*.
+
+**O eixo está errado.** Em JD em inglês estruturado por seção, o que decide não é a proximidade de
+um marcador, é em qual bloco a menção cai — Responsibilities > Required/Minimum > Preferred. O
+filtro não tem noção de seção. É o **REQ-002** (segmentação de JD) de novo, na terceira aparição.
+
+### O achado de brinde: `detectRequiredYears` é mais cego do que a correção de ontem sugeriu
+
+A mesma vaga também passou pelo teto de 2 anos, tendo *"3+ years of professional software
+engineering experience"* escrito. O padrão exige `experi[êe]nc` **adjacente** à expressão de anos:
+
+```
+(\d{1,2})\s*(?:\+|ou mais|or more|…)?\s*(?:anos?|years?)(?:\s+(?:de|of))?\s+experi[êe]nc
+```
+
+`"3+ years of professional software engineering experience"` tem três palavras entre "years of" e
+"experience", e por isso não casa. A correção de ontem ("N ou mais anos") era real, mas **só vale
+quando a adjacência existe** — o alcance é menor do que eu dei a entender.
+
+**Medido no acervo (641 vagas com descrição):**
+
+| | |
+|---|---:|
+| o detector atual acha | **62 (10%)** — confirma o ACHADO-02 |
+| um padrão que tolera até 6 palavras no meio acha | 108 (17%) |
+| **acima do teto de 2 anos que o detector hoje PERDE** | **37** |
+
+**Não alargar sem segmentação.** Entre os 37, aparecem *"30 anos de atuação"* e *"31 anos de
+experiência"* — que são a **idade da empresa**, não requisito. Alargar o padrão sozinho trocaria
+falso negativo por falso positivo: CLASSE-01 forma B pela porta oposta. Os dois achados desta
+entrada convergem na mesma capacidade que falta.
+
+**Estado:** medido, sem correção. Depende do REQ-002.
+
+---
+
+## CLASSE-01, instância 6 · `indexOf` devolvendo −1 lido como índice válido
+
+Aconteceu **dentro do commit que documenta a classe**, e por isso fica registrado.
+
+`scripts/revert-eligibility-feedback.ts` lia o corte de data assim:
+
+```ts
+const since = argv[argv.indexOf("--since") + 1] ?? "2026-08-07";
+```
+
+Sem a flag, `indexOf` devolve **−1**, e `argv[0]` vira o valor. No dry-run (sem argumentos)
+`argv[0]` era `undefined` e o default entrava — tudo certo. Rodando com `--commit`, `argv[0]` era
+a string `"--commit"`, e como `'-' < '2'` em ASCII, a comparação `created_at >= '--commit'` é
+**verdadeira para toda data ISO**. O reparo estornou as ~60 rejeições da história em vez das 5 do
+dia.
+
+Detectado na verificação pós-escrita (a soma de `preference_weights` saltou de −132,85 para
+310,53 e 8 chaves bateram no teto ±10), revertido pelo backup `curriculos.2026-08-07T15-25-30Z`
+restaurando só a tabela e o evento inseridos, e reaplicado corretamente.
+
+**Duas lições, não uma.**
+
+1. **Ausência lida como valor** — a forma A da classe, e a razão de o script passar a usar
+   `parseArgs` em vez de aritmética sobre `indexOf`, mais uma validação de formato do valor.
+2. **Dry-run e commit percorreram caminhos de argumento DIFERENTES.** Foi por isso que o dry-run
+   passou limpo e a escrita não. Um dry-run que não exercita exatamente os mesmos argumentos da
+   escrita não prova nada sobre ela — e o único motivo de o dano ter sido reversível é que o
+   `--commit` faz backup antes de escrever.
+
+---
+
+## Erro de pipeline que só existe em memória
+
+**Estado:** registrado, sem correção — resolvido pela Fase 3 (`generation_runs`).
+
+Os cartões de erro da fila vivem em `pipelineItems`, um `Map` em memória do servidor. A vaga em
+erro **não sai da fila** (`apiQueue` mantém quem tem `stage === "erro"`, e `doApply` aceita
+reentrada), então clicar Aprovar de novo funciona hoje. Mas reiniciar o serviço apaga os cartões,
+e a vaga volta a parecer intacta na fila — sem nenhum registro de que a geração já falhou. O
+`logs/pipeline-<id>.log` sobrevive e nada aponta para ele.
+
+**É a mesma classe:** erro que desaparece no restart é ausência de sinal lida como sucesso. O
+sistema já tem dois detectores de crash — `submissions.status='pending'` e
+`search_runs.finished_at IS NULL` — e **ninguém lê nenhum dos dois**.
+
+Evidência do que a Fase 3 precisa tratar: em 2026-08-06 18h14, sete gerações dispararam em rajada,
+a primeira bateu no limite de sessão e as outras seis levaram HTTP 429 em ~1 segundo cada, com
+zero tokens consumidos. **Limite de sessão encerra a noite; nunca vira retry.**

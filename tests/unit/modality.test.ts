@@ -9,7 +9,34 @@ import {
   remoteHints,
   modalityLabel,
   parseModalityState,
+  blocksGeneration,
 } from "../../src/core/modality.js";
+
+/** Localidades resolvidas, na forma que `blocksGeneration` consome. */
+const EM_CASA = { level: "city", isHomeUf: true };
+const FORA = { level: "city", isHomeUf: false };
+const SEM_LOCAL = { level: "unknown", isHomeUf: false };
+
+describe("blocksGeneration — cobra a modalidade onde ela custa caro", () => {
+  it("pendente + fora da UF-base = recusa antes de gastar a geração", () => {
+    assert.ok(blocksGeneration({ remote_type: null, location: "São Paulo, SP" }, FORA));
+  });
+
+  it("pendente EM CASA não bloqueia — em BH qualquer modalidade serve", () => {
+    // Interromper aqui seria cobrar uma resposta que não muda decisão nenhuma.
+    assert.equal(blocksGeneration({ remote_type: null, location: "Belo Horizonte, MG" }, EM_CASA), null);
+  });
+
+  it("pendente SEM localidade não bloqueia — não se pune ausência com ausência", () => {
+    assert.equal(blocksGeneration({ remote_type: null, location: null }, SEM_LOCAL), null);
+  });
+
+  it("estado afirmado nunca bloqueia, seja qual for", () => {
+    for (const rt of ["remote", "hybrid", "onsite"]) {
+      assert.equal(blocksGeneration({ remote_type: rt, location: "São Paulo, SP" }, FORA), null, rt);
+    }
+  });
+});
 
 describe("resolveModality — precedência e preservação de proveniência", () => {
   it("adapter mudo e operador mudo = unknown, não um chute", () => {
@@ -141,6 +168,14 @@ describe("REGRESSÃO — 'hybrid AI solutions' e 'auxílio híbrido' não produz
       assert.match(pistas[0]!.snippet, /AI solutions|desconto na folha/);
     });
   }
+
+  it("nenhuma quantidade de pista muda o que o gate de geração decide", () => {
+    // O gate lê o ESTADO, não o texto. Um JD cheio de "remoto" continua bloqueando
+    // até alguém afirmar — que é o ponto.
+    const fora = { level: "city", isHomeUf: false };
+    assert.ok(blocksGeneration({ remote_type: null, location: "São Paulo, SP" }, fora));
+    assert.equal(blocksGeneration({ remote_type: null, modality_confirmed: "remote", location: "São Paulo, SP" }, fora), null);
+  });
 
   it("o tipo de estado afirmável não admite 'unknown' — pendência não é decisão", () => {
     // Se um dia alguém tentar gravar o resultado de uma inferência, vai ter que

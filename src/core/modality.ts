@@ -94,6 +94,30 @@ export function modalityLabel(m: Modality): string {
   return `${nome} (${m.source === "operator" ? "confirmado" : "fonte"})`;
 }
 
+/**
+ * A geração deve ser recusada por modalidade indefinida?
+ *
+ * POR QUE AQUI E NÃO NA FILA. Travar a fila inteira custaria ~11 resoluções por
+ * rodada, para sempre. Mas só as vagas que passam de `policy.generate_min_score`
+ * viram kit — hoje, UMA das 11 pendentes. O ponto certo de cobrança é onde a
+ * informação importa: um kit custa ~$3 e ~4 min, resolver a modalidade custa ~1
+ * min, e a pergunta "isso é remoto?" precisa de resposta ANTES de escrever uma
+ * carta dizendo que ele topa o cargo.
+ *
+ * Só bloqueia FORA da UF-base: em Belo Horizonte, presencial, híbrido e remoto
+ * são todos aceitáveis, então a modalidade não muda a decisão e não vale a
+ * interrupção. `unknown` sem localidade reconhecida também passa — bloquear ali
+ * seria punir ausência com ausência.
+ */
+export function blocksGeneration(
+  job: ModalityInput & { location?: string | null },
+  loc: { level: string; isHomeUf: boolean }
+): string | null {
+  if (resolveModality(job).state !== "unknown") return null;
+  if (loc.level === "unknown" || loc.isHomeUf) return null;
+  return `modalidade não verificada e a vaga é fora da UF-base (${job.location ?? "?"})`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pistas — evidência para o humano, não estado do sistema.
 

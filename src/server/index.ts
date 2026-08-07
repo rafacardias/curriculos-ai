@@ -21,6 +21,9 @@ import { runSearch } from "../core/pipeline.js";
 import { resolveAdapters } from "../adapters/index.js";
 import { scoreNewJobs, decayPreferenceWeights, hardFilterReason } from "../core/scoring.js";
 import { funnelCounts } from "../core/funnel.js";
+import { blocksGeneration, resolveModality, parseModalityState } from "../core/modality.js";
+import { resolveLocality } from "../core/locality.js";
+import { confirmModality } from "../db/repo/jobs.js";
 import { buildDashboard, DASHBOARD_PATH } from "../dashboard/build.js";
 import { setJobStatus, getJob } from "../db/repo/jobs.js";
 import { getApplicationByJob, createApplication, setApplicationStatus } from "../db/repo/applications.js";
@@ -84,6 +87,7 @@ function apiQueue(limit: number) {
     db
       .prepare(
         `SELECT id, title, company_name, url, source, ats_platform, location, remote_type,
+                modality_confirmed, modality_confirmed_at, modality_note,
                 language, seniority, score, score_detail, track_hint, policy_action, posted_at
          FROM jobs
          WHERE status='queued'
@@ -96,7 +100,14 @@ function apiQueue(limit: number) {
       const p = pipelineItems.get(j.id);
       return !p || p.stage === "erro"; // em erro volta à fila para nova tentativa
     })
-    .map((j) => ({ ...j, score_detail: j.score_detail ? JSON.parse(j.score_detail) : null }));
+    .map((j) => ({
+      ...j,
+      score_detail: j.score_detail ? JSON.parse(j.score_detail) : null,
+      // `modality` é o estado RESOLVIDO — pendente aparece como pendente, nunca
+      // como "não é remoto". `blocksGeneration` diz se o Aprovar vai recusar.
+      modality: resolveModality(j).state,
+      blocksGeneration: blocksGeneration(j, resolveLocality(j.location)) != null,
+    }));
 }
 
 function apiApplications() {
@@ -316,6 +327,16 @@ function doApply(jobId: string) {
   if (existing && !["concluida", "erro"].includes(existing.stage)) {
     return { ok: false, error: "vaga já está no pipeline" };
   }
+  // Mesmo gate do `kit prepare` (exit 5), aplicado aqui para o operador não
+  // descobrir no meio do pipeline, depois de o token já ter sido gasto.
+  const bloqueio = blocksGeneration(job, resolveLocality(job.location));
+  if (bloqueio) {
+    return {
+      ok: false,
+      error: `${bloqueio}. Confirme a modalidade antes de gerar — a vaga tem o botão "modalidade" na fila, ou: modality set ${jobId} remote|hybrid|onsite`,
+      needsModality: true,
+    };
+  }
   doFeedback(jobId, "aprovar");
   // a vaga some da fila via apiQueue (pipeline em memória + application após o finalize)
   pipelineItems.set(jobId, {
@@ -490,6 +511,12 @@ const server = createServer(async (req, res) => {
     } else if (req.method === "POST" && url.pathname === "/api/apply") {
       const { jobId } = await readBody(req);
       json(res, 200, doApply(jobId));
+    } else if (req.method === "POST" && url.pathname === "/api/modality") {
+      const { jobId, state, note } = await readBody(req);
+      const s = parseModalityState(state);
+      if (!s) { json(res, 400, { error: "estado inválido — use remote, hybrid ou onsite" }); return; }
+      confirmModality(jobId, s, note ?? null);
+      json(res, 200, { ok: true, state: s });
     } else if (req.method === "POST" && url.pathname === "/api/revert") {
       const { jobId } = await readBody(req);
       json(res, 200, doRevert(jobId));

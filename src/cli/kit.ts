@@ -10,6 +10,10 @@
  *   2  truthcheck (citação inexistente ou bullet sem citação)
  *   3  conteúdo ([CONFIRMAR: ...] sobrevivente, entregável ausente ou vazio)
  *   4  ATS (HTML hostil, ou o PDF não devolve o texto que deveria)
+ *
+ * E um do prepare:
+ *   5  modalidade não verificada numa vaga fora da UF-base — recusa ANTES de
+ *      gastar a geração, porque a resposta muda se vale a pena se candidatar
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -35,6 +39,8 @@ import {
   type GateFailure,
 } from "../core/gates.js";
 import { extractPdfText } from "../render/pdf-text.js";
+import { blocksGeneration } from "../core/modality.js";
+import { resolveLocality } from "../core/locality.js";
 import { decidePolicy } from "../core/policy.js";
 import { assignVariant } from "../core/experiments.js";
 import { normalize } from "../core/dedup.js";
@@ -62,6 +68,22 @@ const profile = loadMasterProfile();
 const config = loadConfig();
 
 if (cmd === "prepare") {
+  // Gate de modalidade — exit 5. Antes de qualquer token gasto: um kit custa
+  // ~$3 e ~4 min, resolver a modalidade custa ~1 min, e escrever uma carta
+  // aceitando o cargo sem saber se é presencial em São Paulo é o erro concreto
+  // que o operador nomeou. Ver `blocksGeneration` em src/core/modality.ts.
+  const bloqueio = blocksGeneration(job, resolveLocality(job.location));
+  if (bloqueio) {
+    console.error(`GERAÇÃO RECUSADA: ${bloqueio}
+
+Resolva antes de gastar uma geração:
+  npx tsx src/cli/modality.ts set ${jobId} remote|hybrid|onsite --note "onde você leu"
+
+Para ver as pistas do próprio anúncio:
+  npx tsx src/cli/modality.ts --pending`);
+    process.exit(5);
+  }
+
   mkdirSync(kitDir, { recursive: true });
   const jdText = `${job.title}\n${job.description ?? ""}`;
   const jdKeywords = extractKeywords(jdText, 40);

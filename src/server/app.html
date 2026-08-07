@@ -120,6 +120,11 @@
   .meta { font-family: var(--mono); font-size: 10.5px; color: var(--bone-dim); letter-spacing: .04em; display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
   .tag { display: inline-block; padding: 1px 7px; border: 1px solid var(--line); }
   .tag.act { border-color: var(--signal); color: var(--signal); }
+  .tag.warn { border-color: var(--signal); color: var(--signal); border-style: dashed; }
+  .modrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+            font-family: var(--mono); font-size: 10px; color: var(--signal); }
+  .modrow .btn.mod { padding: 3px 9px; font-size: 9.5px; border: 1px solid var(--line); color: var(--bone-dim); }
+  .modrow .btn.mod:hover { border-color: var(--signal); color: var(--signal); }
   .acts { display: flex; flex-direction: column; border-left: 1px solid var(--line); }
   .acts .btn { border: none; border-bottom: 1px solid var(--line); flex: 1; padding: 8px 18px; font-size: 10px; }
   .acts .btn:last-child { border-bottom: none; }
@@ -388,10 +393,22 @@ async function loadQueue() {
           <span>${esc(j.company_name)}</span>
           <span>${j.source}</span>
           ${j.location ? `<span>${esc(j.location)}</span>` : ""}
-          ${j.remote_type ? `<span class="tag">${j.remote_type}</span>` : ""}
+          <span class="tag${j.modality === "unknown" ? " warn" : ""}">${
+            j.modality === "unknown" ? "modalidade ?" : j.modality
+          }</span>
           ${j.track_hint ? `<span class="tag">trilha: ${j.track_hint}</span>` : ""}
           <span class="tag ${j.policy_action?.startsWith("gerar") ? "act" : ""}">${esc(j.policy_action || "")}</span>
         </div>
+        ${
+          j.modality === "unknown"
+            ? `<div class="modrow">
+                 <span>modalidade não verificada${j.blocksGeneration ? " — bloqueia a geração" : ""}:</span>
+                 <button class="btn ghost mod" data-mod="remote">remoto</button>
+                 <button class="btn ghost mod" data-mod="hybrid">híbrido</button>
+                 <button class="btn ghost mod" data-mod="onsite">presencial</button>
+               </div>`
+            : ""
+        }
       </div>
       <div class="acts">
         <button class="btn" data-act="aprovar">Aprovar ↗</button>
@@ -401,10 +418,17 @@ async function loadQueue() {
     </div>`;
   }).join("");
 
-  el.querySelectorAll("[data-act]").forEach((b) =>
+  el.querySelectorAll("[data-act], [data-mod]").forEach((b) =>
     b.addEventListener("click", async () => {
       const card = b.closest(".card");
       const id = card.dataset.id;
+      if (b.dataset.mod) {
+        // Registra o que o operador leu no anúncio. Não infere: ele decide.
+        await post("/api/modality", { jobId: id, state: b.dataset.mod, note: "confirmado na fila" });
+        toast(`modalidade → ${b.dataset.mod}`);
+        loadQueue();
+        return;
+      }
       if (b.dataset.act === "aprovar") {
         const r = await post("/api/apply", { jobId: id });
         if (!r.ok) { toast(r.error || "erro"); return; }
