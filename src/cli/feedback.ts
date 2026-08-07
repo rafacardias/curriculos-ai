@@ -1,18 +1,26 @@
 /**
- * feedback — registra aprovação/rejeição de vaga e ajusta preference_weights.
+ * feedback — registra aprovação/rejeição de vaga.
  *
  *   npx tsx src/cli/feedback.ts <job_id> aprovar
- *   npx tsx src/cli/feedback.ts <job_id> rejeitar ["motivo"]
+ *   npx tsx src/cli/feedback.ts <job_id> rejeitar <classe> ["detalhe"]
+ *
+ * A CLASSE é obrigatória na rejeição, e é ela — não o texto — que decide se o
+ * score aprende. Ver `src/core/feedback.ts` (BUG-007).
  */
-import { ulid } from "ulid";
-import { getDb, nowIso, transaction } from "../db/client.js";
-import { loadConfig } from "../core/config.js";
-import { getJob, setJobStatus } from "../db/repo/jobs.js";
-import { termsPresent } from "../core/keywords.js";
+import { getJob } from "../db/repo/jobs.js";
+import { applyFeedback } from "../db/repo/feedback.js";
+import { REASON_CLASSES, parseReasonClass } from "../core/feedback.js";
 
-const [jobId, verdict, reason] = process.argv.slice(2);
+const [jobId, verdict, arg3, arg4] = process.argv.slice(2);
+
+const CLASSES = REASON_CLASSES.map((c) => `  ${c.id.padEnd(14)} ${c.label}${c.learns ? "   ← só esta move peso" : ""}`).join("\n");
+
 if (!jobId || !["aprovar", "rejeitar"].includes(verdict ?? "")) {
-  console.error("uso: feedback <job_id> aprovar|rejeitar [motivo]");
+  console.error(`uso: feedback <job_id> aprovar
+     feedback <job_id> rejeitar <classe> ["detalhe"]
+
+classes de motivo:
+${CLASSES}`);
   process.exit(1);
 }
 
@@ -22,44 +30,26 @@ if (!job) {
   process.exit(1);
 }
 
-const config = loadConfig();
-const db = getDb();
-const approve = verdict === "aprovar";
-const delta = approve ? 1 : -1;
-const cap = config.preferences.max_weight;
-
-// Chaves de preferência afetadas por este feedback
-const keys: string[] = [`company:${job.company_name.toLowerCase()}`, `source:${job.source}`];
-if (job.seniority) keys.push(`seniority:${job.seniority}`);
-const tracks = db.prepare("SELECT keywords FROM profile_tracks").all() as unknown as Array<{ keywords: string }>;
-const lexicon = tracks.flatMap((t) => JSON.parse(t.keywords) as string[]);
-const text = `${job.title} ${job.description ?? ""}`;
-for (const kw of termsPresent(text, lexicon).slice(0, 8)) {
-  keys.push(`kw:${kw.toLowerCase()}`);
+const rejeitar = verdict === "rejeitar";
+const reasonClass = rejeitar ? parseReasonClass(arg3) : null;
+if (rejeitar && !reasonClass) {
+  // Recusa em vez de assumir. Classe ausente não aprende — mas errar em silêncio
+  // na CLI esconderia do operador que ele deixou de ensinar algo que queria.
+  console.error(`classe de motivo inválida ou ausente: "${arg3 ?? ""}"\n\n${CLASSES}`);
+  process.exit(1);
 }
 
-transaction(() => {
-  const upsert = db.prepare(
-    `INSERT INTO preference_weights (key, weight, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       weight = MAX(${-cap}, MIN(${cap}, preference_weights.weight + excluded.weight)),
-       updated_at = excluded.updated_at`
-  );
-  for (const key of keys) upsert.run(key, delta, nowIso());
-
-  db.prepare(
-    "INSERT INTO events (id, entity, entity_id, type, payload, created_at) VALUES (?, 'job', ?, ?, ?, ?)"
-  ).run(
-    ulid(),
-    jobId,
-    approve ? "feedback_approve" : "feedback_reject",
-    JSON.stringify({ reason: reason ?? null, keys }),
-    nowIso()
-  );
-
-  if (!approve) setJobStatus(jobId, "rejected");
+const { decision, keys } = applyFeedback({
+  job,
+  verdict: verdict as "aprovar" | "rejeitar",
+  reasonClass,
+  reason: (rejeitar ? arg4 : arg3) ?? null,
+  via: "cli",
 });
 
-console.log(`${approve ? "aprovada" : "rejeitada"}: ${job.title} @ ${job.company_name}`);
-console.log(`pesos ajustados (${delta > 0 ? "+" : ""}${delta}): ${keys.join(", ")}`);
-if (reason) console.log(`motivo: ${reason}`);
+console.log(`${rejeitar ? "rejeitada" : "aprovada"}: ${job.title} @ ${job.company_name}`);
+console.log(
+  decision.learn
+    ? `pesos ajustados (${decision.delta > 0 ? "+" : ""}${decision.delta}): ${keys.join(", ")}`
+    : `SEM ajuste de peso — ${decision.why}`
+);

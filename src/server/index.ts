@@ -25,7 +25,8 @@ import { setJobStatus, getJob } from "../db/repo/jobs.js";
 import { getApplicationByJob, createApplication, setApplicationStatus } from "../db/repo/applications.js";
 import { bumpCompanyStat } from "../db/repo/companies.js";
 import { ulid } from "ulid";
-import { termsPresent } from "../core/keywords.js";
+import { parseReasonClass } from "../core/feedback.js";
+import { applyFeedback, hasLearnedFrom, preferenceKeysFor, bumpPreferenceWeights } from "../db/repo/feedback.js";
 import type { ApplicationStatus } from "../core/types.js";
 import { isAuthorizedUpgrade, newSessionToken } from "./ws-auth.js";
 
@@ -117,41 +118,25 @@ function apiCompanies() {
     .all();
 }
 
-function adjustPreferenceWeights(job: NonNullable<ReturnType<typeof getJob>>, delta: number): string[] {
-  const db = getDb();
-  const config = loadConfig();
-  const cap = config.preferences.max_weight;
-  const keys: string[] = [`company:${job.company_name.toLowerCase()}`, `source:${job.source}`];
-  if (job.seniority) keys.push(`seniority:${job.seniority}`);
-  const tracks = db.prepare("SELECT keywords FROM profile_tracks").all() as unknown as Array<{ keywords: string }>;
-  const lexicon = tracks.flatMap((t) => JSON.parse(t.keywords) as string[]);
-  for (const kw of termsPresent(`${job.title} ${job.description ?? ""}`, lexicon).slice(0, 8)) {
-    keys.push(`kw:${kw.toLowerCase()}`);
-  }
-  const upsert = db.prepare(
-    `INSERT INTO preference_weights (key, weight, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       weight = MAX(${-cap}, MIN(${cap}, preference_weights.weight + excluded.weight)),
-       updated_at = excluded.updated_at`
-  );
-  for (const key of keys) upsert.run(key, delta, nowIso());
-  return keys;
-}
-
 function logJobEvent(jobId: string, type: string, payload: Record<string, unknown>): void {
   getDb()
     .prepare("INSERT INTO events (id, entity, entity_id, type, payload, created_at) VALUES (?, 'job', ?, ?, ?, ?)")
     .run(ulid(), jobId, type, JSON.stringify(payload), nowIso());
 }
 
-function doFeedback(jobId: string, verdict: "aprovar" | "rejeitar", reason?: string) {
+function doFeedback(jobId: string, verdict: "aprovar" | "rejeitar", reason?: string, reasonClass?: string) {
   const job = getJob(jobId);
   if (!job) throw new Error("vaga não encontrada");
-  const approve = verdict === "aprovar";
-  const keys = adjustPreferenceWeights(job, approve ? 1 : -1);
-  logJobEvent(jobId, approve ? "feedback_approve" : "feedback_reject", { reason: reason ?? null, via: "ui" });
-  if (!approve) setJobStatus(jobId, "rejected");
-  return { ok: true, keys };
+  const { decision, keys } = applyFeedback({
+    job,
+    verdict,
+    reasonClass: parseReasonClass(reasonClass),
+    reason: reason ?? null,
+    via: "ui",
+  });
+  // `learned` volta para a UI de propósito: o operador tem que saber quando o
+  // sistema NÃO aprendeu, senão "rejeitei e não mudou nada" vira mistério.
+  return { ok: true, keys, learned: decision.learn, why: decision.why };
 }
 
 function apiRejected(limit: number) {
@@ -172,11 +157,14 @@ function doRevert(jobId: string) {
   const job = getJob(jobId);
   if (!job) throw new Error("vaga não encontrada");
   if (job.status !== "rejected") throw new Error("vaga não está rejeitada");
-  // desfaz o aprendizado negativo da rejeição e devolve à fila
-  adjustPreferenceWeights(job, 1);
-  logJobEvent(jobId, "feedback_revert", { via: "ui" });
+  // Só desfaz o aprendizado se a rejeição TIVER aprendido. Uma rejeição por
+  // elegibilidade não move peso nenhum; devolvê-la à fila com +1 criaria
+  // preferência positiva do nada — o BUG-007 com o sinal trocado.
+  const aprendeu = hasLearnedFrom(jobId, "rejeitar");
+  if (aprendeu) bumpPreferenceWeights(preferenceKeysFor(job), 1);
+  logJobEvent(jobId, "feedback_revert", { via: "ui", desfez_aprendizado: aprendeu });
   setJobStatus(jobId, "queued");
-  return { ok: true };
+  return { ok: true, desfezAprendizado: aprendeu };
 }
 
 /* ── pipeline Aprovar → gerar (claude -p headless) → submeter (modo do config) ──
@@ -474,8 +462,8 @@ const server = createServer(async (req, res) => {
         json(res, 404, { error: "sem snapshot" });
       }
     } else if (req.method === "POST" && url.pathname === "/api/feedback") {
-      const { jobId, verdict, reason } = await readBody(req);
-      json(res, 200, doFeedback(jobId, verdict, reason));
+      const { jobId, verdict, reason, reasonClass } = await readBody(req);
+      json(res, 200, doFeedback(jobId, verdict, reason, reasonClass));
     } else if (req.method === "POST" && url.pathname === "/api/status") {
       const { jobId, status, note } = await readBody(req);
       json(res, 200, doStatus(jobId, status, note));

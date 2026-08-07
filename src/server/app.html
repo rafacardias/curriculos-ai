@@ -405,18 +405,39 @@ async function loadQueue() {
         toast("aprovada — gerando o currículo sob medida e preparando a aplicação…");
         loadPipeline(); loadSummary();
       } else if (b.dataset.act === "rejeitar") {
-        const sure = confirm("Rejeitar esta vaga?\n\nEla sai da fila e ensina o score a evitar vagas parecidas.\n(Dá para reverter depois na seção \"rejeitadas\", no fim da fila.)");
-        if (!sure) return;
-        const reason = prompt("motivo (opcional — ensina o score):") || undefined;
-        await post("/api/feedback", { jobId: id, verdict: "rejeitar", reason });
+        const m = askRejectReason("esta vaga");
+        if (!m) return;
+        const r = await post("/api/feedback", { jobId: id, verdict: "rejeitar", ...m });
         card.remove();
-        toast("rejeitada — recuperável em \"rejeitadas\"");
+        toast(r.learned ? "rejeitada — o score aprendeu" : `rejeitada — sem aprendizado (${r.why})`);
         loadSummary(); loadRejected();
       } else if (b.dataset.act === "snapshot") {
         window.open(`/api/snapshot/${id}`, "_blank");
       }
     })
   );
+}
+
+/* ── motivo de rejeição: classe fechada, texto livre é só nota ──────────────
+ * BUG-007: rejeitar por modalidade/tecnologia/anos ensinava o score a evitar o
+ * TEMA da vaga. Cinco rejeições "híbridas em outras cidades" derrubaram
+ * "agentes de ia", "vector database", "openai" e a fonte "linkedin" — que é de
+ * onde vem a maior parte da fila. A classe é declarada, nunca adivinhada do texto.
+ */
+function askRejectReason(alvo) {
+  const c = prompt(
+    `Por que rejeitar ${alvo}?\n\n` +
+      `1 = não posso — modalidade, local, tecnologia, anos, idioma\n` +
+      `2 = não quero esse tipo de trabalho\n` +
+      `3 = outro motivo\n\n` +
+      `Só o 2 move o score. 1 e 3 registram e não ensinam nada.`,
+    "1"
+  );
+  if (c === null) return null;
+  const reasonClass = { 1: "elegibilidade", 2: "tema", 3: "outro" }[c.trim()];
+  if (!reasonClass) { toast("classe inválida — nada foi feito"); return null; }
+  const reason = prompt("detalhe (opcional — vira nota, não vira peso):") || undefined;
+  return { reasonClass, reason };
 }
 
 /* ── lote (seleção múltipla) ───────────── */
@@ -442,13 +463,13 @@ $("#batchApprove").addEventListener("click", async () => {
 $("#batchReject").addEventListener("click", async () => {
   const cards = pickedCards();
   if (!cards.length) return;
-  if (!confirm(`Rejeitar ${cards.length} vaga(s)?\n\nElas saem da fila e ensinam o score (reversível em "rejeitadas").`)) return;
-  const reason = prompt("motivo comum (opcional — ensina o score):") || undefined;
+  const m = askRejectReason(`${cards.length} vaga(s)`);
+  if (!m) return;
   for (const card of cards) {
-    await post("/api/feedback", { jobId: card.dataset.id, verdict: "rejeitar", reason });
+    await post("/api/feedback", { jobId: card.dataset.id, verdict: "rejeitar", ...m });
     card.remove();
   }
-  toast(`${cards.length} rejeitadas`);
+  toast(`${cards.length} rejeitadas${m.reasonClass === "tema" ? " — o score aprendeu" : " — sem aprendizado"}`);
   updateBatchBar(); loadSummary(); loadRejected();
 });
 
