@@ -7,6 +7,7 @@
  *   npx tsx src/cli/master.ts rejected <trilha> # regera o relatório de descarte
  *   npx tsx src/cli/master.ts gaps <trilha>     # lacunas REAIS por vaga da fila
  *   npx tsx src/cli/master.ts review <trilha>   # sinônimos ordenados por risco
+ *   npx tsx src/cli/master.ts lexicon all       # REQ-003: léxico sem lastro
  *
  * Mesmo sanduíche do `kit.ts`: o determinístico é script, o julgamento é do
  * Claude, e a palavra final é do operador — um mestre com `reviewed_at` nulo é
@@ -32,8 +33,8 @@ import {
 } from "../core/master-resume.js";
 
 const [cmd, track, jobId] = process.argv.slice(2);
-if (!cmd || !track || !["build", "check", "ceiling", "rejected", "gaps", "review"].includes(cmd)) {
-  console.error("uso: master build|check|rejected|gaps|review <trilha> · master ceiling <trilha> <job_id>");
+if (!cmd || !track || !["build", "check", "ceiling", "rejected", "gaps", "review", "lexicon"].includes(cmd)) {
+  console.error("uso: master build|check|rejected|gaps|review|lexicon <trilha|all> · master ceiling <trilha> <job_id>");
   process.exit(1);
 }
 
@@ -46,7 +47,77 @@ function factsOfTrack(t: string) {
     .flatMap((e) => e.facts.map((f) => ({ exp: e, fact: f })));
 }
 
-if (cmd === "build") {
+if (cmd === "lexicon") {
+  // REQ-003 — termo no léxico de trilha sem fato que o comprove é defeito de
+  // RANKING, não de redação: o léxico decide o `keyword_overlap`, que é 65% do
+  // score, ou seja, decide QUAIS VAGAS entram na fila. Um termo sem lastro faz a
+  // fila premiar vaga que pede competência que o perfil não evidencia.
+  const trilhas = (
+    track === "all"
+      ? (getDb().prepare("SELECT id, keywords FROM profile_tracks ORDER BY id").all() as Array<{ id: string; keywords: string }>)
+      : (getDb().prepare("SELECT id, keywords FROM profile_tracks WHERE id = ?").all(track) as Array<{ id: string; keywords: string }>)
+  );
+  if (!trilhas.length) {
+    console.error(`trilha '${track}' não existe. Use um id de trilha ou 'all'.`);
+    process.exit(1);
+  }
+
+  let totalSemLastro = 0;
+  let semLastroReal = 0;
+  let total = 0;
+  for (const tr of trilhas) {
+    const termos: string[] = JSON.parse(tr.keywords);
+    // Lastro = o termo aparece nos fatos DA PRÓPRIA TRILHA. Um termo sustentado
+    // só por experiência de outra trilha não justifica ranquear vaga desta.
+    const corpus = factsOfTrack(tr.id)
+      .map(({ fact }) => `${fact.text} ${fact.skills.join(" ")}`)
+      .join(" \n ");
+    const comLastro = new Set(termsPresent(corpus, termos));
+    const sem = termos.filter((x) => !comLastro.has(x));
+    total += termos.length;
+    totalSemLastro += sem.length;
+
+    console.log(`\n${tr.id} — ${termos.length} termos · ${comLastro.size} com lastro · ${sem.length} SEM`);
+    if (sem.length) {
+      // Onde ele existe no perfil, ainda que fora da trilha? Muda a decisão:
+      // retag da experiência é diferente de remover o termo.
+      const corpusTudo = profile.experiences
+        .map((e) => `${e.role} ${e.facts.map((f) => `${f.text} ${f.skills.join(" ")}`).join(" ")}`)
+        .join(" \n ");
+      const noutraTrilha = new Set(termsPresent(corpusTudo, sem));
+      // `termsPresent` é match exato de token: "teste de regressão" não casa
+      // "testes de regressão". Já errei duas vezes nesta base confundindo ausência
+      // com limitação do matcher, então a distinção fica explícita na saída.
+      const palavrasTrilha = new Set(normalizeForCompare(corpus).split(" ").filter((w) => w.length >= 4));
+      let vizinhos = 0;
+      for (const x of sem) {
+        const partes = normalizeForCompare(x).split(" ").filter((w) => w.length >= 4);
+        const temVizinho =
+          partes.length > 0 &&
+          partes.every((pt) => [...palavrasTrilha].some((w) => w.startsWith(pt.slice(0, 5)) || pt.startsWith(w.slice(0, 5))));
+        if (temVizinho) vizinhos++;
+        const onde = noutraTrilha.has(x)
+          ? profile.experiences
+              .filter((e) => termsPresent(`${e.role} ${e.facts.map((f) => f.text + " " + f.skills.join(" ")).join(" ")}`, [x]).length)
+              .map((e) => e.trackTags.join("/"))
+          : [];
+        const nota = temVizinho
+          ? "variante morfológica existe na trilha"
+          : onde.length
+            ? `existe, mas em: ${[...new Set(onde)].join(", ")}`
+            : "SEM LASTRO NENHUM";
+        console.log(`   ${temVizinho ? "~" : "✗"} ${x.padEnd(34)} ${nota}`);
+      }
+      console.log(`     └─ dos ${sem.length}: ${vizinhos} são variante morfológica · ${sem.length - vizinhos} sem lastro real`);
+      semLastroReal += sem.length - vizinhos;
+    }
+  }
+  console.log(`\n${totalSemLastro} de ${total} termos sem match literal (${Math.round((100 * totalSemLastro) / total)}%).`);
+  console.log(`Destes, ${totalSemLastro - semLastroReal} são variante morfológica de algo que a trilha TEM.`);
+  console.log(`SEM LASTRO REAL: ${semLastroReal} de ${total} (${Math.round((100 * semLastroReal) / total)}%) — estes empurram a fila`);
+  console.log("para vagas que pedem competência que o perfil não evidencia (REQ-003).");
+  process.exit(semLastroReal ? 2 : 0);
+} else if (cmd === "build") {
   const db = getDb();
   const row = db.prepare("SELECT id, name, keywords FROM profile_tracks WHERE id = ?").get(track) as
     | { id: string; name: string; keywords: string }

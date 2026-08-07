@@ -19,6 +19,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | [BUG-003](#bug-003) | Média | **Corrigido** | `src/core/pipeline.ts:41-45` |
 | [BUG-004](#bug-004) | Baixa | Sem cobertura | `src/submit/linkedin-easyapply.ts` |
 | [BUG-008](#bug-008) | **Alta** | **Corrigido** | `src/cli/kit.ts` (gates de conteúdo) |
+| [REQ-003](#req-003) | **Alta** | Medido; correção é do operador | `profile/tracks.yaml` |
 | [REQ-002](#req-002) | — | **Pré-requisito** da Fase 2 | `src/core/keywords.ts` |
 | [REQ-001](#req-001) | — | Requisito aberto da Fase 2 | `src/core/master-resume.ts` |
 | [LIM-001](#lim-001) | — | **FECHADO** | `tests/e2e/kit-ats-gate.test.ts` |
@@ -365,6 +366,53 @@ truthcheck" não pode ser diluída, e a ordem importa: veracidade reprova primei
 
 **Congelado em:** `tests/unit/gates.test.ts` e `tests/e2e/truthcheck-exit2.test.ts`, incluindo o
 caso de precedência (currículo com citação falsa **e** placeholder sai 2, não 3).
+
+---
+
+## REQ-003 — termo no léxico de trilha sem fato que o comprove é defeito de RANKING
+
+**Não é problema de redação. É a fila apontando para as vagas erradas.**
+
+O léxico de `profile/tracks.yaml` alimenta `keyword_overlap` (`src/core/scoring.ts:42-51`), que
+pesa **0.65** — é o componente dominante do score. Ele decide **quais vagas entram na fila**, não
+o que o currículo escreve. Um termo sem lastro faz o sistema premiar vaga que pede competência que
+o perfil não evidencia, e o operador gasta tempo triando na direção errada. O currículo continua
+honesto (o truthcheck protege isso); a **seleção** é que está viesada.
+
+### Medido em 2026-08-06 — `npx tsx src/cli/master.ts lexicon all`
+
+| Trilha | Termos | Sem match literal | **Sem lastro real** | |
+|---|---:|---:|---:|---:|
+| `ai-builder` | 61 | 32 | **13** | 21% |
+| `product` | 37 | 25 | **22** | 59% |
+| `qa` | 31 | 26 | **24** | **77%** |
+| **total** | **129** | 83 | **59** | **46%** |
+
+A coluna do meio e a da direita são diferentes de propósito. `termsPresent` é match exato de
+token: `teste de regressão` não casa `testes de regressão`. Dos 83 sem match literal, **24 são
+variante morfológica** de algo que a trilha tem — limitação do matcher, não ausência. Os 59
+restantes não existem em nenhum fato da trilha, em nenhuma forma.
+
+**A trilha `qa` é a mais grave: 77% do vocabulário que ranqueia suas vagas não tem fato.** Termos
+como `quality assurance`, `regression testing`, `ISTQB`, `Cypress`, `SQL`, `test cases` não
+aparecem em nenhum dos 20 fatos etiquetados `qa`. A trilha `product` está em 59%.
+
+### Regra
+
+Todo termo de léxico precisa de pelo menos um fato da **própria trilha** que o sustente. Termo
+sustentado só por experiência de outra trilha não justifica ranquear vaga desta — e a saída do
+comando distingue os dois casos, porque a correção é diferente: *retag* da experiência, versus
+remover o termo, versus criar o fato que falta.
+
+### Correção é do operador, não do pipeline
+
+Três caminhos por termo, e a escolha é de quem sabe o que fez: **remover** do léxico (não é
+competência dele); **criar o fato** em `master-profile.yaml` (é competência, faltava registro); ou
+**re-etiquetar** a experiência que já o sustenta em outra trilha. Nenhum é automatizável sem
+adivinhar.
+
+Enquanto não for corrigido, `queue_threshold` e qualquer calibração de fila herdam esse viés — o
+que inclui a calibração da Onda 1, feita sobre o léxico atual.
 
 ---
 
