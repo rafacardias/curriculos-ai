@@ -52,6 +52,15 @@ LinkedIn (sessão real dele — nunca um browser/perfil separado).
 6. Avise o usuário onde encontrar o rascunho no LinkedIn (`linkedin.com/post-drafts` ou
    equivalente) para revisão e publicação final por ele.
 
+## Depois de publicar (por qualquer via)
+
+O arquivo em `profile/linkedin-posts/` é o histórico local do sistema — mesmo papel que
+`output/<job_slug>/` tem para os kits de vaga. **Não apague depois de copiar/publicar**,
+manual ou assistido: só atualize o `status` (`published`, `saved_as_draft_on_linkedin`,
+`scheduled`). Se o usuário publicou manualmente (copiou o texto e colou ele mesmo, sem passar
+pelo passo "Publicar" desta skill), atualize o frontmatter mesmo assim: `status: published`,
+`published_at: <data>`, `published_via: manual`.
+
 ## Fora de escopo desta skill
 
 Sem varredura de feed, sem múltiplos posts em sequência sem pedido explícito por post, sem
