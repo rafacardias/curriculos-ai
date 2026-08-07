@@ -19,6 +19,8 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | [BUG-003](#bug-003) | Média | **Corrigido** | `src/core/pipeline.ts:41-45` |
 | [BUG-004](#bug-004) | Baixa | Sem cobertura | `src/submit/linkedin-easyapply.ts` |
 | [BUG-008](#bug-008) | **Alta** | **Corrigido** | `src/cli/kit.ts` (gates de conteúdo) |
+| [BUG-009](#bug-009) | Média | **Corrigido** | `src/core/scoring.ts` (filtro de idioma) |
+| [REQ-004](#req-004) | **Alta** | Medido; veredito pontual | `src/core/master-resume.ts` |
 | [REQ-003](#req-003) | **Alta** | Medido; correção é do operador | `profile/tracks.yaml` |
 | [REQ-002](#req-002) | — | **Pré-requisito** da Fase 2 | `src/core/keywords.ts` |
 | [REQ-001](#req-001) | — | Requisito aberto da Fase 2 | `src/core/master-resume.ts` |
@@ -369,6 +371,73 @@ caso de precedência (currículo com citação falsa **e** placeholder sai 2, n�
 
 ---
 
+## BUG-009 — CORRIGIDO · exigência de idioma nativo não era filtro duro
+
+A vaga `AI No-Code/Low-Code Developer` da Freedom24 entrou na fila com score 52,
+recebeu kit completo — currículo, carta, respostas, outreach, PDF — e só então
+alguém leu, na lista de requisitos: **`Russian: native`**. Requisito eliminatório,
+escrito no JD desde o começo, custando uma geração de ~$3 e uma carta redigida à toa.
+
+Medido no acervo: **2 vagas em 641**, ambas na fila. Volume baixo, custo por
+ocorrência alto — é exatamente o perfil de defeito que compensa filtrar.
+
+**Corrigido:** `filters.blocking_native_languages` em `config/config.yaml`, dado
+versionado e editável (quem sabe que idiomas o operador fala é ele). O filtro casa
+as duas ordens em que o JD escreve — `Russian: native` e `native Russian speaker` —
+e entra na cascata de `hardFilterReason`, junto de senioridade e anos exigidos.
+Português, inglês e espanhol ficam fora da lista de propósito.
+
+A vaga foi retirada do funil (`applications.status = 'withdrawn'`) e o kit ficou em
+disco como evidência.
+
+---
+
+## REQ-004 — a compressão fato → `skills[]` é um ponto de perda não auditado
+
+**Veredito: PONTUAL, não sistêmico.** Um caso real em 261 sinônimos.
+
+### O que se assumia
+
+Toda a Fase 2 tratava `from: <tag>` e `from: <trecho do texto>` como autorizações
+equivalentes. Não são. O caso que revelou isso: `serverless` ← `arquitetura-sem-servidor`,
+tag que veio de "arquitetura sem servidor **de aplicação**" — a compressão descartou o
+qualificador antes de qualquer sinônimo existir, e o sinônimo só herdou a perda.
+
+### Auditado — `npx tsx src/cli/master.ts tags <trilha>`
+
+158 tags em 33 fatos da trilha `ai-builder`:
+
+| Categoria | n | O que é |
+|---|---:|---|
+| `literal` | 43 | aparece no texto e nada a qualifica logo depois |
+| `truncada` | 11 | aparece, mas o texto **continua** com um qualificador que ela descartou |
+| `interpretada` | **104** | **não aparece no texto** — rótulo atribuído, não extraído |
+
+**O número que reformula o problema são os 104 (66%).** A tag não é compressão do
+fato para dois terços dos casos: é uma **reivindicação independente**, feita por quem
+etiquetou. `kanban` em "Priorizou backlog dinâmico" é inferência sobre método, não
+resumo de texto. Então `from` apontando para tag é autorização de segunda ordem — ela
+mesma sem lastro textual.
+
+**O detector de `truncada` tem precisão de 1 em 11**, como a métrica de risco tem 1 em
+7. Das 11, dez são falsos positivos (`ia-generativa` "perdeu" *para atendimento*,
+`monorepo` "perdeu" *com npm*): qualificador de escopo, não de sentido. **Só o
+`serverless` muda o que a frase afirma.** Os detectores servem para gerar candidatos
+baratos, não veredito.
+
+### Regra
+
+`from` que aponta para `fact.text` é autorização forte — o texto inteiro está lá para
+conferir. `from` que aponta para `skills[]` é fraca, e a força cai na ordem
+`literal > truncada > interpretada`. O `master review` ordena por esse eixo.
+
+**Não recalibrar a métrica de risco agora.** Ela detecta troca de idioma e isso é
+sabido; o eixo `skills[] vs fact.text` já entrou como ordenação. Qualquer refinamento
+espera, porque o REQ-004 podia ter redefinido o que conta como origem confiável — e
+o veredito de pontual significa que não redefiniu.
+
+---
+
 ## REQ-003 — termo no léxico de trilha sem fato que o comprove é defeito de RANKING
 
 **Não é problema de redação. É a fila apontando para as vagas erradas.**
@@ -392,6 +461,11 @@ A coluna do meio e a da direita são diferentes de propósito. `termsPresent` é
 token: `teste de regressão` não casa `testes de regressão`. Dos 83 sem match literal, **24 são
 variante morfológica** de algo que a trilha tem — limitação do matcher, não ausência. Os 59
 restantes não existem em nenhum fato da trilha, em nenhuma forma.
+
+> **Suspeita registrada (operador, 2026-08-07):** 77% em `qa` com 20 fatos etiquetados
+> não é lacuna de redação — é indício de que **a trilha não existe no perfil**. A
+> resposta certa para `qa` pode ser remover a trilha, não escrever 24 fatos. Tratado
+> separado da revisão do mestre.
 
 **A trilha `qa` é a mais grave: 77% do vocabulário que ranqueia suas vagas não tem fato.** Termos
 como `quality assurance`, `regression testing`, `ISTQB`, `Cypress`, `SQL`, `test cases` não

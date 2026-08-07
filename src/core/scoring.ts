@@ -172,6 +172,8 @@ export function hardFilterReason(config: AppConfig, job: JobRow): string | null 
   }
   const badKeyword = titleKeywordHit(job.title, config.filters.exclude_title_keywords);
   if (badKeyword) return `filtrado: título contém "${badKeyword}"`;
+  const idioma = blockingNativeLanguage(config, job);
+  if (idioma) return `filtrado: exige ${idioma} nativo`;
   if (config.filters.max_years_required != null) {
     const years = detectRequiredYears(`${job.title}\n${job.description ?? ""}`);
     if (years != null && years > config.filters.max_years_required) {
@@ -287,6 +289,29 @@ function parseDetail(raw: string | null): Record<string, number> | null {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * O JD exige nível NATIVO num idioma que o operador não fala?
+ *
+ * É requisito eliminatório e o sistema não deve gastar uma geração nele — medido:
+ * a vaga da Freedom24 recebeu kit completo, carta e ~$3 de geração antes de alguém
+ * ler "Russian: native" na lista de requisitos.
+ *
+ * Casa as duas ordens porque JD escreve das duas formas: "Russian: native" e
+ * "native Russian speaker".
+ */
+export function blockingNativeLanguage(config: AppConfig, job: JobRow): string | null {
+  const idiomas = config.filters.blocking_native_languages;
+  if (!idiomas.length || !job.description) return null;
+  const texto = job.description.toLowerCase();
+  const nivel = "(?:native|nativo|nativa|fluent|fluente|c2|proficien\\w*)";
+  for (const lang of idiomas) {
+    const l = lang.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`${l}\\s*[:\\-—(]?\\s*${nivel}`, "i").test(texto)) return lang;
+    if (new RegExp(`${nivel}\\s+${l}`, "i").test(texto)) return lang;
+  }
+  return null;
 }
 
 /** Primeira keyword excluída presente no título (palavra inteira, normalizada), ou null. */

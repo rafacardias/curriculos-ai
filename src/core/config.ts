@@ -26,6 +26,9 @@ const ConfigSchema = z.object({
       // Palavras/termos que, presentes no título (comparação normalizada, palavra inteira), filtram a vaga.
       // Ex.: ["PL", "II", "III", "sênior"] — cobre convenções de nível que a heurística não conhece.
       exclude_title_keywords: z.array(z.string()).default([]),
+      // Idiomas que, exigidos em nível NATIVO pelo JD, eliminam a candidatura.
+      // Dado versionado, não regex embutido: quem sabe que idiomas fala é o operador.
+      blocking_native_languages: z.array(z.string()).default([]),
     })
     .default({}),
   scoring: z

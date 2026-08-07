@@ -86,6 +86,39 @@ filters:
   # Palavras que, no título, filtram a vaga (palavra inteira, sem case/acento).
   # PL, II e III já são detectados como senioridade; use para termos extras (ex.: specialist, coordenador).
   exclude_title_keywords: []
+  # Exigência de idioma NATIVO que você não fala = requisito eliminatório, e o
+  # sistema não deve gastar uma geração nela. Medido em 2026-08-06: 2 vagas em 641,
+  # ambas na fila, uma delas já com kit gerado ($3 e uma carta escrita à toa).
+  # Português, inglês e espanhol ficam de fora da lista de propósito.
+  blocking_native_languages:
+    - russian
+    - russo
+    - mandarin
+    - mandarim
+    - chinese
+    - chinês
+    - german
+    - alemão
+    - french
+    - francês
+    - italian
+    - italiano
+    - japanese
+    - japonês
+    - dutch
+    - holandês
+    - polish
+    - polonês
+    - ukrainian
+    - ucraniano
+    - arabic
+    - árabe
+    - hebrew
+    - hebraico
+    - korean
+    - coreano
+    - turkish
+    - turco
 
 # Pesos do score (soma das contribuições, normalizada para 0-100)
 scoring:

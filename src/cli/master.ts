@@ -27,13 +27,14 @@ import {
   profileFactsHash,
   lostVocabulary,
   classifyDiscard,
+  auditTags,
   GENERICO,
   type Discard,
   MASTERS_DIR,
 } from "../core/master-resume.js";
 
 const [cmd, track, jobId] = process.argv.slice(2);
-if (!cmd || !track || !["build", "check", "ceiling", "rejected", "gaps", "review", "lexicon"].includes(cmd)) {
+if (!cmd || !track || !["build", "check", "ceiling", "rejected", "gaps", "review", "lexicon", "tags"].includes(cmd)) {
   console.error("uso: master build|check|rejected|gaps|review|lexicon <trilha|all> · master ceiling <trilha> <job_id>");
   process.exit(1);
 }
@@ -47,7 +48,31 @@ function factsOfTrack(t: string) {
     .flatMap((e) => e.facts.map((f) => ({ exp: e, fact: f })));
 }
 
-if (cmd === "lexicon") {
+if (cmd === "tags") {
+  // REQ-004 — auditoria da compressão fato → skills[].
+  const alvo = track === "all" ? profile.experiences : profile.experiences.filter((e) => e.trackTags.includes(track));
+  const todos = alvo.flatMap((e) => e.facts.flatMap((f) => auditTags(f.id, f.text, f.skills)));
+  const porTipo = (k: string) => todos.filter((x) => x.kind === k);
+
+  console.log(`${todos.length} tags em ${alvo.flatMap((e) => e.facts).length} fatos\n`);
+  console.log(`  literal      ${String(porTipo("literal").length).padStart(4)}  aparece no texto, sem qualificador depois`);
+  console.log(`  truncada     ${String(porTipo("truncada").length).padStart(4)}  ← POPULAÇÃO DE RISCO (REQ-004)`);
+  console.log(`  interpretada ${String(porTipo("interpretada").length).padStart(4)}  rótulo atribuído, não extraído do texto`);
+
+  if (porTipo("truncada").length) {
+    console.log("\nTRUNCADAS — a tag descartou um qualificador que estava no fato:");
+    for (const x of porTipo("truncada")) {
+      console.log(`  ${x.factId.padEnd(26)} ${x.tag.padEnd(30)} perdeu: "${x.perdeu}"`);
+    }
+  }
+  const interp = porTipo("interpretada");
+  if (interp.length) {
+    console.log(`\nINTERPRETADAS (${interp.length}) — sentido não vem do texto, vem de quem etiquetou:`);
+    for (const x of interp.slice(0, 25)) console.log(`  ${x.factId.padEnd(26)} ${x.tag}`);
+    if (interp.length > 25) console.log(`  … +${interp.length - 25}`);
+  }
+  process.exit(porTipo("truncada").length ? 2 : 0);
+} else if (cmd === "lexicon") {
   // REQ-003 — termo no léxico de trilha sem fato que o comprove é defeito de
   // RANKING, não de redação: o léxico decide o `keyword_overlap`, que é 65% do
   // score, ou seja, decide QUAIS VAGAS entram na fila. Um termo sem lastro faz a
@@ -253,6 +278,7 @@ if (cmd === "lexicon") {
   }
 } else if (cmd === "gaps" || cmd === "review") {
   const master = parseMaster(readFileSync(masterPath(track), "utf-8"));
+  const porIdRev = new Map(profile.experiences.flatMap((e) => e.facts.map((f) => [f.id, f] as const)));
   const corpusMestre =
     master.bullets.map((b) => b.text).join(" \n ") +
     " " +
@@ -331,12 +357,14 @@ if (cmd === "lexicon") {
           : "")
       ).split(" ")
     );
-    type Item = { fato: string; term: string; from: string; risco: number; tipo: string };
+    type Item = { fato: string; term: string; from: string; risco: number; tipo: string; origem: string };
     const itens: Item[] = [];
     for (const b of master.bullets) {
+      const fato = porIdRev.get(b.fact_id);
+      const auditoria = fato ? new Map(auditTags(b.fact_id, fato.text, fato.skills).map((a) => [normalizeForCompare(a.tag), a.kind])) : new Map();
       for (const s of b.synonyms) {
         const nt = normalizeForCompare(s.term), nf = normalizeForCompare(s.from);
-        if (nt === nf) continue; // os 77 mecânicos: from é a própria palavra
+        if (nt === nf) continue; // os mecânicos: from é a própria palavra
         const tokT = new Set(nt.split(" ")), tokF = nf.split(" ");
         const compartilha = tokF.some((w) => tokT.has(w));
         const morfo = !compartilha && tokF.some((f) => f.length >= 5 &&
@@ -345,10 +373,16 @@ if (cmd === "lexicon") {
         const tipo = compartilha ? "derivado" : morfo ? "morfológico" : "inferido";
         // Risco: inferido sem apoio do léxico da trilha é o topo.
         const risco = (tipo === "inferido" ? 2 : tipo === "morfológico" ? 1 : 0) + (noLexico ? 0 : 1);
-        itens.push({ fato: b.fact_id, term: s.term, from: s.from, risco, tipo });
+        // REQ-004: `from` em TAG é autorização mais fraca que `from` em fact.text —
+        // 66% das tags não aparecem no texto do fato, então são reivindicação nova,
+        // não compressão dele. É o eixo de ordenação que importa agora.
+        const kindTag = auditoria.get(nf);
+        const origem = kindTag ? `tag:${kindTag}` : "fact.text";
+        itens.push({ fato: b.fact_id, term: s.term, from: s.from, risco, tipo, origem });
       }
     }
-    itens.sort((a, b) => b.risco - a.risco || a.fato.localeCompare(b.fato));
+    const peso = (o: string) => (o === "tag:interpretada" ? 0 : o === "tag:truncada" ? 1 : o === "tag:literal" ? 2 : 3);
+    itens.sort((a, b) => peso(a.origem) - peso(b.origem) || b.risco - a.risco || a.fato.localeCompare(b.fato));
     const mecanicos = master.bullets.reduce(
       (n, b) => n + b.synonyms.filter((s) => normalizeForCompare(s.term) === normalizeForCompare(s.from)).length, 0);
     const bloco = (r: number) => itens.filter((i) => i.risco === r);
@@ -360,12 +394,17 @@ if (cmd === "lexicon") {
       `**${itens.length} sinônimos autorais**, ordenados por risco decrescente. O risco combina a`,
       "distância do `from` (inferido > morfológico > derivado) com o apoio do léxico da trilha:",
       "termo que você já declarou como seu em `tracks.yaml` é menos arriscado que um que eu inventei.", "",
-      ...[3, 2, 1, 0].flatMap((r) => {
-        const b = bloco(r);
-        if (!b.length) return [];
-        const rot = ["risco 0 — derivado e no léxico", "risco 1", "risco 2", "risco 3 — INFERIDO e fora do léxico da trilha"][r]!;
-        return [`## ${rot} (${b.length})`, "", "| fato | sinônimo | autorizado por | tipo |", "|---|---|---|---|",
-          ...b.map((i) => `| \`${i.fato}\` | **${i.term}** | \`${i.from}\` | ${i.tipo} |`), ""];
+      ...["tag:interpretada", "tag:truncada", "tag:literal", "fact.text"].flatMap((o) => {
+        const g = itens.filter((i) => i.origem === o);
+        if (!g.length) return [];
+        const rot: Record<string, string> = {
+          "tag:interpretada": "`from` em tag INTERPRETADA — a tag não existe no texto do fato (REQ-004)",
+          "tag:truncada": "`from` em tag TRUNCADA — a tag descartou um qualificador do fato",
+          "tag:literal": "`from` em tag literal — a tag aparece íntegra no texto",
+          "fact.text": "`from` no TEXTO do fato — autorização mais forte",
+        };
+        return [`## ${rot[o]} (${g.length})`, "", "| fato | sinônimo | autorizado por | inferência | risco |", "|---|---|---|---|---:|",
+          ...g.map((i) => `| \`${i.fato}\` | **${i.term}** | \`${i.from}\` | ${i.tipo} | ${i.risco} |`), ""];
       }),
     ].join("\n");
     const dest = join(PROJECT_ROOT, "profile", `review-${track}.md`);
