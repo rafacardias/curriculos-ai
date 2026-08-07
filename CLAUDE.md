@@ -27,6 +27,9 @@ Todo conteúdo gerado (currículo, cover letter, respostas) espelha o vocabulár
 | `/painel` | Dashboard + performance warehouse |
 | `/agendar on\|off\|status` | Busca automática diária (launchd) |
 | `/linkedin` | Otimização de perfil + outreach |
+| `/linkedin-post [tema\|publicar <arquivo>]` | Gera post (vibecoding/IA) e opcionalmente salva rascunho/agenda no LinkedIn (assistido, via `claude-in-chrome`) |
+| `/linkedin-comentar <url>` | Redige e pré-preenche comentário em post específico — nunca envia sozinho |
+| `/linkedin-auditoria` | Compara perfil LinkedIn ao vivo com o perfil mestre; aponta lacunas e alegações não lastreadas |
 | `/status` | Digest geral |
 
 ## Operação

@@ -10,14 +10,30 @@ export interface TruthcheckResult {
 
 const CITATION_RE = /\[exp:([^\]]+)\]/g;
 
+export interface CitationValidation {
+  citations: string[]; // fact_ids citados (sem duplicata)
+  invalid: string[];   // citações que não existem no perfil mestre
+}
+
+/**
+ * Só a parte do guardrail que independe de formato de currículo: toda citação
+ * `[exp:id]` usada em QUALQUER texto (currículo, post do LinkedIn, comentário)
+ * tem que apontar pra um fato real. Não exige que o texto cite nada — quem
+ * exige cobertura por bullet é o `truthcheck`, específico do currículo.
+ */
+export function validateCitations(text: string, profile: MasterProfile): CitationValidation {
+  const validIds = allFactIds(profile);
+  const citations = [...text.matchAll(CITATION_RE)].map((m) => m[1]!.trim());
+  const invalid = [...new Set(citations.filter((id) => !validIds.has(id)))];
+  return { citations: [...new Set(citations)], invalid };
+}
+
 /**
  * Guardrail mecânico de veracidade: todo bullet do currículo deve citar um
  * fato real do perfil mestre. Citação inexistente = build falha.
  */
 export function truthcheck(resumeMd: string, profile: MasterProfile): TruthcheckResult {
-  const validIds = allFactIds(profile);
-  const citations = [...resumeMd.matchAll(CITATION_RE)].map((m) => m[1]!.trim());
-  const invalid = [...new Set(citations.filter((id) => !validIds.has(id)))];
+  const { citations, invalid } = validateCitations(resumeMd, profile);
 
   // Bullets (linhas começando com "- ") na seção de experiências devem citar.
   //

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT } from "../helpers/sandbox.js";
-import { truthcheck, stripCitations } from "../../src/core/truthcheck.js";
+import { truthcheck, stripCitations, validateCitations } from "../../src/core/truthcheck.js";
 import { loadMasterProfile } from "../../src/core/profile.js";
 
 const profile = loadMasterProfile(); // perfil sintético da sandbox
@@ -114,6 +114,30 @@ describe("truthcheck", () => {
   it("bullets fora da seção de experiência não exigem citação", () => {
     const md = "## Skills\n- Playwright\n- SQL\n";
     assert.equal(truthcheck(md, profile).ok, true);
+  });
+});
+
+describe("validateCitations", () => {
+  // Usada fora do currículo (post/comentário do LinkedIn) — prosa livre, sem
+  // exigência de bullet citado, só que nenhuma citação usada seja inventada.
+
+  it("aprova texto de prosa cujas citações existem", () => {
+    const md = "Aprendi construindo [exp:exp-acme-qa.f1] e [exp:exp-acme-qa.f2] este ano.";
+    const r = validateCitations(md, profile);
+    assert.deepEqual(r.invalid, []);
+    assert.equal(r.citations.length, 2);
+  });
+
+  it("reprova citação a fato inexistente, sem exigir cobertura por linha", () => {
+    const md = "Texto solto sem nenhuma citação, e depois um fato falso [exp:fato-que-nao-existe].";
+    const r = validateCitations(md, profile);
+    assert.deepEqual(r.invalid, ["fato-que-nao-existe"]);
+  });
+
+  it("texto sem nenhuma citação é válido (prosa não exige cobertura)", () => {
+    const r = validateCitations("Só um comentário sem citação nenhuma.", profile);
+    assert.deepEqual(r.invalid, []);
+    assert.deepEqual(r.citations, []);
   });
 });
 

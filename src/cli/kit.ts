@@ -40,6 +40,7 @@ import {
 } from "../core/gates.js";
 import { extractPdfText } from "../render/pdf-text.js";
 import { blocksGeneration } from "../core/modality.js";
+import { buildPortablePrompt, parsePortableResponse } from "../core/portable-prompt.js";
 import { resolveLocality } from "../core/locality.js";
 import { decidePolicy } from "../core/policy.js";
 import { assignVariant } from "../core/experiments.js";
@@ -47,9 +48,14 @@ import { normalize } from "../core/dedup.js";
 import { wrapAtsHtml } from "../render/template.js";
 import { htmlToPdf } from "../render/pdf.js";
 
-const [cmd, jobId] = process.argv.slice(2);
-if (!cmd || !jobId || !["prepare", "finalize"].includes(cmd)) {
-  console.error("uso: kit prepare|finalize <job_id>");
+const [cmd, jobId, arg3] = process.argv.slice(2);
+if (!cmd || !jobId || !["prepare", "finalize", "prompt", "ingest"].includes(cmd)) {
+  console.error(`uso: kit <comando> <job_id>
+
+  prepare  <job_id>            monta o bundle JSON para a LLM redigir
+  finalize <job_id>            gates + coverage + PDFs + registros
+  prompt   <job_id>            escreve PROMPT.md autocontido para colar em QUALQUER LLM
+  ingest   <job_id> <arquivo>  quebra a resposta da LLM nos 4 arquivos do kit`);
   process.exit(1);
 }
 
@@ -125,6 +131,53 @@ Para ver as pistas do próprio anúncio:
   };
   writeFileSync(join(kitDir, "bundle.json"), JSON.stringify(bundle, null, 2), "utf-8");
   console.log(JSON.stringify(bundle, null, 2));
+} else if (cmd === "prompt") {
+  // Caminho portátil: o mesmo bundle, embrulhado num prompt autocontido para
+  // rodar em qualquer LLM. O `finalize` valida igual — ver src/core/portable-prompt.ts.
+  if (!existsSync(join(kitDir, "bundle.json"))) {
+    console.error(`bundle.json não existe em ${kitDir} — rode 'kit prepare ${jobId}' antes.`);
+    process.exit(1);
+  }
+  const texto = buildPortablePrompt(kitDir);
+  const destino = join(kitDir, "PROMPT.md");
+  writeFileSync(destino, texto, "utf-8");
+  console.log(`prompt escrito: ${destino.replace(PROJECT_ROOT + "/", "")}`);
+  console.log(`  ${texto.length.toLocaleString("pt-BR")} caracteres  ≈ ${Math.round(texto.length / 4).toLocaleString("pt-BR")} tokens`);
+  console.log(`
+1. copie:   pbcopy < "${destino}"
+2. cole numa LLM à sua escolha e mande rodar
+3. salve a resposta inteira num arquivo, ex.: ${kitDir.replace(PROJECT_ROOT + "/", "")}/resposta.txt
+4. npx tsx src/cli/kit.ts ingest ${jobId} <arquivo>
+5. npx tsx src/cli/kit.ts finalize ${jobId}
+
+O finalize roda os MESMOS gates — citação inexistente reprova igual (exit 2).`);
+} else if (cmd === "ingest") {
+  if (!arg3) {
+    console.error(`uso: kit ingest ${jobId} <arquivo com a resposta da LLM>`);
+    process.exit(1);
+  }
+  if (!existsSync(arg3)) {
+    console.error(`arquivo não encontrado: ${arg3}`);
+    process.exit(1);
+  }
+  const esperados = ["resume.md", "cover-letter.md", "answers.md", "outreach.md"];
+  const { files, missing } = parsePortableResponse(readFileSync(arg3, "utf-8"), esperados);
+  if (missing.length) {
+    // Recusa em vez de gravar parcialmente: 3 de 4 arquivos deixaria o erro
+    // aparecer lá no finalize, longe da causa.
+    console.error(`resposta incompleta — faltam: ${missing.join(", ")}`);
+    console.error(`achei: ${Object.keys(files).join(", ") || "nenhum bloco"}`);
+    console.error(`\nO delimitador tem que estar sozinho na linha, exatamente assim:`);
+    console.error(`  ===== FILE: resume.md =====`);
+    process.exit(1);
+  }
+  mkdirSync(kitDir, { recursive: true });
+  for (const [nome, corpo] of Object.entries(files)) {
+    if (!esperados.includes(nome)) continue; // ignora bloco extra que o modelo inventar
+    writeFileSync(join(kitDir, nome), corpo, "utf-8");
+    console.log(`  escrito: ${nome}  (${corpo.length.toLocaleString("pt-BR")} chars)`);
+  }
+  console.log(`\nagora: npx tsx src/cli/kit.ts finalize ${jobId}`);
 } else {
   // finalize
   const resumePath = join(kitDir, "resume.md");
