@@ -93,7 +93,10 @@
   .btn.primary:hover { filter: brightness(1.1); color: var(--ink); }
   .btn.ghost { border-color: transparent; color: var(--bone-dim); padding: 12px 10px; }
   .btn.ghost:hover { color: var(--bone); }
+  .searchbar.urlbar { margin-top: -6px; }
+  .searchbar.urlbar input { font-size: 12px; padding: 10px 12px; }
   .searchnote { font-family: var(--mono); font-size: 11px; color: var(--bone-dim); margin: -20px 0 24px; min-height: 14px; }
+  .searchnote b { color: var(--bone); }
   .searchnote.run::before { content: "▮"; color: var(--signal); animation: blink .8s infinite; margin-right: 6px; }
   @keyframes blink { 50% { opacity: .2; } }
 
@@ -254,6 +257,14 @@
     <button class="btn primary" id="go">Buscar</button>
   </div>
   <div class="searchnote" id="searchnote"></div>
+
+  <div class="searchbar urlbar">
+    <input id="jurl" placeholder="cole a URL de uma vaga — fallback universal (LinkedIn, Gupy, site da empresa)" />
+    <input id="jtitle" placeholder="cargo (opcional)" style="max-width:200px" />
+    <input id="jcompany" placeholder="empresa (opcional)" style="max-width:170px" />
+    <button class="btn" id="goUrl">Adicionar</button>
+  </div>
+  <div class="searchnote" id="urlnote"></div>
 
   <section id="fila" class="on">
     <div id="pipeline"></div>
@@ -615,11 +626,24 @@ async function loadBoard() {
   $("#board").querySelectorAll("a[data-drop]").forEach((a) =>
     a.addEventListener("click", async (e) => {
       e.preventDefault();
-      const note = prompt(`Descartar o kit de "${a.dataset.title}"?\n\nEle sai do funil e vai para "descartadas", de onde dá para restaurar.\nOs arquivos em output/ continuam onde estão.\n\nmotivo (opcional):`, "");
-      if (note === null) return;
-      await post("/api/status", { jobId: a.dataset.drop, status: "withdrawn", note: note || "descartado na UI" });
-      toast("descartado — recuperável em \"descartadas\"");
-      loadBoard(); loadSummary();
+      // Dois motivos, e a diferença importa: "fechada" é fato sobre o mundo e
+      // marca a vaga como expirada para nenhuma busca futura trazê-la de volta;
+      // "descartei" é decisão dele e a vaga segue existindo.
+      const c = prompt(
+        `Tirar "${a.dataset.title}" do funil?\n\n` +
+          `1 = a vaga não existe mais (anúncio saiu do ar)\n` +
+          `2 = eu não vou aplicar / gerei por engano\n\n` +
+          `Nos dois casos o kit continua em output/ e o card volta pelo "restaurar".\n` +
+          `Só o 1 marca a vaga como expirada, para busca nenhuma trazê-la de volta.`,
+        "1"
+      );
+      if (c === null) return;
+      const kind = { 1: "closed", 2: "mine" }[c.trim()];
+      if (!kind) { toast("opção inválida — nada foi feito"); return; }
+      const note = prompt("detalhe (opcional):") || undefined;
+      const r = await post("/api/discard", { jobId: a.dataset.drop, kind, note });
+      toast(r.expired ? "vaga expirada e retirada do funil" : "descartado — recuperável em \"descartadas\"");
+      loadBoard(); loadSummary(); loadQueue();
     })
   );
   $("#dropped").querySelectorAll("a[data-restore]").forEach((a) =>
@@ -645,6 +669,34 @@ $("#go").addEventListener("click", async () => {
   else toast(r.error || "erro");
 });
 $("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#go").click(); });
+
+/* ── vaga por URL: o fallback universal, agora sem terminal ────────────────
+ * A extração de página genérica é ruim por natureza — o título costuma vir da
+ * tag <title> ("Página da Vaga | ...") e a empresa vem "?". Por isso os avisos
+ * aparecem na tela em vez de a vaga entrar torta em silêncio: um kit endereçado
+ * a "?" custa a mesma mediana de $1,96 de um kit certo. */
+$("#goUrl").addEventListener("click", async () => {
+  const url = $("#jurl").value.trim();
+  const note = $("#urlnote");
+  if (!url) { note.textContent = "cole uma URL primeiro"; return; }
+  note.classList.add("run"); note.textContent = "baixando e pontuando…";
+  const r = await post("/api/job-url", {
+    url,
+    title: $("#jtitle").value.trim() || undefined,
+    company: $("#jcompany").value.trim() || undefined,
+  });
+  note.classList.remove("run");
+  if (!r.ok) { note.textContent = `erro: ${r.error}`; return; }
+  const avisos = (r.extractionWarnings || []).map((a) => `⚠ ${a}`).join("  ·  ");
+  note.innerHTML =
+    `<b>${esc(r.job.title)}</b> @ ${esc(r.job.company_name)} — score ${Math.round(r.scored?.score ?? 0)}` +
+    ` · ${esc(r.scored?.policyAction || "")}` +
+    (r.filtered ? ` · <span style="color:var(--signal)">${esc(r.filtered)}</span>` : "") +
+    (avisos ? `<br>${esc(avisos)} — reenvie a mesma URL preenchendo cargo e empresa para corrigir` : "");
+  $("#jurl").value = ""; $("#jtitle").value = ""; $("#jcompany").value = "";
+  loadQueue(); loadSummary();
+});
+$("#jurl").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#goUrl").click(); });
 
 function esc(s) { return String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c])); }
 

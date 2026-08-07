@@ -21,6 +21,7 @@ import { runSearch } from "../core/pipeline.js";
 import { resolveAdapters } from "../adapters/index.js";
 import { scoreNewJobs, decayPreferenceWeights, hardFilterReason } from "../core/scoring.js";
 import { funnelCounts } from "../core/funnel.js";
+import { addJobByUrl } from "../core/manual-job.js";
 import { blocksGeneration, resolveModality, parseModalityState } from "../core/modality.js";
 import { resolveLocality } from "../core/locality.js";
 import { confirmModality } from "../db/repo/jobs.js";
@@ -352,6 +353,31 @@ function doApply(jobId: string) {
   return { ok: true };
 }
 
+/**
+ * Tira a vaga do funil. Dois motivos, e a diferença não é cosmética.
+ *
+ *  - `closed`: **o anúncio não existe mais.** É fato sobre o mundo. Além de sair
+ *    do funil, a vaga vira `expired` em `jobs`, o que a remove da repontuação e
+ *    impede que uma busca futura a traga de volta como se ainda estivesse aberta.
+ *  - `mine`: **eu não vou aplicar.** É decisão dele. A vaga continua existindo e
+ *    elegível; só a candidatura foi descartada.
+ *
+ * Nenhum dos dois apaga linha nem arquivo: o kit custou dinheiro real (mediana
+ * medida de $1,96) e o card volta pelo "restaurar".
+ */
+function doDiscard(jobId: string, kind: "closed" | "mine", note?: string) {
+  const job = getJob(jobId);
+  if (!job) throw new Error("vaga não encontrada");
+  const fechada = kind === "closed";
+  const motivo = note || (fechada ? "anúncio não está mais no ar" : "descartado na UI");
+  doStatus(jobId, "withdrawn", motivo);
+  if (fechada) {
+    setJobStatus(jobId, "expired");
+    logJobEvent(jobId, "job_expired", { via: "ui", note: motivo });
+  }
+  return { ok: true, expired: fechada };
+}
+
 function apiPipeline() {
   return [...pipelineItems.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 20);
 }
@@ -511,6 +537,13 @@ const server = createServer(async (req, res) => {
     } else if (req.method === "POST" && url.pathname === "/api/apply") {
       const { jobId } = await readBody(req);
       json(res, 200, doApply(jobId));
+    } else if (req.method === "POST" && url.pathname === "/api/job-url") {
+      const { url: alvo, title, company } = await readBody(req);
+      const r = await addJobByUrl(loadConfig(), String(alvo ?? ""), { title, companyName: company });
+      json(res, r.ok ? 200 : 400, r);
+    } else if (req.method === "POST" && url.pathname === "/api/discard") {
+      const { jobId, kind, note } = await readBody(req);
+      json(res, 200, doDiscard(jobId, kind, note));
     } else if (req.method === "POST" && url.pathname === "/api/modality") {
       const { jobId, state, note } = await readBody(req);
       const s = parseModalityState(state);

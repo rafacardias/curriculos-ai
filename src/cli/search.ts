@@ -10,7 +10,7 @@ import { parseArgs } from "node:util";
 import { loadConfig } from "../core/config.js";
 import { runSearch } from "../core/pipeline.js";
 import { resolveAdapters } from "../adapters/index.js";
-import { fetchManualUrl } from "../adapters/manual-url.js";
+import { addJobByUrl } from "../core/manual-job.js";
 import { insertJob } from "../db/repo/jobs.js";
 import { scoreNewJobs, decayPreferenceWeights } from "../core/scoring.js";
 
@@ -38,25 +38,19 @@ if (values.auto && !config.auto_search) {
 }
 
 if (values.url) {
-  const result = await fetchManualUrl(values.url, {
-    title: values.title,
-    companyName: values.company,
-  });
-  if (result.errors.length) {
-    console.error(`erro ao buscar URL: ${result.errors.join("; ")}`);
+  // Mesmo caminho que a UI usa — src/core/manual-job.ts.
+  const r = await addJobByUrl(config, values.url, { title: values.title, companyName: values.company });
+  if (!r.ok) {
+    console.error(`erro: ${r.error}`);
     process.exit(1);
   }
-  const raw = result.jobs[0]!;
-  const inserted = insertJob(raw);
-  if (!inserted) {
-    console.log("vaga já existia (fingerprint duplicado).");
-    process.exit(0);
+  console.log(`vaga inserida: ${r.job!.id}`);
+  console.log(`  ${r.job!.title} @ ${r.job!.company_name}`);
+  console.log(`  score ${r.scored?.score} · trilha ${r.scored?.trackHint ?? "?"} · ${r.scored?.policyAction} · status ${r.scored?.status}`);
+  for (const a of r.extractionWarnings) console.log(`  ⚠ ${a}`);
+  if (r.extractionWarnings.length) {
+    console.log(`  corrija com: --url "${values.url}" --title "<cargo>" --company "<empresa>"`);
   }
-  const scored = scoreNewJobs(config, [inserted.id]);
-  const s = scored[0];
-  console.log(`vaga inserida: ${inserted.id}`);
-  console.log(`  ${inserted.title} @ ${inserted.company_name}`);
-  if (s) console.log(`  score ${s.score} · trilha ${s.trackHint ?? "?"} · ${s.policyAction} · status ${s.status}`);
   process.exit(0);
 }
 
