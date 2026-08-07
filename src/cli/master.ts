@@ -4,13 +4,15 @@
  *   npx tsx src/cli/master.ts build <trilha>   # emite os fatos da trilha p/ redigir
  *   npx tsx src/cli/master.ts check <trilha>   # valida o YAML contra o perfil real
  *   npx tsx src/cli/master.ts ceiling <trilha> <job_id>   # teto de cobertura
+ *   npx tsx src/cli/master.ts rejected <trilha> # regera o relatório de descarte
  *
  * Mesmo sanduíche do `kit.ts`: o determinístico é script, o julgamento é do
  * Claude, e a palavra final é do operador — um mestre com `reviewed_at` nulo é
  * recusado por `check` e por qualquer consumidor.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { getDb } from "../db/client.js";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { getDb, PROJECT_ROOT } from "../db/client.js";
 import { getJob } from "../db/repo/jobs.js";
 import { loadMasterProfile } from "../core/profile.js";
 import { extractKeywords, termsPresent } from "../core/keywords.js";
@@ -20,12 +22,14 @@ import {
   validateMaster,
   profileFactsHash,
   lostVocabulary,
+  classifyDiscard,
+  type Discard,
   MASTERS_DIR,
 } from "../core/master-resume.js";
 
 const [cmd, track, jobId] = process.argv.slice(2);
-if (!cmd || !track || !["build", "check", "ceiling"].includes(cmd)) {
-  console.error("uso: master build|check <trilha> · master ceiling <trilha> <job_id>");
+if (!cmd || !track || !["build", "check", "ceiling", "rejected"].includes(cmd)) {
+  console.error("uso: master build|check|rejected <trilha> · master ceiling <trilha> <job_id>");
   process.exit(1);
 }
 
@@ -114,6 +118,64 @@ if (cmd === "build") {
   console.error(`\n❌ ${problemas.length} problema(s):`);
   for (const x of problemas) console.error(`  [${x.kind}] ${x.detail}`);
   process.exit(2);
+} else if (cmd === "rejected") {
+  // O relatório de descarte é DERIVADO, não guardado: ele é gitignorado (deriva
+  // dos fatos reais) e portanto não sobrevive a um clone limpo. Guardar seria
+  // fingir durabilidade. Regenerável a qualquer momento é honesto — e o comando
+  // é a fonte da verdade, não o arquivo.
+  const master = parseMaster(readFileSync(masterPath(track), "utf-8"));
+  const porId = new Map(profile.experiences.flatMap((e) => e.facts.map((f) => [f.id, f] as const)));
+
+  const demanda = new Set<string>();
+  for (const j of getDb().prepare("SELECT title, description FROM jobs").all() as Array<{ title: string; description: string | null }>) {
+    for (const k of extractKeywords(`${j.title}\n${j.description ?? ""}`, 30)) {
+      for (const parte of k.term.split(" ")) demanda.add(parte);
+    }
+  }
+
+  const descartes: Discard[] = [];
+  for (const b of master.bullets) {
+    const f = porId.get(b.fact_id);
+    if (!f) continue;
+    for (const w of lostVocabulary(b, f.text, f.skills)) {
+      const reason = classifyDiscard(w, demanda);
+      if (reason) descartes.push({ term: w, factId: b.fact_id, reason });
+    }
+  }
+
+  const md = [
+    `# Sinônimos descartados — trilha ${track}`,
+    "",
+    "**Arquivo DERIVADO.** Gitignorado, porque deriva dos fatos reais, e portanto não",
+    "sobrevive a um clone limpo. Não guarde: regere com",
+    "`npx tsx src/cli/master.ts rejected " + track + "`. O comando é a fonte da verdade.",
+    "",
+    "Vocabulário que o fato tinha, o bullet perdeu na reescrita, e que **não** virou sinônimo.",
+    "",
+    "- **verbo** — verbo de narração conjugado; já está no bullet, e JD pede substantivo.",
+    "- **generico** — preposição, numeral, palavra de ligação. Não discrimina nada.",
+    `- **sem-demanda** — nunca extraída como keyword de nenhum JD do acervo (${demanda.size} termos de demanda).`,
+    "",
+    "> Ressalva: `extractKeywords` é frequência pura e produz ruído nas duas direções",
+    "> (mede `clube vantagens`, `você`). O sinal de demanda é imperfeito. Discordou de um",
+    "> descarte? Mova a linha para o YAML do mestre com o `from` correspondente.",
+    "",
+    `Total: **${descartes.length}** descartados.`,
+    "",
+    "| termo | fato de origem | motivo |",
+    "|---|---|---|",
+    ...descartes
+      .sort((a, b) => a.reason.localeCompare(b.reason) || a.term.localeCompare(b.term))
+      .map((r) => `| \`${r.term}\` | \`${r.factId}\` | ${r.reason} |`),
+    "",
+  ].join("\n");
+
+  const destino = join(PROJECT_ROOT, "profile", `synonyms-rejected-${track}.md`);
+  writeFileSync(destino, md, "utf-8");
+  console.log(`${descartes.length} descartes → ${destino}`);
+  for (const m of ["verbo", "generico", "sem-demanda"] as const) {
+    console.log(`  ${m.padEnd(12)} ${descartes.filter((d) => d.reason === m).length}`);
+  }
 } else {
   // ceiling — o número que a Fase 2 nunca pode superar
   if (!jobId) {
