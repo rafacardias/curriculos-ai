@@ -34,7 +34,11 @@ export function detectSeniority(title: string): string | undefined {
   if (/\b(junior|jr)\b/.test(t)) return "junior";
   // "PL" = pleno na convenção BR (JR/PL/SR); exceção: "PL SQL" (PL/SQL normalizado) é tecnologia
   if (/\b(pleno|mid|middle)\b/.test(t) || /\bpl\b(?!\s*sql)/.test(t) || /\bii\b/.test(t)) return "mid";
-  if (/\b(senior|sr|especialista|specialist)\b/.test(t) || /\biii\b/.test(t)) return "senior";
+  // "especialista/specialist" NÃO entra aqui sozinho (ACHADO-06, KNOWN-BUGS.md): em inglês
+  // "Specialist" não carrega senioridade nenhuma, e em português "Especialista I/II/III" é
+  // banda de carreira — só o numeral de topo (III) ou um qualificador explícito de senioridade
+  // sustentam a classificação.
+  if (/\b(senior|sr)\b/.test(t) || /\biii\b/.test(t)) return "senior";
   if (/\b(lead|lider|principal|staff)\b/.test(t)) return "lead";
   // "manager/gerente" só é liderança quando NÃO faz parte de cargo de produto/projeto
   // (Product Manager, Gerente de Projetos etc. são funções IC, não chefia)

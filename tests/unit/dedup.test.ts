@@ -86,6 +86,34 @@ describe("detectSeniority", () => {
     assert.equal(detectSeniority("Desenvolvedor PL SQL"), undefined);
   });
 
+  describe("ACHADO-06 (KNOWN-BUGS.md): 'especialista/specialist' sozinho não é sênior", () => {
+    // As 5 vagas ai-builder que o mapeamento cego filtrava (medidas em 2026-08-07).
+    const naoSenior: string[] = [
+      "AI & Automation Specialist (Full-Time)",
+      "ESPECIALISTA I ENGENHARIA MACHINE LEARNING",
+      "Especialista em Automação e IA",
+      "Especialista Engenheiro de IA",
+      "Marketing & Automations Specialist",
+    ];
+    for (const title of naoSenior) {
+      it(`"${title}" → undefined (não sênior)`, () =>
+        assert.notEqual(detectSeniority(title), "senior"));
+    }
+
+    it("em inglês, 'Specialist' isolado não carrega senioridade", () => {
+      assert.equal(detectSeniority("Patient Care Specialist"), undefined);
+      assert.equal(detectSeniority("Data Entry Specialist Assistant Administrator"), undefined);
+    });
+
+    it("'Especialista III' (numeral de topo) continua sênior", () => {
+      assert.equal(detectSeniority("Especialista III"), "senior");
+    });
+
+    it("'Especialista Sênior' continua sênior (qualificador explícito)", () => {
+      assert.equal(detectSeniority("Especialista Sênior em Dados"), "senior");
+    });
+  });
+
   it("Product/Project Manager é função IC, não liderança", () => {
     assert.equal(detectSeniority("Product Manager"), undefined);
     assert.equal(detectSeniority("Gerente de Projetos"), undefined);

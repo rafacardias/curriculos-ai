@@ -217,7 +217,8 @@ export function updateJobRescore(
   trackHint: string | null,
   policyAction: string,
   status: string,
-  at: string
+  at: string,
+  seniority: string | null
 ): void {
   getDb()
     .prepare(
@@ -228,8 +229,9 @@ export function updateJobRescore(
               track_hint        = ?,
               policy_action     = ?,
               status            = ?,
-              score_rescored_at = ?
+              score_rescored_at = ?,
+              seniority         = ?
         WHERE id = ?`
     )
-    .run(score, JSON.stringify(detail), trackHint, policyAction, status, at, id);
+    .run(score, JSON.stringify(detail), trackHint, policyAction, status, at, seniority, id);
 }

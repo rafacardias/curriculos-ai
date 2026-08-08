@@ -41,7 +41,7 @@ achadas de novo, não redescobertas):
 | [CLASSE-01 inst. 8](#classe-01-instância-8--variante-ausente-lida-como-variante-válida) | **a mais perigosa**: variante não declarada ao redator entraria no warehouse como dado válido. Verificado: nada entrou |
 | [CLASSE-01 inst. 9](#classe-01-instância-9---tools-sem---allowedtools) | `--tools` sem `--allowedTools` = `permission_denied` silencioso. A degradação honesta salvou por sorte, agora está testada |
 | [Lição de método](#lição-de-método--número-não-medido-nesta-sessão-é-hipótese-não-premissa) | **terceira vez** que número citado de memória virou fundamento de plano. Nenhuma fase é autorizada por projeção |
-| [ACHADO-06](#achado-06--detectseniority-mapeia-especialistaspecialist--senior-e-filtra-51-do-acervo) | "Specialist" tratado como sênior filtra 5 vagas vivas de ai-builder. **Medido, não corrigido** |
+| [ACHADO-06](#achado-06--detectseniority-mapeia-especialistaspecialist--senior-e-filtra-51-do-acervo) | "Specialist" tratado como sênior filtra 5 vagas vivas de ai-builder. **Corrigido** (`src/core/dedup.ts:37`) |
 | [Erro só em memória](#erro-de-pipeline-que-só-existe-em-memória) | cartão de erro some no restart — [promovido](#prioridade-movida-generation_runs-sai-da-fase-3) para logo depois da segmentação |
 
 ---
@@ -166,11 +166,11 @@ Registrados aqui porque foram medidos com rigor e mudam decisões, mas nenhum é
 
 ### ACHADO-06 · `detectSeniority` mapeia "especialista/specialist" → `senior` e filtra 5,1% do acervo
 
-**Medido, não corrigido** — por instrução explícita do operador: *"quero medir quantas vagas isso
-atinge antes de mexer."*
+**Corrigido** (2026-08-08) — medido primeiro, por instrução explícita do operador: *"quero medir
+quantas vagas isso atinge antes de mexer."* Depois de medido, a correção foi autorizada.
 
-`src/core/dedup.ts:37` trata `especialista` e `specialist` como sinônimos de sênior. Com
-`exclude_seniority: ["mid","senior","lead","leadership"]`, isso filtra **33 de 642 vagas (5,1%)**.
+`src/core/dedup.ts:37` tratava `especialista` e `specialist` como sinônimos de sênior. Com
+`exclude_seniority` incluindo `senior`, isso filtrava **33 de 642 vagas (5,1%)**.
 
 O volume é pequeno; a composição é que importa. Das 8 vivas (`status = new`), **5 são da trilha
 ai-builder**:
@@ -193,8 +193,19 @@ ai-builder**:
    da faixa, não o teto.
 
 É a forma B da CLASSE-01: um token lido como classificação sem o contexto que o qualificaria.
-A saída provável não é remover a palavra da regex — é a mesma que resolveu o REQ-002, ler o
-contexto (numeral de banda, e distinguir o uso EN do PT). **Nada foi alterado.**
+
+**Correção aplicada:** `especialista`/`specialist` saiu da alternativa de `senior` sozinho — agora
+só classifica como sênior quando vem com o numeral de banda de topo (`III`) ou um qualificador
+explícito ("sênior"/"senior"). `especialista I`/`especialista II`/`specialist` sem numeral voltam
+`undefined` (sem sinal), não mais `senior`. As 5 vagas ai-builder da tabela acima, e os três casos
+"Specialist" de título de entrada em inglês, testados em `tests/unit/dedup.test.ts` (describe
+`ACHADO-06`). `especialista III` e `especialista sênior` continuam `senior` — o caso real de topo
+não regrediu.
+
+`seniority` é congelado no `INSERT`, igual ao `score` — sem propagar a correção para o acervo já
+coletado, as 5 vagas continuariam presas na leitura antiga. `rescoreAll` (`src/core/scoring.ts`)
+agora recalcula `seniority` a partir do título a cada repontuação, do mesmo jeito que já recalcula
+o score; `npx tsx src/cli/rescore.ts --commit` aplica no banco real.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 

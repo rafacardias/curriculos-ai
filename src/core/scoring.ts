@@ -1,6 +1,6 @@
 import { getDb } from "../db/client.js";
 import { termsPresent, tokenize } from "./keywords.js";
-import { detectRequiredYears, normalize } from "./dedup.js";
+import { detectRequiredYears, detectSeniority, normalize } from "./dedup.js";
 import { decidePolicy } from "./policy.js";
 import {
   getJob,
@@ -247,7 +247,13 @@ export function rescoreAll(config: AppConfig, opts: { commit?: boolean } = {}): 
   const jobs = listRescorableJobs();
   const all: RescoreChange[] = [];
 
-  for (const job of jobs) {
+  for (const rawJob of jobs) {
+    // `seniority` é derivado do título e congelado no insert, igual ao score — uma correção
+    // em `detectSeniority` (ACHADO-06) só alcança vagas futuras se o rescore também a
+    // recalcular aqui, senão o acervo já coletado fica preso na leitura antiga para sempre.
+    const seniority = detectSeniority(rawJob.title) ?? null;
+    const job = seniority === rawJob.seniority ? rawJob : { ...rawJob, seniority };
+
     const { score, detail, trackHint } = scoreJob(config, job);
     // log: false — repontuar 375 vagas não são 375 decisões de política tomadas.
     const policy = decidePolicy(config, job, score, trackHint, { log: false });
@@ -266,19 +272,19 @@ export function rescoreAll(config: AppConfig, opts: { commit?: boolean } = {}): 
       company: job.company_name,
       source: job.source,
       location: job.location,
-      scoreBefore: job.score,
+      scoreBefore: rawJob.score,
       scoreAfter: score,
-      delta: round2(score - (job.score ?? 0)),
-      statusBefore: job.status,
+      delta: round2(score - (rawJob.score ?? 0)),
+      statusBefore: rawJob.status,
       statusAfter,
-      detailBefore: parseDetail(job.score_detail),
+      detailBefore: parseDetail(rawJob.score_detail),
       detailAfter: detail,
       policyAction,
       trackHint,
     });
 
     if (commit) {
-      updateJobRescore(job.id, score, detail, trackHint, policyAction, statusAfter, at);
+      updateJobRescore(job.id, score, detail, trackHint, policyAction, statusAfter, at, seniority);
     }
   }
 
