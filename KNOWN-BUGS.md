@@ -43,6 +43,7 @@ achadas de novo, não redescobertas):
 | [Lição de método](#lição-de-método--número-não-medido-nesta-sessão-é-hipótese-não-premissa) | **terceira vez** que número citado de memória virou fundamento de plano. Nenhuma fase é autorizada por projeção |
 | [ACHADO-06](#achado-06--detectseniority-mapeia-especialistaspecialist--senior-e-filtra-51-do-acervo) | "Specialist" tratado como sênior filtra 5 vagas vivas de ai-builder. **Corrigido** (`src/core/dedup.ts:37`) |
 | [Erro só em memória](#erro-de-pipeline-que-só-existe-em-memória) | cartão de erro some no restart — [promovido](#prioridade-movida-generation_runs-sai-da-fase-3) para logo depois da segmentação |
+| [ACHADO-07](#achado-07--migration-002testts-prova-o-lint-anti-droprename-só-contra-migrations-limpas) | lint anti-`DROP`/`RENAME` nunca testado contra migration que deveria falhar. **Medido, não corrigido** |
 
 ---
 
@@ -206,6 +207,31 @@ não regrediu.
 coletado, as 5 vagas continuariam presas na leitura antiga. `rescoreAll` (`src/core/scoring.ts`)
 agora recalcula `seniority` a partir do título a cada repontuação, do mesmo jeito que já recalcula
 o score; `npx tsx src/cli/rescore.ts --commit` aplica no banco real.
+
+**Resultado medido no `--commit` de 2026-08-08 (fila 4→6):** das 5 vagas da tabela, só 2 voltaram —
+`AI & Automation Specialist` e `ESPECIALISTA I ENGENHARIA MACHINE LEARNING`. Das outras 3: uma
+(`Especialista em Automação e IA`, Techne) já tinha `applications` — candidatura já decidida pelo
+operador, `rescoreAll` corretamente não mexe; as outras duas (`Especialista Engenheiro de IA`,
+`Marketing & Automations Specialist`) continuam de fora, agora por filtros **legítimos e
+independentes** (Python fora do perfil; 3+ anos exigidos) que o filtro de senioridade errado só
+mascarava. **O filtro errado escondia três exclusões corretas** — é por isso que medir antes de
+corrigir valeu a pena: "5 voltando juntas" era a expectativa errada, e só ficou visível depois que
+as 5 foram verificadas uma a uma, não pelo tamanho do achado original.
+
+### ACHADO-07 · `migration-002.test.ts` prova o lint anti-`DROP`/`RENAME` só contra migrations limpas
+
+**Medido, não corrigido** — achado da varredura de controles positivos de 2026-08-08 (28 arquivos
+de teste, 0 sem controle positivo, 1 parcial — este).
+
+O teste que confirma "nenhuma migration contém comando destrutivo" só roda a regex contra as
+migrations reais, que já são limpas por construção. Ele nunca é exercitado contra um caso que
+**deveria** disparar — uma migration sintética com `DROP`/`RENAME` de propósito. É a forma C da
+CLASSE-01: o teste confirma o esperado sem nunca distinguir "protegido pela regex" de "correto por
+acaso", porque a regex nunca teve chance de falhar contra um input que deveria reprovar.
+
+**Correção proposta (próxima rodada):** uma migration sintética fixture com `DROP TABLE` (ou
+`RENAME`), e um teste que afirma que o lint a rejeita. Uma linha de asserção nova, não redesenho.
+Nada foi alterado.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
@@ -751,6 +777,14 @@ de 2026-08-07 (backup `curriculos.2026-08-07T14-07-35Z.db`, sha256 `149eddcd…`
 deste commit**. Números de antes descrevem outra régua. A baseline em `docs/baseline-onda1.md`
 continua válida como registro do que foi medido na época, não como termo de comparação com o
 estado atual.
+
+**Extensão (2026-08-08, ACHADO-06) — a mesma quebra, um campo a mais.** `rescoreAll` agora
+recalcula `seniority` a partir do título a cada repontuação, não só `score` — a correção do
+ACHADO-06 só alcançava vagas futuras sem isso, do mesmo jeito que a de "N ou mais anos" só
+alcançava sem o `rescore --commit` de 2026-08-07. O `rescore --commit` de 2026-08-08 (backup
+`curriculos.2026-08-08T23-26-59Z.pre-rescore.db`, sha256 `f853b850…`) recalculou 327 registros
+com o `detectSeniority` corrigido — fila 4→6. Comparação histórica de `seniority` armazenado
+também só vale a partir deste commit, pelo mesmo motivo.
 
 ---
 
