@@ -1157,3 +1157,18 @@ some quando a ferramenta é usada normalmente não é um caso de borda.
 
 `generation_runs` (migration aditiva `004`, já que a `003` virou modalidade) passa a ser **a
 próxima coisa depois da segmentação**, antes do resto da Fase 3.
+
+---
+
+## Backlog de UI reportado pelo operador (2026-08-07, não construído)
+
+Registrado para não se perder. Nenhum destes estava na rodada autorizada.
+
+1. **Notificações sem dispensar.** Os cartões de conclusão ("concluída — Especialista em
+   Automação e IA @ Techne") não têm marcar-como-lida nem fechar; acumulam no topo da fila.
+2. **Vaga bloqueada por modalidade não mostra a URL.** Justamente quando o operador precisa abrir
+   o anúncio para decidir remoto/híbrido/presencial, o link não está no cartão — enquanto no
+   kanban ele está. O botão `JD` existe, mas a URL da vaga original não.
+3. **Fontes de vaga ausentes.** Careerjet, Glassdoor, Jooble, Trampos, NetVagas, Talent.com,
+   RioVagas, Remotar, Jobbol, Agrou, YDUQS, Portal de Vagas da Gupy. Avaliar quais têm API ou
+   HTML estável o bastante para virar adapter (o `src/adapters/` já isola falha por fonte).

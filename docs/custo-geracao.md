@@ -175,6 +175,106 @@ habilitou**, e agora está medido em vez de suposto. Não há flag de TTL na CLI
 Ambos param em exit 3 pelos mesmos 2 `[CONFIRMAR:` — pretensão salarial (prescrita pelo próprio
 fato) e escolaridade (indefinida de verdade). O primeiro é o que a fase F4 resolve.
 
+## Não-regressão v2 (2026-08-08) — 5 de 5 pares, **REPROVOU de novo**
+
+F4 ativa, paridade corrigida, amostra completa. Critério: nenhuma vaga perde mais de 5 pontos de
+cobertura; zero reprovações novas de truthcheck.
+
+| vaga | cobertura | ATS | exit | `[CONFIRMAR:` | pág |
+|---|---|---|---|---|---|
+| LMG Staffing — AI-Assisted SW Engineer | 57% → **50%** | 66 → 60 | 0 → 0 | 0 → 0 | 2 → 2 |
+| Hospital Care — Engenheiro de IA | 20% → **13%** | 36 → 30 | **0 → 3** | 0 → 1 | **2 → 3** |
+| Techne — Analista de Chatbot Junior | 30% → 30% | 44 → 44 | 0 → 0 | 0 → 0 | 2 → 2 |
+| TSA — Analista de Automação | 30% → **33%** | 44 → 46 | 0 → 0 | 0 → 0 | 2 → 2 |
+| Unimed — Fluxo Conversacional | 50% → 50% | 60 → 60 | 0 → 0 | 0 → 0 | 2 → 2 |
+
+**Veredicto: reprovado.** Duas vagas caem 7 pontos. `--via` continua obrigatória e `agentic`
+continua o caminho validado. **Nada foi consertado** — a distinção entre defeito de transcrição e
+afinação de termômetro é do operador.
+
+### O que MELHOROU, e prova que a rodada anterior valeu
+
+- **A Techne junior foi de −13 para 0.** Era a vaga que reprovou na v1, e a causa diagnosticada
+  (eco do título perdido na destilação) estava certa: corrigida a paridade, a regressão sumiu.
+- **F4 funcionou em 5 de 5.** Nenhum `[CONFIRMAR:` de pretensão salarial em nenhuma vaga. O único
+  marcador sobrevivente é de **escolaridade** — a vaga exige superior completo e a formação está
+  em curso. É indecisão real, não falha do redator.
+- **4 de 5 vagas mantiveram ou melhoraram** cobertura e ATS.
+
+### Por que as duas caíram — fatos, sem interpretação
+
+**LMG Staffing** (57% → 50%, resume 5.750 → 5.899 ch, 2 páginas nas duas):
+
+| | keywords |
+|---|---|
+| perdidas pelo cli | `context protocols`, `mcps`, `model context`, `protocols mcps` |
+| ganhas pelo cli | `accelerate development`, `front end` |
+
+As quatro perdidas são **fragmentos de um único termo** — "Model Context Protocols (MCPs)" —
+contado quatro vezes pelo n-grama. O currículo agêntico mencionava MCP e o novo não.
+**A pergunta que decide é se MCP tem fato que o sustente no perfil**, e ela é do operador: o
+truthcheck é referencial, não semântico, então ele aprovaria o termo mesmo num bullet cujo fato
+citado não fala de MCP.
+
+**Hospital Care** (20% → 13%, resume 4.977 → **6.854 ch**, 2 → **3 páginas**):
+
+| | keywords |
+|---|---|
+| perdidas pelo cli | `back end`, `dados`, `end`, `engenharia` |
+| ganhas pelo cli | `artificial`, `inteligencia artificial` |
+
+`back end` / `end` é o mesmo fragmento contado duas vezes; `dados` e `engenharia` são palavras
+genéricas. O marcador que a levou a exit 3:
+
+> `[CONFIRMAR: a vaga exige Ensino Superior Completo em Ciência da Computação, Engenharia de
+> Software ou correlatas; minha formação atual é Tecnólogo em Gestão da TI, cursando, conclusão
+> prevista para 06/2027 — favor confirmar se este requisito é eliminatório]`
+
+### As 3 páginas voltaram — n=2 agora, e o orçamento não cobre o primeiro disparo
+
+O orçamento de tamanho que entrou na rodada anterior vive **só no prompt da revisão**. As `REGRAS`
+do primeiro disparo limitam bullets ("3–6, 1 linha cada") mas **não têm alvo de página**. Aqui o
+currículo saiu com 6.854 caracteres — o maior já medido — e cruzou para 3 páginas.
+
+Registrado, não corrigido. Com n=2 (Techne+F4 e Hospital Care) já não é acidente, mas a decisão de
+onde o limite mora — prompt do primeiro disparo, ou gate no `finalize` — é do operador.
+
+### O `rescore --commit` autorizado NÃO foi executado
+
+Ele estava contaminado por uma mudança minha da rodada anterior: eu adicionei 30 keywords de
+portfólio (`otimização de custo`, `melhoria contínua`, `observabilidade`…) à trilha `ai-builder`,
+que é **vocabulário de MATCHING**, não de redação. Efeito medido:
+
+| | vagas alteradas | entram na fila | maior delta |
+|---|---:|---:|---:|
+| com as 30 keywords | 200 | **12** | +26,0 |
+| sem elas | — | **0** | **−0,3** |
+
+Uma das que entravam era `ANALISTA FINANCEIRO (MELHORIA CONTÍNUA E QUALIDADE)` — falso positivo
+puro, CLASSE-01 forma B. As keywords foram revertidas da trilha (guardadas em
+`tracks.COM-keywords-portfolio.yaml`); os **fatos** do perfil, que é o que o operador pediu para
+os currículos falarem de melhoria e economia, continuam lá.
+
+Sem elas o `rescore` é **no-op**: 0 entram, 0 saem, delta máximo −0,3 (decaimento de preferências).
+Não foi commitado porque `--commit` sobrescreve `score_previous`, a linha de base do rescore de
+elegibilidade que já rodou — gravar 298 linhas para aplicar ±0,3 de ruído destruiria essa
+proveniência por nada.
+
+### Custo de segunda ordem, de novo: 2 das 5 vagas originais seguem bloqueadas
+
+`E — Analista de Automação` (86,5) e `10x Advisory` (82,2) continuam com modalidade pendente — são
+decisão humana, e a checagem prévia (que esta rodada fez antes de medir, como combinado) as pegou
+antes de queimar geração. Foram substituídas por **LMG Staffing** e **Hospital Care**, ambas com
+kit agêntico, ambas desbloqueadas, ambas de engenharia de IA. A amostra é 5, mas não é a mesma 5.
+
+### Um bug meu que o próprio guarda pegou
+
+O `variant-guard` bloqueou a medição inteira: `kit generate --out` escrevia os 4 arquivos num
+diretório de trabalho **sem copiar o `bundle.json`**, e sem ele não dá para saber que variante o
+redator recebeu. O guarda estava certo e o encanamento errado — corrigido para o `--out` levar o
+bundle junto. Um kit que não carrega seu bundle não é auditável depois, que é exatamente o ponto
+do guarda.
+
 ## O que o critério de aceite NÃO prova
 
 `coveragePct` e `atsScoreHeuristic` são heurísticas **deste** sistema. O coverage sai de

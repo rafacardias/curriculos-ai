@@ -175,6 +175,14 @@ export async function gerarKit(opts: {
 
   mkdirSync(outDir, { recursive: true });
   for (const nome of EXPECTED) writeFileSync(join(outDir, nome), files[nome]!, "utf-8");
+  // O bundle vai junto quando o destino não é o kit_dir. Sem ele o diretório não
+  // é auditável depois: não dá para saber qual variante o redator recebeu — e é
+  // exatamente isso que o `variant-guard` cobra de quem for pontuar o kit.
+  // Descoberto na não-regressão de 2026-08-08, quando o guarda bloqueou a
+  // própria medição que ele deveria proteger.
+  if (outDir !== opts.kitDir) {
+    writeFileSync(join(outDir, "bundle.json"), readFileSync(join(opts.kitDir, "bundle.json"), "utf-8"), "utf-8");
+  }
   res.ok = true;
 
   if (!opts.revisar) return res;
