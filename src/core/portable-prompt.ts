@@ -102,6 +102,8 @@ Bullets em CAR (Contexto → Ação → Resultado):
     qualitativo. NUNCA inventar métrica;
   - 1 linha cada (máx. 2), 3–6 bullets por experiência, ordenados pela relevância ao JD
     (a variante A/B decide metric-first vs role-first);
+  - orçamento de página: o currículo TEM de caber em 2 páginas — não couber, corte o bullet
+    menos relevante ao JD, nunca a citação [exp:fact_id] nem o fato;
   - sem pronome "eu", sem adjetivo vazio ("proativo", "dinâmico"), sem jargão interno que o
     recrutador não conhece.
 

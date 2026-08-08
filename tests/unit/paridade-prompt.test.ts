@@ -75,6 +75,7 @@ const CONTRATO: Item[] = [
   { item: "reutilizar known_screening_answers", skill: /known_screening_answers/, regras: /known_screening_answers/ },
   { item: "[CONFIRMAR: quando falta candidate_fact", skill: /\[CONFIRMAR:/, regras: /\[CONFIRMAR:/ },
   { item: "pretensão vem de salary_research, não de estimativa própria", skill: /salary_research/, regras: /salary_research/ },
+  { item: "orçamento de página: cabe em 2 páginas", skill: /2 páginas/, regras: /2 páginas/ },
 
   // ---------- divergências DECLARADAS ----------
   {

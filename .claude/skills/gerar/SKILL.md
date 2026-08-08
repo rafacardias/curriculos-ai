@@ -70,6 +70,7 @@ Keyword certa em sintaxe fraca não converte. Cada bullet segue a estrutura CAR 
 - **Contexto curto** (onde/escala) + **ação específica** (o que fez, com as keywords do JD na sintaxe natural da frase — não em lista) + **resultado**.
 - **Resultado quantificado sempre que o fato tiver número** (%, R$, prazo, volume). Sem número no fato → resultado qualitativo do próprio fato; NUNCA inventar métrica (Regra nº 1).
 - 1 linha por bullet (máx. 2), 3–6 bullets por experiência, ordenados pela relevância para o JD (variante A/B decide metric-first vs role-first).
+- Orçamento de página: o currículo TEM de caber em 2 páginas. Não couber → corte o bullet menos relevante ao JD, nunca a citação [exp:fact_id] nem o fato.
 - Sem pronomes ("eu"), sem adjetivos vazios ("proativo", "dinâmico"), sem jargão interno que o recrutador não conhece.
 
 **STAR (Situação-Tarefa-Ação-Resultado) não é para o currículo** — é o formato das respostas comportamentais: use no `answers.md` (perguntas "conte uma vez em que...") e no material de entrevista, sempre montado sobre fatos citáveis do perfil.
