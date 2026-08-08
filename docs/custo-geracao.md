@@ -305,6 +305,32 @@ Resultado medido na Techne, com F4 ativa: **exit 0**, coverage 47%, ATS 58, cont
 Custo da busca: **$0,0839**. O kit saiu com **3 páginas** (era 2) — informação, não gate, mas
 vale olhar em vaga de entrada.
 
+## As 3 páginas — medido, e nenhuma das duas hipóteses estava certa
+
+| via | páginas | resume.md | answers.md |
+|---|---:|---:|---:|
+| agêntico (n=6) | **2** em 6/6 | 4.836–5.553 ch | 2.591–4.046 ch |
+| cli (n=4) | **2** em 4/4 | 5.010–5.730 ch | 1.992–3.265 ch |
+| cli + F4 (n=1) | **3** | **6.035 ch** | 2.446 ch |
+
+**Não é padrão do caminho novo** — 4 de 4 kits do `--via=cli` saíram com 2 páginas. **E não é a
+pesquisa salarial inflando o `answers.md`** — o `answers.md` daquele kit é o *menor* dos três da
+mesma vaga, e `pages` conta só o `resume.pdf`.
+
+A causa é outra e é da mesma família das anteriores: **o prompt da revisão não carregava nenhum
+orçamento de tamanho.** As `REGRAS` dizem "1 linha por bullet (máx. 2), 3–6 bullets"; o prompt da
+revisão, que é uma terceira destilação, não repetia. Aquele kit foi o que a revisão mais subiu
+(27% → 47%, o maior ganho do conjunto) e o texto extra cruzou a quebra de página — em torno de
+~5.800–6.000 caracteres.
+
+Ou seja: **a revisão otimizava cobertura sem saber que páginas existem.** Corrigido com o
+orçamento explícito no prompt (2 páginas, e "se precisar de espaço, CORTE o bullet menos
+relevante — não acrescente"), e `tests/unit/paridade-prompt.test.ts` passou a cobrir também esse
+terceiro texto.
+
+**Não virou gate.** n=1, e a correção é no redator, não no portão. Fica para re-medir na próxima
+não-regressão: se 3 páginas reaparecer com o orçamento no prompt, aí sim vira gate.
+
 ## Correções de números que circularam antes desta medição
 
 | afirmação anterior | medido | onde apareceu |

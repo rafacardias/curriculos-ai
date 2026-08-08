@@ -39,10 +39,29 @@ busca (6 adapters) → dedup fingerprint → scoring (léxico por trilha + prefe
 | **Adapters com isolamento de falha** | Fonte quebrada (APIs não documentadas mudam!) reporta erro em `search_runs` sem derrubar a busca |
 | **Coverage report honesto** | "ATS score" é rotulado estimativa heurística; o artefato real é a lista de keywords cobertas/não cobertas |
 | **Experiment engine** | Variantes de currículo round-robin por segmento, medidas como "sinal direcional (n=X)" — sem teatro estatístico |
+| **Gates que reprovam** (`src/core/gates.ts`) | Exit codes distintos por causa: 2 truthcheck · 3 marcador `[CONFIRMAR:` sobrevivente ou entregável vazio · 4 HTML hostil a ATS, PDF sem camada de texto, ordem de leitura quebrada · 5 modalidade não confirmada, **antes** de gastar a geração |
+| **Perfis de harness** (`src/local/harness.ts`) | Um único construtor de argv para toda invocação de LLM; um teste varre `src/` e reprova se qualquer outro arquivo montar a linha de comando |
+
+## Engenharia de custo — medida, não estimada
+
+Gerar um kit custava **$2,63 e 4.851.953 tokens de entrada** em 38 turnos. A anatomia dos logs mostrou que **83% do custo era lado-input**: o laço agêntico relia 80.824 tokens de inventário de ferramentas a cada turno, enquanto os 4 arquivos entregues custavam 9,6% do total.
+
+| | antes | depois | delta |
+|---|---:|---:|---:|
+| turnos | 38 | 2 | **−95%** |
+| tokens de entrada | 4.851.953 | 18.010 | **−99,6%** |
+| custo por kit | $2,63 | $0,40 | **−85%** |
+| prefixo de harness por invocação | 80.824 | 192 | **−99,8%** |
+| cobertura de keywords (mesma vaga) | 40% | 47% | +7 pp |
+
+Como: `--tools ""` + `--system-prompt` substituído + `--strict-mcp-config` + `--disable-slash-commands`, e a redação convertida de laço agêntico em disparo único com uma revisão de limite rígido. Método e ressalvas em [`docs/custo-geracao.md`](docs/custo-geracao.md); a fronteira de dados (o que sai da máquina e o que nunca sai) em [`docs/fronteira-de-dados.md`](docs/fronteira-de-dados.md).
+
+**A disciplina importa mais que o número.** Toda troca de padrão passa por não-regressão em amostra com critério de aceite em código — e a primeira reprovou, então o caminho barato ficou atrás de flag. O critério é sempre da forma *"não pode piorar muito"*, nunca *"tem de melhorar tanto"*: cobertura e ATS são heurísticas do próprio sistema, e a ressalva vive junto do código que as calcula.
 
 ## Skills de operação (Claude Code como interface)
 
-`/perfil` `/buscar` `/fila` `/vaga` `/gerar` `/submeter` `/aplicar` `/respostas` `/empresa` `/feedback` `/linkedin` `/painel` `/agendar` `/status`
+`/perfil` `/buscar` `/fila` `/vaga` `/gerar` `/submeter` `/aplicar` `/respostas` `/empresa` `/feedback` `/painel` `/agendar` `/status`
+`/linkedin` `/linkedin-post` `/linkedin-comentar` `/linkedin-auditoria`
 
 ## Stack
 
@@ -57,5 +76,7 @@ Perfil pessoal (`profile/*.yaml` reais), banco de dados, kits gerados e snapshot
 ### English summary
 
 A local-first "interview maximizer" built entirely through AI-assisted development (Claude Code) in one day: 6 job-source adapters with failure isolation, declarative policy engine, fact-grounded resume generation where every bullet must cite a verifiable fact id (mechanically enforced — the build fails on fabrication), honest keyword-coverage reporting, Playwright submission layer with three autonomy modes that pauses on unknown screening questions instead of guessing, SQLite tracking with a performance warehouse, and resume-variant experiments reported as directional signals. Personal data never enters the repo.
+
+**Cost engineering, measured:** profiling the generation logs showed 83% of the spend was input-side — an agentic loop re-reading 80,824 tokens of tool inventory on every one of 38 turns, while the four delivered files accounted for 9.6% of it. Rebuilt as a single shot plus one bounded revision: **38 → 2 turns, 4.85M → 18k input tokens (−99.6%), $2.63 → $0.40 per kit (−85%)**, with keyword coverage going *up* 7 points on the same job. Every default switch is gated on a sampled non-regression run with the acceptance criterion written as code — the first one failed, so the cheap path stayed behind a flag.
 
 *Author: Jonas Rafael Cardias ([LinkedIn](https://www.linkedin.com/in/rafael-cardias-pm-qa/)) — AI Builder & vibe coder transitioning into QA/PM. This repo doubles as a portfolio piece: it is the system I use to run my own job search.*

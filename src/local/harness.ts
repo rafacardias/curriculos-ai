@@ -99,6 +99,25 @@ export function buildHarnessArgv(
     );
   }
 
+  // `--tools` diz o que EXISTE; `--allowedTools` diz o que é PERMITIDO. Duas
+  // flags que parecem uma. Medido em 2026-08-07: o perfil `salario` declarava
+  // `tools: [WebSearch]` e as duas tentativas de busca voltaram em
+  // `permission_denials` — silenciosamente, sem erro, com o modelo respondendo
+  // "não consegui pesquisar". É o mesmo defeito do `--model`: ausência de uma
+  // segunda declaração lida como permissão herdada, quando `isolate_settings`
+  // garante que não há allowlist herdada de lugar nenhum.
+  if (Array.isArray(perfil.tools) && perfil.tools.length > 0) {
+    const permitidas = new Set(perfil.allowed_tools ?? []);
+    const semPermissao = perfil.tools.filter((t) => !permitidas.has(t));
+    if (semPermissao.length) {
+      throw new HarnessProfileError(
+        `perfil de harness "${nome}" declara ${semPermissao.join(", ")} em \`tools\` sem ` +
+          "`allowed_tools` correspondente. `tools` só torna a ferramenta disponível; sem a " +
+          "allowlist a chamada volta em permission_denied e o modelo responde que não conseguiu."
+      );
+    }
+  }
+
   if (perfil.tools === undefined) {
     throw new HarnessProfileError(
       `perfil de harness "${nome}" não declara \`tools\`. Use \`[]\` para desligar todas, ` +

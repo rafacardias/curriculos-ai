@@ -32,6 +32,28 @@ Todo conteúdo gerado (currículo, cover letter, respostas) espelha o vocabulár
 | `/linkedin-auditoria` | Compara perfil LinkedIn ao vivo com o perfil mestre; aponta lacunas e alegações não lastreadas |
 | `/status` | Digest geral |
 
+## Geração de kit — vias, perfis e custo
+
+`kit generate <job_id> --via cli|agentic|external` (**`--via` é obrigatória, sem default**).
+`agentic` é o caminho validado; `cli` é o disparo único (~6× mais barato) e **ainda não passou
+na não-regressão** — ver `docs/custo-geracao.md`.
+
+- Todo argv de `claude` sai de `src/local/harness.ts`; só `src/local/generate-runner.ts` dispara
+  o binário. Um teste varre `src/` e reprova quem montar linha de comando por fora.
+- Os perfis vivem em `config.yaml → harness.profiles`. **`model`, `tools` e `max_budget_usd` não
+  têm default** — ausência de configuração já foi lida como default seguro e rodou Opus por
+  acidente. `tools` diz o que existe; `allowed_tools` diz o que é permitido, e as duas são
+  necessárias.
+- `npx tsx src/cli/salary.ts <job_id>` pesquisa a faixa salarial num passo separado (perfil
+  `salario`, só WebSearch). Sem ele o kit sai com `[CONFIRMAR: pretensão]` e o finalize sai 3 —
+  degradação correta, nunca número inventado.
+- `scripts/measure-kit.ts` pontua um kit com os mesmos gates do `finalize` **sem tocar no banco** —
+  é como se comparam vias sem contaminar o funil.
+
+**Antes de trocar qualquer default:** não-regressão em amostra, critério de aceite em código, na
+forma "não pode piorar muito". Cobertura e ATS são heurísticas deste sistema — servem de alarme
+para regressão grande, não de placar para melhoria fina.
+
 ## Operação
 
 - `npm run db:migrate` — aplica migrations (idempotente; roda automático em qualquer acesso ao DB)

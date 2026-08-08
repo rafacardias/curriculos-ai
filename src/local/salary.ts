@@ -48,6 +48,33 @@ const SYS =
   "sempre citando as fontes que você consultou. Nunca invente número.";
 
 /**
+ * Separa a resposta da busca. Devolve `null` quando NÃO há faixa confiável.
+ *
+ * A DEGRADAÇÃO É O CAMINHO PRINCIPAL, não o de exceção — e este parser é onde
+ * ela mora. Em 2026-08-07 a primeira execução rodou sem `allowed_tools`, as
+ * buscas voltaram em `permission_denials`, e o modelo respondeu
+ * "FAIXA: Não disponível no momento (falha de permissão na busca)". O `null`
+ * daqui fez o kit sair com `[CONFIRMAR: pretensão]` e o finalize sair 3.
+ *
+ * Aquilo funcionou por sorte: o caminho de falha estava certo antes de o
+ * caminho feliz existir. Sorte não é garantia — por isso está testado.
+ *
+ * Qualquer coisa que não seja uma faixa afirmada vira `null`: o marcador
+ * INDISPONIVEL, mas também qualquer resposta em que o modelo diz que não
+ * conseguiu. Um número inventado num formulário é pior que um campo em branco.
+ */
+export function parseSalaryResponse(texto: string): { faixa: string; fontes: string } | null {
+  const faixa = /^FAIXA:\s*(.+)$/im.exec(texto)?.[1]?.trim();
+  const fontes = /^FONTES:\s*(.+)$/im.exec(texto)?.[1]?.trim() ?? "";
+  if (!faixa) return null;
+  if (/^INDISPONIVEL$/i.test(faixa)) return null;
+  // O modelo raramente devolve o marcador exato quando algo dá errado — ele
+  // narra a falha dentro do próprio campo. Isso também é ausência de dado.
+  if (/n[ãa]o (?:dispon[íi]vel|consegui|foi poss[íi]vel)|falha|indispon[íi]vel|N\/A/i.test(faixa)) return null;
+  return { faixa, fontes };
+}
+
+/**
  * Roda UMA busca e grava `salary-research.json` no kitDir.
  *
  * Não lança se a busca falhar — devolve `null` e o kit segue com
@@ -85,9 +112,9 @@ export async function pesquisarSalario(
   const r = await runHarness("salario", perfil, { systemPrompt: SYS, stdin: prompt });
   if (!r.ok) return null;
 
-  const faixa = /^FAIXA:\s*(.+)$/im.exec(r.text)?.[1]?.trim();
-  const fontes = /^FONTES:\s*(.+)$/im.exec(r.text)?.[1]?.trim() ?? "";
-  if (!faixa || /^INDISPONIVEL$/i.test(faixa)) return null;
+  const parsed = parseSalaryResponse(r.text);
+  if (!parsed) return null;
+  const { faixa, fontes } = parsed;
 
   const res: SalaryResearch = {
     faixa,

@@ -9,6 +9,9 @@
   },
   "scripts": {
     "db:migrate": "tsx src/cli/migrate.ts",
+    "salary": "tsx src/cli/salary.ts",
+    "kit": "tsx src/cli/kit.ts",
+    "measure": "tsx scripts/measure-kit.ts",
     "typecheck": "tsc --noEmit",
     "ui": "tsx src/server/index.ts",
     "pretest": "rm -rf .test-sandbox && mkdir -p .test-sandbox && cp -R tests/fixtures/sandbox-root/. .test-sandbox/",

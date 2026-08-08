@@ -19,6 +19,7 @@ import { parsePortableResponse, buildPortablePrompt } from "../core/portable-pro
 import { coverageReport, renderCoverageMd } from "../core/coverage.js";
 import { stripCitations } from "../core/truthcheck.js";
 import type { AppConfig } from "../core/config.js";
+import { assertVariantDeclarada } from "../core/variant-guard.js";
 
 export const VIAS = ["cli", "agentic", "external"] as const;
 export type Via = (typeof VIAS)[number];
@@ -133,6 +134,14 @@ export async function gerarKit(opts: {
     return res;
   }
 
+  // O redator TEM de receber a variante. Sem este guarda, um kit escrito sem
+  // disciplina de variante seria registrado como se tivesse uma.
+  assertVariantDeclarada(
+    JSON.parse(readFileSync(join(opts.kitDir, "bundle.json"), "utf-8")),
+    opts.config.experiments.enabled,
+    `gerarKit ${opts.jobId}`
+  );
+
   // ---- cli e external partem do mesmo PROMPT.md
   const promptPath = join(opts.kitDir, "PROMPT.md");
   const texto = buildPortablePrompt(opts.kitDir);
@@ -199,6 +208,10 @@ export async function gerarKit(opts: {
     "- Você só pode: reformular com a grafia exata do JD, reordenar, e cortar.",
     "- Keyword que não tem fato que a sustente FICA DE FORA.",
     "- Ruído de scraping (copiar link, etapa, link, voce, pessoas) deve ser ignorado.",
+    "- ORÇAMENTO DE TAMANHO: 1 linha por bullet (máx. 2), 3–6 bullets por experiência, e o",
+    "  currículo TEM de caber em 2 páginas. Cobrir mais keyword não vale uma terceira página:",
+    "  em vaga de entrada, currículo de 3 páginas é descartado por humano antes de qualquer ATS.",
+    "  Se precisar de espaço, CORTE o bullet menos relevante — não acrescente.",
     "",
     "Responda SÓ com o bloco delimitado:",
     "===== FILE: resume.md =====",

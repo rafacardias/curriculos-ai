@@ -62,9 +62,16 @@ describe("buildHarnessArgv", () => {
     assert.equal(valorDe(argv, "--tools"), "");
   });
 
-  it("--tools lista as ferramentas quando o perfil declara", () => {
-    const argv = buildHarnessArgv("salario", { ...OK, tools: ["WebSearch"] }, { systemPrompt: "s" });
+  it("--tools lista as ferramentas quando o perfil declara (com allowlist)", () => {
+    // A allowlist agora é obrigatória junto: `--tools` só torna a ferramenta
+    // disponível, `--allowedTools` a permite. Ver variant-e-degradacao.test.ts.
+    const argv = buildHarnessArgv(
+      "salario",
+      { ...OK, tools: ["WebSearch"], allowed_tools: ["WebSearch"] },
+      { systemPrompt: "s" }
+    );
     assert.equal(valorDe(argv, "--tools"), "WebSearch");
+    assert.ok(argv.includes("--allowedTools"));
   });
 
   it("substitui o system prompt em vez de acrescentar", () => {

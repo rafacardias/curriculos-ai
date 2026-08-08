@@ -38,6 +38,8 @@ achadas de novo, não redescobertas):
 | [ACHADO-05](#achado-05--o-10x-advisory-escapou-de-dois-filtros-e-nenhuma-das-hipóteses-estava-certa) | o filtro de tecnologia precisa de **seção**, não de marcador; e o detector de anos perde 37 vagas |
 | [CLASSE-01 inst. 6](#classe-01-instância-6--indexof-devolvendo-1-lido-como-índice-válido) | `indexOf` −1 lido como índice; dry-run e commit por caminhos diferentes |
 | [CLASSE-01 inst. 7](#classe-01-instância-7--chave-sem-valor-lida-como-informação-disponível) | `candidate_facts` sem `value` custou 7 dos 38 turnos de uma geração — mais que escrever os entregáveis |
+| [CLASSE-01 inst. 8](#classe-01-instância-8--variante-ausente-lida-como-variante-válida) | **a mais perigosa**: variante não declarada ao redator entraria no warehouse como dado válido. Verificado: nada entrou |
+| [CLASSE-01 inst. 9](#classe-01-instância-9---tools-sem---allowedtools) | `--tools` sem `--allowedTools` = `permission_denied` silencioso. A degradação honesta salvou por sorte, agora está testada |
 | [Lição de método](#lição-de-método--número-não-medido-nesta-sessão-é-hipótese-não-premissa) | **terceira vez** que número citado de memória virou fundamento de plano. Nenhuma fase é autorizada por projeção |
 | [ACHADO-06](#achado-06--detectseniority-mapeia-especialistaspecialist--senior-e-filtra-51-do-acervo) | "Specialist" tratado como sênior filtra 5 vagas vivas de ai-builder. **Medido, não corrigido** |
 | [Erro só em memória](#erro-de-pipeline-que-só-existe-em-memória) | cartão de erro some no restart — [promovido](#prioridade-movida-generation_runs-sai-da-fase-3) para logo depois da segmentação |
@@ -963,6 +965,58 @@ linha.
 **Generalização.** Ao montar contexto para um modelo, *chave sem valor* é pior que *chave
 ausente*: a chave ausente sinaliza a lacuna, a chave vazia a esconde. Se um campo é omitido de
 propósito, ele precisa dizer que foi omitido.
+
+---
+
+## CLASSE-01, instância 8 · variante ausente lida como variante válida
+
+**Forma A, camada de experimento — e a mais perigosa das oito, porque é silenciosa.**
+
+O caminho é: `prepare` atribui a variante A/B e grava no `bundle.json` → `finalize` copia
+`bundle.variant` para `resume_versions.variant` (`src/cli/kit.ts:369`) → o `/painel` agrega
+conversão por variante (`src/dashboard/build.ts:73`). **Nada nesse caminho verifica que o REDATOR
+conhecia a variante.** O que é registrado é a variante *atribuída*, não a *seguida*.
+
+As `REGRAS` do prompt portátil nunca mencionavam `variant` (ver a varredura de paridade). Um kit
+escrito pelo disparo único teria entrado no warehouse como "variante B" tendo sido redigido sem
+disciplina de variante nenhuma.
+
+**Por que é pior que um kit ruim.** Kit ruim aparece na cobertura. Instrumento corrompido não
+aparece em lugar nenhum — e contamina toda decisão futura tomada a partir da série. Não é regra
+perdida: é **dado inválido injetado numa série destinada a decidir**.
+
+**Verificado no banco (2026-08-07):** 19 `resume_versions`, **0 sem variante**, e todas as 19 do
+caminho agêntico — o `--out` do `kit generate` nunca registra. **Nada não-computável entrou.** A
+verificação foi feita antes do guarda existir, justamente para saber se havia dano a marcar.
+
+**Correção:** `src/core/variant-guard.ts`. Experimento ligado + variante não declarada = recusa,
+nunca default. Vale no `gerarKit` (antes de disparar) e no `measure-kit` (exit 6). Quando o
+experimento está desligado, `variant: null` é o estado correto e o guarda não age — a ausência ali
+é declarada, não omissão.
+
+---
+
+## CLASSE-01, instância 9 · `--tools` sem `--allowedTools`
+
+Duas flags que parecem uma. `--tools` diz quais ferramentas **existem**; `--allowedTools` diz
+quais são **permitidas**. Com `--setting-sources ""` não há allowlist herdada de lugar nenhum.
+
+Medido em 2026-08-07: o perfil `salario` declarava `tools: [WebSearch]` e nada mais. O modelo
+tentou buscar duas vezes, as duas voltaram em `permission_denials`, **o processo pai não viu erro
+nenhum**, e o modelo respondeu em prosa que não tinha conseguido pesquisar.
+
+É o mesmo defeito do `--model`: ausência de uma segunda declaração lida como permissão herdada.
+Corrigido em `buildHarnessArgv`, que recusa perfil com `tools` sem `allowed_tools` correspondente
+e nomeia qual faltou.
+
+### O que salvou, e por sorte
+
+A resposta do modelo (*"FAIXA: Não disponível no momento (falha de permissão na busca)"*) caiu no
+`null` do parser, o kit saiu com `[CONFIRMAR: pretensão]` e o `finalize` saiu 3. **O caminho de
+falha estava certo antes de o caminho feliz existir** — nenhum número inventado chegou perto de um
+formulário. Mas foi sorte: o parser nem conhecia aquela forma de resposta. Agora está testado
+(`tests/unit/variant-e-degradacao.test.ts`), com as frases reais que o modelo produziu, e com a
+cadeia inteira provada: sem faixa → `null` → `[CONFIRMAR:` → exit 3.
 
 ---
 

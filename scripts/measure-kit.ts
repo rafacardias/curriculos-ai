@@ -44,6 +44,8 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { getJob } from "../src/db/repo/jobs.js";
+import { loadConfig } from "../src/core/config.js";
+import { assertVariantDeclarada, VariantError } from "../src/core/variant-guard.js";
 import { loadMasterProfile } from "../src/core/profile.js";
 import { truthcheck, stripCitations } from "../src/core/truthcheck.js";
 import { coverageReport, renderCoverageMd } from "../src/core/coverage.js";
@@ -88,6 +90,25 @@ if (!job) {
 }
 const dir = values.dir;
 const profile = loadMasterProfile();
+
+// Variante ausente NÃO vira default. Pontuar um kit cuja variante o redator não
+// conhecia produz um número que entra numa comparação de conversão como se
+// fosse comparável. Ver src/core/variant-guard.ts.
+try {
+  const bundlePath = existsSync(join(dir, "bundle.json"))
+    ? join(dir, "bundle.json")
+    : join(dir, "..", "bundle.json");
+  const bundle = existsSync(bundlePath)
+    ? (JSON.parse(readFileSync(bundlePath, "utf-8")) as { variant?: unknown })
+    : null;
+  assertVariantDeclarada(bundle, loadConfig().experiments.enabled, `measure-kit ${dir}`);
+} catch (e) {
+  if (e instanceof VariantError) {
+    console.error(e.message);
+    process.exit(6);
+  }
+  throw e;
+}
 
 const EXPECTED = ["resume.md", "cover-letter.md", "answers.md", "outreach.md"];
 

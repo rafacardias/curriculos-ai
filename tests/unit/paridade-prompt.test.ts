@@ -30,6 +30,11 @@ import { REPO_ROOT } from "../helpers/sandbox.js";
 
 const SKILL = readFileSync(join(REPO_ROOT, ".claude/skills/gerar/SKILL.md"), "utf-8");
 const PROMPT_TS = readFileSync(join(REPO_ROOT, "src/core/portable-prompt.ts"), "utf-8");
+// O TERCEIRO texto de contrato: o prompt da revisão, em generate-kit.ts. Ele
+// também é uma destilação, e também perdeu coisa — o orçamento de tamanho. Foi
+// por isso que o kit da Techne com F4 saiu com 3 páginas: a revisão otimiza
+// cobertura e nada no laço sabia de páginas.
+const REVISAO_TS = readFileSync(join(REPO_ROOT, "src/local/generate-kit.ts"), "utf-8");
 
 interface Item {
   item: string;
@@ -97,6 +102,25 @@ const CONTRATO: Item[] = [
     porque: "apresentação de resultado, não redação",
   },
 ];
+
+describe("o prompt da REVISÃO carrega os inegociáveis", () => {
+  // A revisão recebe só o coverage-report e o currículo. Se ela não repetir as
+  // regras, otimiza a métrica sem limite — e foi o que aconteceu: currículo de
+  // 6.035 chars, o mais longo dos nove medidos, 3 páginas.
+  const OBRIGATORIOS: Array<[string, RegExp]> = [
+    ["citação [exp:id] preservada", /\[exp:<fact_id>\]/],
+    ["não inventar citação/skill/métrica", /NÃO pode inventar/i],
+    ["só reformular, reordenar e cortar", /reformular com a grafia exata do JD, reordenar, e cortar/i],
+    ["keyword sem fato fica de fora", /FICA DE FORA/i],
+    ["orçamento de tamanho: bullets", /3–6 bullets/],
+    ["orçamento de tamanho: 2 páginas", /2 páginas/],
+  ];
+  for (const [nome, rx] of OBRIGATORIOS) {
+    it(`repete: ${nome}`, () => {
+      assert.ok(rx.test(REVISAO_TS), `o prompt da revisão não repete "${nome}"`);
+    });
+  }
+});
 
 describe("paridade SKILL.md × REGRAS do prompt portátil", () => {
   it("controle positivo: os dois arquivos foram lidos e têm conteúdo", () => {
