@@ -210,6 +210,9 @@
   .chip.on { border-color: var(--signal); color: var(--signal); background: var(--signal-soft); }
   .srow { display: grid; grid-template-columns: 1fr auto; gap: 10px; border-bottom: 1px dashed var(--line); padding: 12px 0; align-items: start; }
   .srow:last-child { border-bottom: none; }
+  .trow { border-bottom: 1px dashed var(--line); padding: 12px 0; }
+  .trow:last-child { border-bottom: none; }
+  .trow .tid:disabled { opacity: .6; }
 
   /* ── seleção em lote na fila ──────────── */
   .pick {
@@ -267,6 +270,10 @@
   <div class="searchnote" id="urlnote"></div>
 
   <section id="fila" class="on">
+    <div class="row" style="margin-bottom:10px">
+      <label for="trackFilter">trilha:</label>
+      <select id="trackFilter"><option value="">todas</option></select>
+    </div>
     <div id="pipeline"></div>
     <div id="queue"></div>
     <details id="rejwrap">
@@ -306,6 +313,7 @@
 const $ = (s) => document.querySelector(s);
 const api = async (path, opts) => (await fetch(path, opts)).json();
 const post = (path, body) => api(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const put = (path, body) => api(path, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
@@ -401,7 +409,8 @@ async function loadSummary() {
 }
 
 async function loadQueue() {
-  const jobs = await api("/api/queue?limit=60");
+  const track = $("#trackFilter") ? $("#trackFilter").value : "";
+  const jobs = await api(`/api/queue?limit=60${track ? `&track=${encodeURIComponent(track)}` : ""}`);
   const el = $("#queue");
   if (!jobs.length) { el.innerHTML = `<div class="empty">fila vazia — rode uma busca acima</div>`; return; }
   el.innerHTML = jobs.map((j) => {
@@ -704,10 +713,90 @@ function esc(s) { return String(s ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;
 const SOURCES = ["remotive", "remoteok", "wwr", "gupy", "linkedin"];
 const DAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 let CFG = null;
+let TRACKS = null;
 
 async function loadConfig() {
   CFG = await api("/api/config");
   renderConfig();
+  loadTracksAdmin();
+}
+
+async function loadTracksAdmin() {
+  TRACKS = await api("/api/tracks");
+  renderTracksAdmin();
+}
+
+function trowHtml(t) {
+  const kws = t.keywords ? JSON.parse(t.keywords).join(", ") : "";
+  return `<div class="trow" data-id="${esc(t.id)}">
+    <div class="row">
+      <input type="text" class="tid" value="${esc(t.id)}" disabled title="id não é editável" style="width:120px">
+      <input type="text" class="tname" value="${esc(t.name)}" placeholder="nome" style="flex:1;min-width:160px">
+      <span class="chip ten ${t.enabled ? "on" : ""}">${t.enabled ? "habilitada" : "desabilitada"}</span>
+    </div>
+    <div class="row">
+      <input type="text" class="tkw" value="${esc(kws)}" placeholder="keywords separadas por vírgula" style="flex:1">
+      <button class="btn ghost tsave">salvar</button>
+    </div>
+  </div>`;
+}
+
+function newTrowHtml() {
+  return `<div class="trow new" data-id="">
+    <div class="row">
+      <input type="text" class="tid" placeholder="id (ex.: produtos)" style="width:120px">
+      <input type="text" class="tname" placeholder="nome (ex.: Produtos / PM / PO / SM)" style="flex:1;min-width:160px">
+    </div>
+    <div class="row">
+      <input type="text" class="tkw" placeholder="keywords separadas por vírgula" style="flex:1">
+      <button class="btn ghost tsave">criar</button>
+    </div>
+  </div>`;
+}
+
+function renderTracksAdmin() {
+  $("#tracksList").innerHTML = TRACKS.map(trowHtml).join("") || '<div class="sub">nenhuma trilha ainda</div>';
+  bindTracksAdmin();
+}
+
+function bindTracksAdmin() {
+  $("#tracksList").querySelectorAll(".ten").forEach((ch) =>
+    ch.addEventListener("click", () => {
+      ch.classList.toggle("on");
+      ch.textContent = ch.classList.contains("on") ? "habilitada" : "desabilitada";
+    })
+  );
+  $("#tracksList").querySelectorAll(".tsave").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const row = b.closest(".trow");
+      const id = row.dataset.id || row.querySelector(".tid").value.trim();
+      const name = row.querySelector(".tname").value.trim();
+      const keywords = row.querySelector(".tkw").value.split(",").map((s) => s.trim()).filter(Boolean);
+      if (!id || !name) { toast("id e nome são obrigatórios"); return; }
+      try {
+        if (row.classList.contains("new")) {
+          await post("/api/tracks", { id, name, keywords });
+          toast(`trilha "${id}" criada`);
+        } else {
+          const enabled = row.querySelector(".ten").classList.contains("on");
+          await put(`/api/tracks/${encodeURIComponent(id)}`, { name, keywords, enabled });
+          toast(`trilha "${id}" salva`);
+        }
+        loadTracksAdmin();
+        loadTrackFilter();
+      } catch (e) {
+        toast("erro ao salvar trilha");
+      }
+    })
+  );
+  const addBtn = $("#trackAdd");
+  if (addBtn && !addBtn.dataset.bound) {
+    addBtn.dataset.bound = "1";
+    addBtn.addEventListener("click", () => {
+      $("#tracksList").insertAdjacentHTML("beforeend", newTrowHtml());
+      bindTracksAdmin();
+    });
+  }
 }
 
 function srowHtml(s, i) {
@@ -744,6 +833,12 @@ function renderConfig() {
       <h4>Buscas configuradas</h4>
       <div id="cfgSearches">${c.searches.map(srowHtml).join("") || '<div class="sub">nenhuma busca — adicione abaixo</div>'}</div>
       <div class="row" style="margin:12px 0 0"><button class="btn" id="cfgAdd">+ adicionar busca</button></div>
+    </div>
+    <div class="cfg">
+      <h4>Trilhas</h4>
+      <div id="tracksList"></div>
+      <div class="row" style="margin:12px 0 0"><button class="btn" id="trackAdd">+ nova trilha</button></div>
+      <div class="sub">a trilha com maior overlap de keywords contra o texto da vaga vence e vira o <code>track_hint</code> — o overlap já alimenta 65% do score por padrão. <code>id</code> não é editável depois de criado: é o valor congelado em vagas já pontuadas. Desabilitar tira a trilha da disputa sem apagar histórico.</div>
     </div>
     <div class="cfg">
       <h4>Filtros duros</h4>
@@ -837,8 +932,23 @@ function bindConfig() {
   });
 }
 
-function loadAll() { loadSummary(); loadQueue(); loadBoard(); loadCompanies(); loadPipeline(); loadRejected(); }
+function loadAll() { loadSummary(); loadQueue(); loadBoard(); loadCompanies(); loadPipeline(); loadRejected(); loadTrackFilter(); }
 loadAll();
+
+async function loadTrackFilter() {
+  const tracks = await api("/api/tracks");
+  const sel = $("#trackFilter");
+  const atual = sel.value;
+  sel.innerHTML = `<option value="">todas</option>${tracks
+    .filter((t) => t.enabled)
+    .map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`)
+    .join("")}`;
+  sel.value = atual;
+  if (!sel.dataset.bound) {
+    sel.addEventListener("change", loadQueue);
+    sel.dataset.bound = "1";
+  }
+}
 setInterval(loadSummary, 30000);
 </script>
 </body>

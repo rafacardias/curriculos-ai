@@ -42,8 +42,10 @@ export function scoreJob(config: AppConfig, job: JobRow): { score: number; detai
   const w = config.scoring;
   const text = `${job.title} ${job.description ?? ""}`;
 
-  // 1. keyword_overlap × melhor trilha
-  const tracks = db.prepare("SELECT id, keywords FROM profile_tracks").all() as unknown as TrackRow[];
+  // 1. keyword_overlap × melhor trilha (só trilhas habilitadas competem)
+  const tracks = db
+    .prepare("SELECT id, keywords FROM profile_tracks WHERE enabled = 1")
+    .all() as unknown as TrackRow[];
   let trackHint: string | null = null;
   let overlap = 0;
   if (tracks.length) {

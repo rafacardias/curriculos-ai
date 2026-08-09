@@ -30,6 +30,7 @@ import { buildDashboard, DASHBOARD_PATH } from "../dashboard/build.js";
 import { setJobStatus, getJob } from "../db/repo/jobs.js";
 import { getApplicationByJob, createApplication, setApplicationStatus } from "../db/repo/applications.js";
 import { bumpCompanyStat } from "../db/repo/companies.js";
+import { listTracks, createTrack, updateTrack } from "../db/repo/profile-tracks.js";
 import { ulid } from "ulid";
 import { parseReasonClass } from "../core/feedback.js";
 import { applyFeedback, hasLearnedFrom, preferenceKeysFor, bumpPreferenceWeights } from "../db/repo/feedback.js";
@@ -83,7 +84,7 @@ function apiSummary() {
   };
 }
 
-function apiQueue(limit: number) {
+function apiQueue(limit: number, track?: string | null) {
   const db = getDb();
   return (
     db
@@ -102,6 +103,7 @@ function apiQueue(limit: number) {
       const p = pipelineItems.get(j.id);
       return !p || p.stage === "erro"; // em erro volta à fila para nova tentativa
     })
+    .filter((j) => !track || j.track_hint === track)
     .map((j) => ({
       ...j,
       score_detail: j.score_detail ? JSON.parse(j.score_detail) : null,
@@ -494,7 +496,7 @@ const server = createServer(async (req, res) => {
     } else if (req.method === "GET" && url.pathname === "/api/summary") {
       json(res, 200, apiSummary());
     } else if (req.method === "GET" && url.pathname === "/api/queue") {
-      json(res, 200, apiQueue(parseInt(url.searchParams.get("limit") ?? "50", 10)));
+      json(res, 200, apiQueue(parseInt(url.searchParams.get("limit") ?? "50", 10), url.searchParams.get("track")));
     } else if (req.method === "GET" && url.pathname === "/api/applications") {
       json(res, 200, apiApplications());
     } else if (req.method === "GET" && url.pathname === "/api/companies") {
@@ -543,6 +545,23 @@ const server = createServer(async (req, res) => {
     } else if (req.method === "POST" && url.pathname === "/api/search") {
       const { query } = await readBody(req);
       json(res, 200, await doSearch(query));
+    } else if (req.method === "GET" && url.pathname === "/api/tracks") {
+      json(res, 200, listTracks());
+    } else if (req.method === "POST" && url.pathname === "/api/tracks") {
+      const { id, name, summary, keywords } = await readBody(req);
+      try {
+        json(res, 200, createTrack({ id, name, summary: summary ?? null, keywords: keywords ?? [] }));
+      } catch (e) {
+        json(res, 400, { error: e instanceof Error ? e.message : String(e) });
+      }
+    } else if (req.method === "PUT" && url.pathname.startsWith("/api/tracks/")) {
+      const id = url.pathname.split("/").pop()!;
+      const { name, summary, keywords, enabled } = await readBody(req);
+      try {
+        json(res, 200, updateTrack(id, { name, summary, keywords, enabled }));
+      } catch (e) {
+        json(res, 400, { error: e instanceof Error ? e.message : String(e) });
+      }
     } else {
       json(res, 404, { error: "rota desconhecida" });
     }
