@@ -10,6 +10,13 @@
  * `ats` é `z.enum` fechado de propósito: declarar uma empresa com um ATS que
  * `company-watch.ts` ainda não sabe buscar tem que FALHAR alto na validação,
  * não ser silenciosamente ignorada.
+ *
+ * `"gupy"` é BEST-EFFORT DECLARADO, não integração estável: não existe API
+ * pública por empresa, o adapter faz scrape estruturado do `__NEXT_DATA__`
+ * da página do board (ver `src/adapters/company-gupy.ts`) — quebra sem aviso
+ * se a Gupy mudar o build do Next. Mesmo tratamento que a Fase B vai dar ao
+ * caso "sem ATS" (site próprio em HTML). Falha de parse nunca aborta o lote
+ * — vira `error` por empresa no orquestrador.
  */
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";

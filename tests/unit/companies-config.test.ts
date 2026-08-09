@@ -44,7 +44,10 @@ describe("loadCompaniesConfig", () => {
     // operador é válido contra o schema que o código realmente usa.
     const raw = parse(readFileSync(join(REPO_ROOT, "config", "companies.yaml"), "utf-8"));
     const companies = raw.map((c: unknown) => CompanyWatchSchema.parse(c));
-    assert.ok(companies.length >= 3);
+    // 2, não 3: TOTVS foi removida — "totvs.gupy.io" é 404 de verdade
+    // (verificado ao vivo), não só "não confirmada em GPTW/BH".
+    assert.ok(companies.length >= 2);
     assert.ok(companies.some((c: { handle: string }) => c.handle === "localiza"));
+    assert.ok(!companies.some((c: { handle: string }) => c.handle === "totvs"));
   });
 });

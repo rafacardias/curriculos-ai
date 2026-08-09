@@ -17,7 +17,11 @@
 import { getDb } from "../db/client.js";
 import { transaction } from "../db/client.js";
 import { loadCompaniesConfig, type CompanyWatch } from "./companies-config.js";
-import { fetchGupyCompanyJobs, type CompanyFetchResult } from "../adapters/company-gupy.js";
+import {
+  fetchGupyCompanyJobs,
+  type CompanyFetchResult,
+  type ModalityDistribution,
+} from "../adapters/company-gupy.js";
 import { insertJob } from "../db/repo/jobs.js";
 import { scoreNewJobs, type ScoredJob } from "./scoring.js";
 import { termsPresent } from "./keywords.js";
@@ -31,7 +35,7 @@ export interface CompanyWatchOutcome {
   filteredOut: number;
   inserted: number;
   error: string | null;
-  modalityStats: { withModality: number; withoutModality: number };
+  modalityStats: ModalityDistribution;
 }
 
 export interface WatchRunResult {
@@ -69,7 +73,7 @@ interface CompanyFetchOutcome {
   found: number;
   filteredOut: number;
   error: string | null;
-  modalityStats: { withModality: number; withoutModality: number };
+  modalityStats: ModalityDistribution;
 }
 
 /**
@@ -116,7 +120,7 @@ export async function runCompanyWatch(
         found: 0,
         filteredOut: 0,
         error: String(err),
-        modalityStats: { withModality: 0, withoutModality: 0 },
+        modalityStats: { remote: 0, hybrid: 0, onsite: 0, none: 0 },
       });
     }
   }

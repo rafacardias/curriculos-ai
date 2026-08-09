@@ -1,16 +1,48 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { resetDb, REPO_ROOT } from "../helpers/sandbox.js";
+import { resetDb } from "../helpers/sandbox.js";
 import { installFetchStub, type FetchStub } from "../helpers/net.js";
 import { getDb, nowIso } from "../../src/db/client.js";
 import { runCompanyWatch } from "../../src/core/company-watch.js";
 
-const HOLDING_FIXTURE = readFileSync(
-  join(REPO_ROOT, "tests/fixtures/http/gupy.company-jobs.json"),
-  "utf-8"
-);
+/**
+ * Fixture sintético próprio (não o real de company-gupy.test.ts) — este
+ * arquivo testa o FILTRO LÉXICO do orquestrador, então os títulos precisam
+ * bater/não bater de propósito com as trilhas semeadas abaixo. O shape (HTML
+ * + __NEXT_DATA__) é o mesmo formato real; só o conteúdo é inventado.
+ */
+function boardHtml(jobs: unknown[]): string {
+  return `<!DOCTYPE html><html><body>
+    <script id="__NEXT_DATA__" type="application/json">
+      ${JSON.stringify({ props: { pageProps: { careerPage: { name: "Fictícia Holding" }, jobs } } })}
+    </script>
+  </body></html>`;
+}
+
+const HOLDING_JOBS = [
+  {
+    id: 88001,
+    title: "Especialista em Automação de Processos",
+    type: "vacancy_type_effective",
+    department: "ai-builder e n8n",
+    workplace: { workplaceType: "remote", address: { city: "Belo Horizonte", stateShortName: "MG" } },
+  },
+  {
+    id: 88002,
+    title: "Product Manager Sênior",
+    type: "vacancy_type_effective",
+    department: "Product Owner e backlog",
+    workplace: { workplaceType: "on-site", address: { city: "Belo Horizonte", stateShortName: "MG" } },
+  },
+  {
+    id: 88003,
+    title: "Motorista de Frota",
+    type: "vacancy_type_effective",
+    department: null,
+    workplace: { workplaceType: null, address: { city: "Belo Horizonte", stateShortName: "MG" } },
+  },
+];
+const HOLDING_FIXTURE = boardHtml(HOLDING_JOBS);
 
 function seedTracks(): void {
   const db = getDb();
@@ -28,8 +60,8 @@ beforeEach(() => {
 });
 afterEach(() => stub?.restore());
 
-const ROUTES: Array<[RegExp, { body: string; status?: number }]> = [
-  [/ficticia-holding\.gupy\.io/, { body: HOLDING_FIXTURE }],
+const ROUTES: Array<[RegExp, { body: string; status?: number; contentType?: string }]> = [
+  [/ficticia-holding\.gupy\.io/, { body: HOLDING_FIXTURE, contentType: "text/html" }],
   [/ficticia-falha\.gupy\.io/, { body: "erro interno", status: 500 }],
 ];
 
@@ -41,7 +73,7 @@ describe("runCompanyWatch — dry-run (default)", () => {
     assert.equal(r.commit, false);
     const holding = r.outcomes.find((o) => o.handle === "ficticia-holding")!;
     assert.equal(holding.found, 3);
-    assert.equal(holding.filteredOut, 1, "a vaga de Motorista não bate com nenhuma keyword");
+    assert.equal(holding.filteredOut, 1, "a vaga de Motorista não bate com nenhuma keyword (título nem departamento)");
     assert.equal(holding.inserted, 2, "ai-builder + product manager passam o filtro léxico");
     assert.equal(r.scored.length, 2);
 
@@ -63,13 +95,13 @@ describe("runCompanyWatch — commit", () => {
     assert.equal(count, 2, "só as 2 que passaram o filtro, uma vez cada");
   });
 
-  it("contagem de modalidade estruturada vs. NULL, agregada", async () => {
+  it("distribuição de workplaceType, agregada — remote/hybrid/onsite/ausente", async () => {
     stub = installFetchStub(ROUTES);
     const r = await runCompanyWatch({ companyHandle: "ficticia-holding", commit: true });
     const holding = r.outcomes[0]!;
-    // As 3 vagas do fixture entram na contagem de modalidade (ela é calculada
-    // no fetch, antes do filtro léxico) — 2 com modalidade, 1 sem.
-    assert.deepEqual(holding.modalityStats, { withModality: 2, withoutModality: 1 });
+    // As 3 vagas do fixture entram na distribuição (calculada no fetch, antes
+    // do filtro léxico) — 1 remote, 0 hybrid, 1 on-site, 1 sem modalidade.
+    assert.deepEqual(holding.modalityStats, { remote: 1, hybrid: 0, onsite: 1, none: 1 });
   });
 });
 

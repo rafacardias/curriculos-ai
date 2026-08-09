@@ -47,6 +47,8 @@ achadas de novo, não redescobertas):
 | [ACHADO-08](#achado-08--remote_only-do-config-de-busca-é-decorativo-em-toda-a-stack) | nenhum adapter lê `remote_only`; `doSearch` do servidor nem repassa o campo. **Medido, não corrigido** |
 | [ACHADO-09](#achado-09--err_http_headers_sent-pré-existente-em-mainnenhum-teste-sobe-o-servidor-http-real) | `ERR_HTTP_HEADERS_SENT` reproduz idêntico em `main`; nenhum dos 360 testes sobe o dispatcher HTTP de verdade. **Medido, não corrigido** |
 | [ACHADO-10](#achado-10--get-apitracks-devolve-trilhas-desabilitadas-o-filtro-é-só-no-cliente) | `GET /api/tracks` devolve todas as trilhas, inclusive desabilitadas — filtro é só em `app.html`. **Medido, não corrigido** |
+| [ACHADO-11](#achado-11--o-board-da-gupy-por-empresa-não-tem-api-é-scrape-de-__next_data__) | `<handle>.gupy.io/api/v1/jobs` é 404 — o board por empresa é scrape de `__NEXT_DATA__`, não integração estável. Filtro léxico da Fase A é título+departamento, sem descrição: 2/782 vagas passaram na validação real. Modalidade estruturada: 782/782 (100%). **Corrigido** (adapter redesenhado) |
+| [ACHADO-12](#achado-12--totvsgupyio-é-404-de-verdade-handle-removido-do-cadastro) | `totvs.gupy.io` e 5 variações óbvias são 404 — handle errado, não "não confirmada". TOTVS removida de `config/companies.yaml`. **Corrigido** (removida) |
 
 ---
 
@@ -356,6 +358,66 @@ em vez de importar `listTracks()` direto do repo.
 (default mantém o comportamento atual — todas — pra não quebrar o painel de CONFIG), e
 `loadTrackFilter()` passar a pedir só as habilitadas ao servidor em vez de filtrar depois de
 baixar tudo. Nada alterado.
+
+### ACHADO-11 · o board da Gupy por empresa não tem API — é scrape de `__NEXT_DATA__`
+
+**Corrigido** — a primeira versão de `company-gupy.ts` (Fase A) assumiu, sem verificar ao vivo,
+que `<handle>.gupy.io/api/v1/jobs` seria o mesmo tipo de endpoint JSON que o agregador
+(`employability-portal.gupy.io`) já usa. É 404 de verdade — confirmado contra Localiza e Algar
+reais. **Não existe API pública por empresa.** O que existe é a página do board
+(`<handle>.gupy.io/`), Next.js server-rendered, com as vagas embutidas em
+`<script id="__NEXT_DATA__">` no HTML — `props.pageProps.jobs`, um array com TODAS as vagas de
+uma vez (773 pra Localiza, 9 pra Algar, sem paginação — SSR, não API paginada).
+
+**Isto muda a natureza do adapter**: não é integração estável, é scrape estruturado. `ats: "gupy"`
+em `companies-config.ts` está documentado como best-effort declarado — quebra sem aviso se a Gupy
+mudar o build do Next. Falha de parse vira `error` por empresa no orquestrador, nunca uma exceção
+que aborta o lote (já era assim antes; a diferença é que agora está documentado que ISTO é o
+motivo de existir, não só defesa genérica).
+
+**Consequência pra prioridade da Fase B (registrada, não muda a ordem agora)**: se Gupy já é
+scrape, Greenhouse — API JSON real e versionada — passa a ser o único adapter genuinamente
+estável desta feature. Vale mais peso na decisão de qual vem primeiro na Fase B do que só "caso
+real confirmado" (Hotmart).
+
+**Shape sem `description`**: `pageProps.jobs` não traz o texto do anúncio, só
+`title`/`department`/`workplace`. Buscar a descrição de cada vaga exigiria um 2º request por
+vaga (até 773 só pra uma empresa) — fora do escopo "núcleo mínimo" da Fase A. `department` entra
+no campo `description` do `RawJob` só pra dar ao filtro léxico um pouco mais que o título
+sozinho — mas o filtro da Fase A é **título+departamento**, não JD completo.
+
+**Os três números pedidos, medidos contra Localiza + Algar reais (`watch run`, dry-run, sem
+escrever):**
+
+| | valor |
+|---|---:|
+| total de vagas (efetivas, banco de talentos já excluído) | 782 |
+| passaram o filtro léxico título+departamento | **2 (0,3%)** |
+| modalidade estruturada (`workplaceType` presente) | **782/782 (100%)** |
+
+**O filtro título-only tem recall baixíssimo, como esperado** — "Especialista em Produto III"
+não menciona "product manager"/"product owner", e não tem descrição pra compensar. Isso é uma
+limitação REAL da Fase A, não um bug: qualquer melhoria de recall (buscar descrição, matching
+mais permissivo) é decisão de Fase B/C, com custo de request explícito a pesar.
+
+**A modalidade estruturada, por outro lado, é 100%** — as 782 vagas efetivas de Localiza+Algar
+TÊM `workplaceType` sempre presente (distribuição real: remote 10, hybrid 80, on-site 692,
+ausente 0). Pra este par de empresas, o gargalo do exit 5 (modalidade não verificada) **é
+eliminado por inteiro** nas vagas que a vigilância captura — não parcialmente, 100%. Isso é
+melhor do que a premissa original ("ATS quase sempre expõe modalidade de forma limpa") assumia.
+
+### ACHADO-12 · `totvs.gupy.io` é 404 de verdade — handle removido do cadastro
+
+**Corrigido** — a nota original de `config/companies.yaml` dizia "TOTVS está em Gupy mas NÃO foi
+confirmada em GPTW/BH". Verificado ao vivo nesta sessão: **`totvs.gupy.io` não existe** (404
+genuíno, não just "não confirmada"). Tentadas 5 variações óbvias de handle
+(`totvsgrupo`, `grupototvs`, `totvscarreiras`, `totvs-carreiras`, `vagastotvs`) — todas 404.
+Parado de adivinhar em vez de continuar tentando variações às cegas.
+
+TOTVS removida de `config/companies.yaml`. O critério de aceite da Fase A passa a ser
+Localiza + Algar (2 empresas reais e verificadas) — a prova de dedup (segunda execução → zero
+vagas novas) funciona igual com n=2. Se um dia fizer sentido incluir a TOTVS, o handle certo
+precisa ser achado primeiro (busca dedicada, não adivinhação de padrão).
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 

@@ -46,29 +46,39 @@ if (result.commit) appendInbox(result);
 function report(r: WatchRunResult): void {
   console.log(r.commit ? "APLICADO — gravou no banco.\n" : "DRY-RUN — nada foi escrito.\n");
 
+  let totalFound = 0;
+  let totalPassed = 0;
+  const dist = { remote: 0, hybrid: 0, onsite: 0, none: 0 };
+
   for (const o of r.outcomes) {
     if (o.error) {
       console.log(`✖ ${o.company} (${o.handle}): ${o.error}`);
       continue;
     }
+    const passouFiltro = o.found - o.filteredOut;
+    totalFound += o.found;
+    totalPassed += passouFiltro;
+    dist.remote += o.modalityStats.remote;
+    dist.hybrid += o.modalityStats.hybrid;
+    dist.onsite += o.modalityStats.onsite;
+    dist.none += o.modalityStats.none;
     console.log(
-      `${o.company} (${o.handle}): ${o.found} vagas · ${o.filteredOut} fora do léxico · ${o.inserted} novas`
+      `${o.company} (${o.handle}): ${o.found} vagas · ${passouFiltro} passaram o filtro título+departamento · ${o.inserted} novas`
     );
   }
 
-  const totalMod = r.outcomes.reduce(
-    (acc, o) => ({
-      with: acc.with + o.modalityStats.withModality,
-      without: acc.without + o.modalityStats.withoutModality,
-    }),
-    { with: 0, without: 0 }
-  );
-  const totalVagas = totalMod.with + totalMod.without;
-  if (totalVagas > 0) {
-    const pct = Math.round((totalMod.with / totalVagas) * 100);
+  // Os três números pedidos: total, quantas passaram o filtro título-only
+  // (a Fase A não busca descrição — ver company-gupy.ts), e a distribuição
+  // real de workplaceType — é ela que decide se o gargalo do exit 5 encolhe.
+  if (totalFound > 0) {
+    const pctFiltro = Math.round((totalPassed / totalFound) * 100);
+    console.log(`\nTotal de vagas: ${totalFound}`);
+    console.log(`Passaram o filtro (título+departamento, sem descrição nesta fase): ${totalPassed} (${pctFiltro}%)`);
+    const withMod = dist.remote + dist.hybrid + dist.onsite;
+    const pctMod = Math.round((withMod / totalFound) * 100);
     console.log(
-      `\nModalidade estruturada: ${totalMod.with}/${totalVagas} (${pct}%) — ` +
-        `este é o número que decide se o gargalo do exit 5 encolhe de verdade.`
+      `Modalidade estruturada: ${withMod}/${totalFound} (${pctMod}%) — ` +
+        `remote ${dist.remote} · hybrid ${dist.hybrid} · on-site ${dist.onsite} · ausente ${dist.none}`
     );
   }
 
