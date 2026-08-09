@@ -4,7 +4,12 @@ import { fetchJson, stripHtml, detectLanguage } from "./types.js";
 
 // Endpoint público do job board da Gupy — não documentado/versionado.
 // Validamos o shape com zod e falhamos alto em vez de inserir lixo.
-const Schema = z.object({
+//
+// `Schema` e `REMOTE_MAP` são exportados porque `src/adapters/company-gupy.ts`
+// (vigilância por empresa) fala com o MESMO backend Gupy, só que pelo board por
+// empresa (`<handle>.gupy.io`) em vez do agregador — o shape da resposta é
+// idêntico, então reusa a mesma validação em vez de duplicá-la.
+export const Schema = z.object({
   data: z.array(
     z.object({
       id: z.union([z.string(), z.number()]),
@@ -22,7 +27,7 @@ const Schema = z.object({
   ),
 });
 
-const REMOTE_MAP: Record<string, "remote" | "hybrid" | "onsite"> = {
+export const REMOTE_MAP: Record<string, "remote" | "hybrid" | "onsite"> = {
   remote: "remote",
   hybrid: "hybrid",
   "on-site": "onsite",

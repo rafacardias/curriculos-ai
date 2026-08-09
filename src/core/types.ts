@@ -1,6 +1,9 @@
 // Tipos de domínio — este módulo não conhece CLI nem Claude Code.
 
-export type JobSource = "gupy" | "remotive" | "remoteok" | "wwr" | "linkedin" | "manual";
+// "<ats>-watch" é o padrão de proveniência da vigilância por empresa (Fase A) —
+// mesmo ATS, caminho de descoberta diferente da busca por termo. Ver
+// src/core/company-watch.ts e KNOWN-BUGS.md (decisão de não reaproveitar "gupy").
+export type JobSource = "gupy" | "remotive" | "remoteok" | "wwr" | "linkedin" | "manual" | "gupy-watch";
 export type AtsPlatform = "greenhouse" | "lever" | "workday" | "gupy" | "linkedin" | "other";
 export type RemoteType = "remote" | "hybrid" | "onsite";
 export type JobStatus = "new" | "queued" | "rejected" | "expired" | "applied_elsewhere";

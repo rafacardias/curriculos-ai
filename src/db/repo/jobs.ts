@@ -53,9 +53,26 @@ export interface JobRow {
 
 const SNAPSHOT_DIR = join(PROJECT_ROOT, "output", "_jd-snapshots");
 
-/** Insere vaga nova; retorna null se o fingerprint já existe (dedup). */
+/**
+ * Insere vaga nova; retorna null se já existe (dedup).
+ *
+ * Duas chaves de identidade, checadas nesta ordem:
+ *  1. `(source, source_job_id)`, quando a fonte fornece um id nativo — sobrevive
+ *     a reformulação de texto entre polls (vigilância por empresa relê o mesmo
+ *     anúncio a cada 4-6h; `jobFingerprint` sozinho duplicaria se o título mudar
+ *     uma vírgula). Ver `007_watch_dedup.sql`.
+ *  2. `jobFingerprint` (companyName+title+location), o dedup CROSS-SOURCE — a
+ *     mesma vaga vista pela busca por termo e pela vigilância continua
+ *     colidindo mesmo com `source` diferente (`gupy` × `gupy-watch`).
+ */
 export function insertJob(raw: RawJob): JobRow | null {
   const db = getDb();
+  if (raw.sourceJobId) {
+    const bySourceId = db
+      .prepare("SELECT id FROM jobs WHERE source = ? AND source_job_id = ?")
+      .get(raw.source, raw.sourceJobId);
+    if (bySourceId) return null;
+  }
   const fingerprint = jobFingerprint(raw);
   const exists = db.prepare("SELECT id FROM jobs WHERE fingerprint = ?").get(fingerprint);
   if (exists) return null;
