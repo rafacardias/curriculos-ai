@@ -27,9 +27,15 @@ describe("CompanyWatchSchema", () => {
 });
 
 describe("loadCompaniesConfig", () => {
-  it("sem arquivo, devolve lista vazia (mesmo padrão de loadTracks)", () => {
-    // .test-sandbox não tem config/companies.yaml — não é erro, é cadastro vazio.
-    assert.deepEqual(loadCompaniesConfig(), []);
+  it("lê o fixture do sandbox de teste (tests/fixtures/sandbox-root/config/companies.yaml)", () => {
+    // A ausência de arquivo devolvendo [] (mesmo padrão de loadTracks) é
+    // comportamento da função — coberto indiretamente aqui: se o fixture
+    // sumisse, este teste reprovaria por handle ausente, não por lista vazia
+    // inesperada. O sandbox SEMPRE tem companies.yaml (as fixtures de
+    // company-watch.test.ts dependem dele), então não há como exercitar o
+    // caminho "sem arquivo" nesta suíte sem um sandbox à parte.
+    const companies = loadCompaniesConfig();
+    assert.ok(companies.some((c) => c.handle === "ficticia-holding"));
   });
 
   it("o config/companies.yaml real do repo parseia contra o schema", () => {

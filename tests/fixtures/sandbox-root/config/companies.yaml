@@ -1,0 +1,20 @@
+# Fixture de teste — nomes/handles sintéticos, mesma convenção das outras
+# fixtures HTTP ("Fictícia ..."). Não são as empresas reais de config/companies.yaml.
+
+- name: Fictícia Holding
+  ats: gupy
+  handle: ficticia-holding
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: Fictícia Falha Co
+  ats: gupy
+  handle: ficticia-falha
+  tracks: []
+  enabled: true
+
+- name: Fictícia Desabilitada
+  ats: gupy
+  handle: ficticia-desabilitada
+  tracks: []
+  enabled: false
