@@ -287,17 +287,50 @@ chamam as funções (`apiQueue`, `doApply`, `doFeedback` etc.) diretamente, pula
 `createServer(...)` inteiro. É por isso que rotas HTTP passam 100% verde nos testes e ainda assim
 podem quebrar ao vivo.
 
-**Hipótese não verificada** (não investigada a fundo — registrado como acha, não como causa
-confirmada): a instância manual crashou sem eu ter enviado request nenhum, o que sugere um
-cliente já conectado de antes (aba de browser com `loadAll()` fazendo poll a cada 4s, ou o
-terminal WebSocket com sua lógica de reconexão automática) bateu na porta assim que o processo
-novo assumiu, correndo com o ciclo de resposta de outra rota. A instância gerenciada por
-`launchd` (`ui-service.ts`), reiniciada logo depois nas mesmas condições, não crashou — o que é
-consistente com a hipótese (nenhum cliente reconectando na janela exata), mas não a prova.
+**Gatilho confirmado do crash nas subidas manuais** (não é mais hipótese): `src/server/index.ts`
+chama `execFileSync("open", ["http://localhost:4780"])` dentro do callback de `.listen()` sempre
+que `process.env.CURRICULOS_SERVICE` não está setado (linha ~627). Essa variável só é setada no
+plist do `launchd` (`src/local/ui-agent.ts:46`, `CURRICULOS_SERVICE=1`) — **nunca** por um `npx
+tsx src/server/index.ts` manual. Ou seja: toda subida manual desta sessão (3 tentativas, mais uma
+4ª com `lsof` — nenhuma setou a variável) abriu de fato uma aba de browser nova apontando pra
+`localhost:4780`, que carrega `app.html` e dispara `loadAll()` imediatamente (rajada de ~7 GETs
+concorrentes: `/api/summary`, `/api/queue`, `/api/applications`, `/api/companies`,
+`/api/pipeline`, `/api/rejected`, `/api/tracks`) contra um processo que acabou de subir. É por
+isso que `launchd` (que seta `CURRICULOS_SERVICE=1` e portanto nunca chama `open()`) nunca
+crashou nas mesmas condições, e toda subida manual crashou 3 de 3 vezes.
 
-**Correção proposta (não feita nesta sessão):** um teste que sobe `createServer` de verdade (não
-só as funções) e dispara requisições HTTP reais contra ele fecharia esse buraco de cobertura —
-teria pego este bug antes de qualquer smoke test manual. Nada foi alterado no dispatcher.
+**`lsof -i :4780` não flagrou nada**: nem antes de derrubar o serviço real, nem imediatamente
+depois (porta limpa), nem 0,8s após a subida manual (processo ainda nem tinha aberto a porta
+nesse instante) — o que é consistente com o gatilho ser a ABERTURA da aba pelo `open()`, que só
+acontece DEPOIS do `.listen()` bem-sucedido, não uma conexão pendente de antes.
+
+**Harness in-process criado** (`tests/e2e/server-http.test.ts`) — `createApp()` (refatoração
+mínima em `src/server/index.ts`: o handler que vivia dentro de `createServer(...)` virou uma
+função exportada que NÃO escuta porta nem chama `open()`; só o bloco de entrypoint no fim do
+arquivo, guardado por `isMainModule` — comparação de `import.meta.url` contra `process.argv[1]`
+— chama `.listen()` de verdade). O teste sobe em porta efêmera (`listen(0)`), sandbox via
+`CURRICULOS_ROOT`, nunca a porta 4780 real nem o banco de produção. Fecha o buraco de cobertura
+por construção: `GET /api/tracks` e `POST /api/score-confirm` agora têm prova HTTP real (6
+testes, `npm test`), incluindo a prova pelo CLI de que `kit prepare` sai 6 antes da confirmação
+e para de sair 6 depois.
+
+**Tentativa de reproduzir o crash no harness in-process: não reproduziu.** Uma rajada dos mesmos
+~7 GETs concorrentes que `loadAll()` dispara (via `fetch` real, não mock) contra a instância
+efêmera devolveu 200 e JSON válido em todas as 7, sem exceção. Isso não prova que o dispatcher
+está correto — só prova que "GETs concorrentes simples" não é o gatilho sozinho. Combinado com o
+achado do `open()`, a hipótese mais provável agora é algo específico do CLIENTE real (browser)
+que um `fetch` limpo não replica: uma requisição abortada a meio caminho (ex. o próprio
+`loadAll()` sendo re-disparado antes da rodada anterior terminar, ou uma aba fechada cancelando
+uma requisição em voo), ou a tentativa de upgrade do WebSocket (`/term`) competindo com uma
+resposta HTTP normal na mesma conexão keep-alive. Não investigado mais fundo — fica registrado
+como próximo passo, não como causa confirmada.
+
+**Correção do dispatcher**: continua não feita nesta sessão, por decisão explícita — é uma
+decisão separada da cobertura de teste. O que motivaria investigar: o `catch` genérico
+(`} catch (err) { json(res, 500, ...) }`) não verifica `res.headersSent` antes de escrever — um
+guard ali (`if (!res.headersSent) json(res, 500, ...)`) provavelmente silenciaria o sintoma sem
+entender a causa raiz (por que dois code-paths respondem a mesma conexão), o que teria o mesmo
+cheiro do CLASSE-01: tratar o sintoma, não a classe do defeito.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 

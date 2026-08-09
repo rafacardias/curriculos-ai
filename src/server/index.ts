@@ -496,7 +496,15 @@ async function doSearch(query?: string) {
   return { ok: true };
 }
 
-const server = createServer(async (req, res) => {
+/**
+ * Monta o servidor (rotas + WS do terminal) SEM escutar porta nenhuma — é o que
+ * permite um teste subir isto numa porta efêmera (`server.listen(0)`), em vez de
+ * depender do processo real na 4780. `.listen()` e o `execFileSync("open", ...)`
+ * continuam fora daqui, só no bloco de entrypoint no fim do arquivo — importar
+ * este módulo nunca deve abrir porta nem aba de browser sozinho.
+ */
+export function createApp() {
+  const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
   try {
     if (req.method === "GET" && url.pathname === "/") {
@@ -621,14 +629,25 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => shell.kill());
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`Curriculos UI: http://localhost:${PORT}`);
-  // como serviço (launchd) não abre o browser — senão surge uma aba a cada login/restart
-  if (!process.env.CURRICULOS_SERVICE) {
-    try {
-      execFileSync("open", [`http://localhost:${PORT}`]);
-    } catch {
-      /* abrir manualmente */
+  return server;
+}
+
+// Só sobe de verdade quando este arquivo é o processo principal — importar o
+// módulo (ex.: de um teste, via createApp()) nunca deve escutar porta nem abrir
+// browser. `npx tsx src/server/index.ts` e o binário do serviço (ui-service.ts →
+// launchd) passam por aqui; um `import { createApp } from "./index.js"` não.
+const isMainModule = !!process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  const server = createApp();
+  server.listen(PORT, "127.0.0.1", () => {
+    console.log(`Curriculos UI: http://localhost:${PORT}`);
+    // como serviço (launchd) não abre o browser — senão surge uma aba a cada login/restart
+    if (!process.env.CURRICULOS_SERVICE) {
+      try {
+        execFileSync("open", [`http://localhost:${PORT}`]);
+      } catch {
+        /* abrir manualmente */
+      }
     }
-  }
-});
+  });
+}
