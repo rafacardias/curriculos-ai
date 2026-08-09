@@ -183,7 +183,7 @@ cobertura; zero reprovações novas de truthcheck.
 | vaga | cobertura | ATS | exit | `[CONFIRMAR:` | pág |
 |---|---|---|---|---|---|
 | LMG Staffing — AI-Assisted SW Engineer | 57% → **50%** | 66 → 60 | 0 → 0 | 0 → 0 | 2 → 2 |
-| Hospital Care — Engenheiro de IA | 20% → **13%** | 36 → 30 | **0 → 3** | 0 → 1 | **2 → 3** |
+| Hospital Care — Engenheiro de IA `[STALE: --out não preservado]` | 20% → **13%** | 36 → 30 | **0 → 3** | 0 → 1 | **2 → 3** |
 | Techne — Analista de Chatbot Junior | 30% → 30% | 44 → 44 | 0 → 0 | 0 → 0 | 2 → 2 |
 | TSA — Analista de Automação | 30% → **33%** | 44 → 46 | 0 → 0 | 0 → 0 | 2 → 2 |
 | Unimed — Fluxo Conversacional | 50% → 50% | 60 → 60 | 0 → 0 | 0 → 0 | 2 → 2 |
@@ -216,7 +216,15 @@ contado quatro vezes pelo n-grama. O currículo agêntico mencionava MCP e o nov
 truthcheck é referencial, não semântico, então ele aprovaria o termo mesmo num bullet cujo fato
 citado não fala de MCP.
 
-**Hospital Care** (20% → 13%, resume 4.977 → **6.854 ch**, 2 → **3 páginas**):
+**Hospital Care** (20% → 13%, resume 4.977 → **6.854 ch**, 2 → **3 páginas**) —
+**`[STALE: --out não preservado]`**. Estes números são da v2 (2026-08-08, medida original), não
+recomputados desde então: o diretório `--out` da variante `--via cli` era scratch e não
+sobreviveu à sessão que fechou a Fase 0 (2026-08-08, sessão seguinte). O achado de causa (palavras
+genéricas, não sobreposição de n-grama — ver `KNOWN-BUGS.md`) foi verificado batendo as 4
+keywords perdidas contra o algoritmo corrigido, e elas não mudam — mas isso prova só que a CAUSA
+do −7 não é a que o `extractKeywords` corrigiu, não prova que o −7 continua −7 sob o critério
+novo. Recompute-lo exige regerar o kit `--via cli` de novo — o preço de ter deixado o `--out`
+em scratch da primeira vez.
 
 | | keywords |
 |---|---|
@@ -274,6 +282,19 @@ diretório de trabalho **sem copiar o `bundle.json`**, e sem ele não dá para s
 redator recebeu. O guarda estava certo e o encanamento errado — corrigido para o `--out` levar o
 bundle junto. Um kit que não carrega seu bundle não é auditável depois, que é exatamente o ponto
 do guarda.
+
+### Lição operacional: `--out` de comparação de não-regressão nunca mais em scratch
+
+Os diretórios `--out` desta rodada (LMG, Hospital Care e os outros três pares) não sobreviveram
+à sessão seguinte — eram scratch, não um lugar persistente. Consequência medida na sessão de
+2026-08-08 que fechou a Fase 0: o achado da Hospital Care (−7 pontos) não pôde ser recomputado
+sob o algoritmo de `extractKeywords` corrigido, só a causa pôde ser verificada indiretamente
+(ver `KNOWN-BUGS.md`, e o `[STALE]` na tabela acima). Regenerar os 5 kits `--via cli` do zero é
+o preço de ter jogado o `--out` fora — e é exatamente o custo que gravar num diretório persistente
+em disco (ex. `output/_non-regressao/<data>/` — já gitignorado por carregar JD e currículo reais,
+como todo `output/`, então não é um commit novo, só um caminho que sobrevive ao fim da sessão)
+teria evitado. Da próxima vez que rodar uma comparação `--via cli` × `--via agentic` para decidir
+o default, o `--out` grava em lugar que sobrevive à sessão, sempre.
 
 ## O que o critério de aceite NÃO prova
 
