@@ -40,6 +40,21 @@ describe("extractKeywords", () => {
     const t = "teste de regressão com Playwright e automação de API";
     assert.deepEqual(extractKeywords(t, 10), extractKeywords(t, 10));
   });
+
+  it("REQ-002/LMG: termo composto de 4 tokens não gera bigramas encadeados sobrepostos", () => {
+    // Achado real (KNOWN-BUGS.md): "Model Context Protocols (MCPs)" virava 4
+    // "keywords" via bigrama de stride 1 — model+context, context+protocols,
+    // protocols+mcps — o token do meio (context, protocols) contado duas vezes
+    // como bigrama além de uma vez como unigrama. Com stride 2, "context
+    // protocols" (o par do meio, sobreposto) não deve existir mais.
+    const kws = extractKeywords("Requisito: experiência com Model Context Protocols (MCPs) obrigatória", 40);
+    const terms = kws.map((k) => k.term);
+    assert.ok(!terms.includes("context protocols"), "bigrama sobreposto do meio não deveria existir");
+    assert.ok(terms.includes("model context"), "bigrama âncora do início continua");
+    assert.ok(terms.includes("protocols mcps"), "bigrama âncora seguinte continua");
+    // unigramas continuam existindo — coexistência de escala é intencional.
+    assert.ok(terms.includes("model") && terms.includes("context") && terms.includes("protocols"));
+  });
 });
 
 describe("termsPresent", () => {
