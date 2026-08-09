@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { resetDb } from "../helpers/sandbox.js";
 import { getDb, nowIso } from "../../src/db/client.js";
 import { loadConfig, type AppConfig } from "../../src/core/config.js";
-import { decidePolicy } from "../../src/core/policy.js";
-import { insertJob, getJob } from "../../src/db/repo/jobs.js";
+import { decidePolicy, blocksGenerationByScore } from "../../src/core/policy.js";
+import { insertJob, getJob, updateJobScore, confirmScore } from "../../src/db/repo/jobs.js";
 import { createApplication } from "../../src/db/repo/applications.js";
 import type { RawJob } from "../../src/core/types.js";
 
@@ -132,5 +132,46 @@ describe("decidePolicy — cascata de regras", () => {
     const payload = JSON.parse(ev.payload);
     assert.equal(payload.score, 90);
     assert.equal(payload.rule, "default");
+  });
+});
+
+describe("blocksGenerationByScore — gate real onde antes só havia rótulo", () => {
+  beforeEach(seedTracks);
+
+  it("score abaixo do corte, sem confirmação, bloqueia", () => {
+    const job = mkJob();
+    updateJobScore(job.id, config.policy.generate_min_score - 1, {}, "qa", "ignorar: score baixo", "new");
+    const bloqueado = getJob(job.id)!;
+    assert.ok(blocksGenerationByScore(config, bloqueado));
+  });
+
+  it("score no corte ou acima nunca bloqueia", () => {
+    const job = mkJob();
+    updateJobScore(job.id, config.policy.generate_min_score, {}, "qa", "gerar", "queued");
+    assert.equal(blocksGenerationByScore(config, getJob(job.id)!), null);
+  });
+
+  it("confirmScore libera a geração sem alterar o score calculado", () => {
+    const job = mkJob();
+    updateJobScore(job.id, config.policy.generate_min_score - 10, {}, "qa", "ignorar: score baixo", "new");
+    assert.ok(blocksGenerationByScore(config, getJob(job.id)!));
+
+    confirmScore(job.id, true, "conheço o CEO, quero aplicar mesmo assim");
+    const confirmado = getJob(job.id)!;
+    assert.equal(blocksGenerationByScore(config, confirmado), null);
+    assert.equal(confirmado.score, config.policy.generate_min_score - 10, "confirmar não reescreve o score");
+  });
+
+  it("confirmScore(false) desfaz a confirmação — volta a bloquear", () => {
+    const job = mkJob();
+    updateJobScore(job.id, config.policy.generate_min_score - 5, {}, "qa", "ignorar: score baixo", "new");
+    confirmScore(job.id, true, "teste");
+    confirmScore(job.id, false);
+    assert.ok(blocksGenerationByScore(config, getJob(job.id)!));
+  });
+
+  it("score null (vaga nunca pontuada) não bloqueia — nada para comparar", () => {
+    const job = mkJob();
+    assert.equal(blocksGenerationByScore(config, getJob(job.id)!), null);
   });
 });

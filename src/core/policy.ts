@@ -12,6 +12,25 @@ export interface PolicyDecision {
 }
 
 /**
+ * A geração deve ser recusada por score abaixo do corte?
+ *
+ * "ignorar: score X < Y" em `decidePolicy` sempre foi só o RÓTULO — nunca um gate
+ * de código. Nada em `kit.ts prepare` olhava para `shouldGenerate`; o "bloqueio"
+ * que o operador sentia era a skill do agente parando ali por convenção, não o
+ * sistema recusando. Sem gate real não existia como dizer "sei que é baixo,
+ * quero mesmo assim" — só editar `generate_min_score` pro config inteiro.
+ *
+ * Mesmo desenho de `blocksGeneration` (modality.ts): a confirmação é uma coluna
+ * separada (`score_confirmed_at`), nunca sobrescreve o `score` calculado.
+ */
+export function blocksGenerationByScore(config: AppConfig, job: JobRow): string | null {
+  if (job.score == null) return null;
+  if (job.score >= config.policy.generate_min_score) return null;
+  if (job.score_confirmed_at) return null;
+  return `score ${job.score} abaixo do corte de geração (${config.policy.generate_min_score})`;
+}
+
+/**
  * Policy engine: decide se vale gerar kit e em qual modo submeter,
  * com base em score, fonte, cooldown de empresa e cap semanal por trilha.
  * Toda decisão é logada em events (type=policy_decision).

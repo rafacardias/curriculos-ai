@@ -441,6 +441,14 @@ async function loadQueue() {
                </div>`
             : ""
         }
+        ${
+          j.blocksScore
+            ? `<div class="modrow">
+                 <span>score ${Math.round(j.score)} abaixo do corte de geração — bloqueia:</span>
+                 <button class="btn ghost scoreconfirm">confirmar mesmo assim</button>
+               </div>`
+            : ""
+        }
       </div>
       <div class="acts">
         <button class="btn" data-act="aprovar">Aprovar ↗</button>
@@ -450,10 +458,18 @@ async function loadQueue() {
     </div>`;
   }).join("");
 
-  el.querySelectorAll("[data-act], [data-mod]").forEach((b) =>
+  el.querySelectorAll("[data-act], [data-mod], .scoreconfirm").forEach((b) =>
     b.addEventListener("click", async () => {
       const card = b.closest(".card");
       const id = card.dataset.id;
+      if (b.classList.contains("scoreconfirm")) {
+        const note = prompt("por que gerar mesmo com o score abaixo do corte?", "");
+        if (note === null) return; // cancelou
+        await post("/api/score-confirm", { jobId: id, note });
+        toast("score confirmado — gere o kit normalmente");
+        loadQueue();
+        return;
+      }
       if (b.dataset.mod) {
         // Registra o que o operador leu no anúncio. Não infere: ele decide.
         await post("/api/modality", { jobId: id, state: b.dataset.mod, note: "confirmado na fila" });

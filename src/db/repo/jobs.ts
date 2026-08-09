@@ -42,6 +42,13 @@ export interface JobRow {
   modality_confirmed: string | null;
   modality_confirmed_at: string | null;
   modality_note: string | null;
+  /**
+   * Score baixo confirmado PELO OPERADOR — "eu sei que é abaixo do corte, quero
+   * mesmo assim". Mesma lógica de proveniência de `modality_confirmed`: campo
+   * separado do `score`, nunca sobrescreve o número calculado.
+   */
+  score_confirmed_at: string | null;
+  score_confirmed_note: string | null;
 }
 
 const SNAPSHOT_DIR = join(PROJECT_ROOT, "output", "_jd-snapshots");
@@ -97,6 +104,8 @@ export function insertJob(raw: RawJob): JobRow | null {
     modality_confirmed: null,
     modality_confirmed_at: null,
     modality_note: null,
+    score_confirmed_at: null,
+    score_confirmed_note: null,
   };
 
   db.prepare(
@@ -182,6 +191,21 @@ export function confirmModality(
         WHERE id = ?`
     )
     .run(state, state ? nowIso() : null, state ? note : null, id);
+}
+
+/**
+ * Registra que o OPERADOR quer gerar kit mesmo com score abaixo do corte.
+ *
+ * Nunca toca `score`: o número calculado fica intacto, a confirmação é uma decisão
+ * em cima dele, não uma correção dele. `confirmed=false` limpa a confirmação.
+ */
+export function confirmScore(id: string, confirmed: boolean, note: string | null = null): void {
+  getDb()
+    .prepare(
+      `UPDATE jobs SET score_confirmed_at = ?, score_confirmed_note = ?
+        WHERE id = ?`
+    )
+    .run(confirmed ? nowIso() : null, confirmed ? note : null, id);
 }
 
 /**

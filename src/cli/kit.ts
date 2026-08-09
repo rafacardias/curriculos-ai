@@ -11,9 +11,11 @@
  *   3  conteúdo ([CONFIRMAR: ...] sobrevivente, entregável ausente ou vazio)
  *   4  ATS (HTML hostil, ou o PDF não devolve o texto que deveria)
  *
- * E um do prepare:
+ * E dois do prepare:
  *   5  modalidade não verificada numa vaga fora da UF-base — recusa ANTES de
  *      gastar a geração, porque a resposta muda se vale a pena se candidatar
+ *   6  score abaixo do corte de geração e sem confirmação do operador — ver
+ *      `blocksGenerationByScore` em src/core/policy.ts
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -45,7 +47,7 @@ import { buildPortablePrompt, parsePortableResponse } from "../core/portable-pro
 import { resolveLocality } from "../core/locality.js";
 import { gerarKit, parseVia } from "../local/generate-kit.js";
 import { lerSalaryResearch } from "../local/salary.js";
-import { decidePolicy } from "../core/policy.js";
+import { decidePolicy, blocksGenerationByScore } from "../core/policy.js";
 import { assignVariant } from "../core/experiments.js";
 import { normalize } from "../core/dedup.js";
 import { wrapAtsHtml } from "../render/template.js";
@@ -111,12 +113,22 @@ Para ver as pistas do próprio anúncio:
     process.exit(5);
   }
 
+  // Gate de score — exit 6. Ver `blocksGenerationByScore` em src/core/policy.ts.
+  const bloqueioScore = blocksGenerationByScore(config, job);
+  if (bloqueioScore) {
+    console.error(`GERAÇÃO RECUSADA: ${bloqueioScore}
+
+Se quiser gerar mesmo assim:
+  npx tsx src/cli/score.ts confirm ${jobId} --note "por que vale a pena mesmo com o score baixo"`);
+    process.exit(6);
+  }
+
   mkdirSync(kitDir, { recursive: true });
   const jdText = `${job.title}\n${job.description ?? ""}`;
   const jdKeywords = extractKeywords(jdText, 40);
 
   const db = getDb();
-  const tracks = db.prepare("SELECT id, name, summary, keywords FROM profile_tracks").all() as unknown as Array<{
+  const tracks = db.prepare("SELECT id, name, summary, keywords FROM profile_tracks WHERE enabled = 1").all() as unknown as Array<{
     id: string; name: string; summary: string | null; keywords: string;
   }>;
 

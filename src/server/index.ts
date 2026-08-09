@@ -24,8 +24,9 @@ import { scoreNewJobs, decayPreferenceWeights, hardFilterReason } from "../core/
 import { funnelCounts } from "../core/funnel.js";
 import { addJobByUrl } from "../core/manual-job.js";
 import { blocksGeneration, resolveModality, parseModalityState } from "../core/modality.js";
+import { blocksGenerationByScore } from "../core/policy.js";
 import { resolveLocality } from "../core/locality.js";
-import { confirmModality } from "../db/repo/jobs.js";
+import { confirmModality, confirmScore } from "../db/repo/jobs.js";
 import { buildDashboard, DASHBOARD_PATH } from "../dashboard/build.js";
 import { setJobStatus, getJob } from "../db/repo/jobs.js";
 import { getApplicationByJob, createApplication, setApplicationStatus } from "../db/repo/applications.js";
@@ -86,11 +87,13 @@ function apiSummary() {
 
 function apiQueue(limit: number, track?: string | null) {
   const db = getDb();
+  const config = loadConfig();
   return (
     db
       .prepare(
         `SELECT id, title, company_name, url, source, ats_platform, location, remote_type,
                 modality_confirmed, modality_confirmed_at, modality_note,
+                score_confirmed_at, score_confirmed_note,
                 language, seniority, score, score_detail, track_hint, policy_action, posted_at
          FROM jobs
          WHERE status='queued'
@@ -111,6 +114,7 @@ function apiQueue(limit: number, track?: string | null) {
       // como "não é remoto". `blocksGeneration` diz se o Aprovar vai recusar.
       modality: resolveModality(j).state,
       blocksGeneration: blocksGeneration(j, resolveLocality(j.location)) != null,
+      blocksScore: blocksGenerationByScore(config, j) != null,
     }));
 }
 
@@ -321,6 +325,15 @@ function doApply(jobId: string) {
       ok: false,
       error: `${bloqueio}. Confirme a modalidade antes de gerar — a vaga tem o botão "modalidade" na fila, ou: modality set ${jobId} remote|hybrid|onsite`,
       needsModality: true,
+    };
+  }
+  // Mesmo gate do `kit prepare` (exit 6): score abaixo do corte sem confirmação.
+  const bloqueioScore = blocksGenerationByScore(loadConfig(), job);
+  if (bloqueioScore) {
+    return {
+      ok: false,
+      error: `${bloqueioScore}. Confirme que quer gerar mesmo assim — botão "score baixo" na fila, ou: score confirm ${jobId} --note "..."`,
+      needsScoreConfirm: true,
     };
   }
   doFeedback(jobId, "aprovar");
@@ -535,6 +548,10 @@ const server = createServer(async (req, res) => {
       if (!s) { json(res, 400, { error: "estado inválido — use remote, hybrid ou onsite" }); return; }
       confirmModality(jobId, s, note ?? null);
       json(res, 200, { ok: true, state: s });
+    } else if (req.method === "POST" && url.pathname === "/api/score-confirm") {
+      const { jobId, note } = await readBody(req);
+      confirmScore(jobId, true, note ?? null);
+      json(res, 200, { ok: true });
     } else if (req.method === "POST" && url.pathname === "/api/revert") {
       const { jobId } = await readBody(req);
       json(res, 200, doRevert(jobId));
