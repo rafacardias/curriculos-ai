@@ -786,6 +786,50 @@ alcançava sem o `rescore --commit` de 2026-08-07. O `rescore --commit` de 2026-
 com o `detectSeniority` corrigido — fila 4→6. Comparação histórica de `seniority` armazenado
 também só vale a partir deste commit, pelo mesmo motivo.
 
+## `extractKeywords` — bigrama de stride 2 (2026-08-08), e o que ficou provado vs. não provado
+
+**Correção aplicada** (commit `8163760`, `src/core/keywords.ts`): bigramas passam a formar de 2
+em 2 tokens, não de 1 em 1. Antes, um termo composto de N tokens gerava N-1 bigramas encadeados
+que se sobrepunham — cada token do meio entrava em dois bigramas vizinhos, além do próprio
+unigrama. Era a causa direta da reprovação da LMG Staffing na não-regressão v2
+(`docs/custo-geracao.md`): "Model Context Protocols (MCPs)" contado como 4 fragmentos
+(`context protocols`, `mcps`, `model context`, `protocols mcps`).
+
+**Verificado, sem regenerar kits** (regeneração via `--via cli` chama o binário `claude`
+diretamente — `src/local/generate-runner.ts:118` — e travaria num shell sandboxado do Claude
+Code; decisão do operador foi validar sem gastar). Recomputado `extractKeywords` sobre o JD REAL
+da LMG (`output/lmg-staffing-solutions-ai-assisted-software-engineer-web-app-xxn1qe/bundle.json`,
+que menciona "Model Context Protocols" 3 vezes em posições diferentes do texto) no `top=30` que
+`coverageReport()` usa de fato em produção:
+
+| termo | antigo (top30) | novo (top30) |
+|---|---|---|
+| `context protocols` | entra, count=6 | **fora do top30** |
+| `mcps` | entra, count=5 | entra, count=5 |
+| `model context` | entra, count=6 | entra, count=4 |
+| `protocols mcps` | entra, count=6 | entra, count=4 |
+
+O fragmento que causava a perda de cobertura (`context protocols`) some do corte real. **Isso é
+o que a correção prova, e só isso** — a contagem não zera para as outras formas porque a mesma
+frase aparece 3× em pontos diferentes do JD, e o alinhamento par/ímpar do stride depende de
+quantos tokens (pós-stopword) vieram antes de CADA ocorrência — cada uma "sorteia" um
+alinhamento próprio. Não há dupla-contagem por ocorrência individual (o que a correção garante),
+mas o conjunto de termos ainda pode conter mais de uma forma do mesmo termo composto quando ele
+recorre várias vezes com alinhamentos diferentes. Termo canônico único (1 entrada por entidade
+composta, sempre) exigiria rastrear ocorrências por posição, não por stride global — não fiz
+isso; ficaria como trabalho futuro se o padrão se repetir.
+
+**Não verificado, e por quê**: a mesma checagem rodada no JD da Hospital Care (segunda vaga que
+caiu 7 pontos na v2) mostra as 4 keywords perdidas (`back end`, `end`, `dados`, `engenharia`)
+com contagem **idêntica** entre o algoritmo antigo e o novo — esta correção não as afeta. A causa
+ali é outra: são palavras curtas genéricas (REQ-002 na forma original — n-grama sem noção de
+termo composto), não sobreposição de cadeia. **A não-regressão completa não foi reexecutada** —
+os diretórios `--out` da comparação v2 (`docs/custo-geracao.md`) eram scratch e não sobreviveram
+à sessão; reconstruir a tabela completa exige regerar os 5 kits `--via cli`, que não foi feito
+(decisão do operador, custo e risco de trava). Antes de decidir se `--via cli` volta a ser
+candidato a default, essa tabela precisa ser refeita de verdade — o que está registrado aqui é a
+prova pontual de que o mecanismo do bug está corrigido, não uma nova rodada de não-regressão.
+
 ---
 
 ## Custo assumido — o filtro de Python é a fronteira da trilha, não um detalhe de config
