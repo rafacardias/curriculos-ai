@@ -1,0 +1,29 @@
+# Cadastro de empresas vigiadas — ver src/core/companies-config.ts.
+#
+# `ats` só aceita o que company-watch.ts sabe buscar hoje (Fase A: só "gupy").
+# `tracks` são ids de profile_tracks — sem duplicar léxico aqui.
+#
+# GPTW/BH confirmado nesta sessão (Localiza e Algar): investigação com WebSearch/
+# WebFetch contra GPTW MG 2025/2026 e os respectivos boards de carreira, ver
+# KNOWN-BUGS.md e o plano da feature. TOTVS está em Gupy mas NÃO foi confirmada
+# na amostra GPTW/BH — entra só como fixture de teste da Fase A, marcada como tal.
+
+- name: Localiza
+  ats: gupy
+  handle: localiza
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: Algar
+  ats: gupy
+  handle: algar
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: TOTVS
+  ats: gupy
+  handle: totvs
+  tracks: [ai-builder, product]
+  enabled: true
+  # NÃO confirmada em GPTW/BH nesta sessão — fixture de teste da Fase A, não
+  # parte da lista curada. Confirme (ou remova) antes de tratar como cadastro real.
