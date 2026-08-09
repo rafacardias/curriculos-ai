@@ -46,6 +46,7 @@ achadas de novo, não redescobertas):
 | [ACHADO-07](#achado-07--migration-002testts-prova-o-lint-anti-droprename-só-contra-migrations-limpas) | lint anti-`DROP`/`RENAME` nunca testado contra migration que deveria falhar. **Medido, não corrigido** |
 | [ACHADO-08](#achado-08--remote_only-do-config-de-busca-é-decorativo-em-toda-a-stack) | nenhum adapter lê `remote_only`; `doSearch` do servidor nem repassa o campo. **Medido, não corrigido** |
 | [ACHADO-09](#achado-09--err_http_headers_sent-pré-existente-em-mainnenhum-teste-sobe-o-servidor-http-real) | `ERR_HTTP_HEADERS_SENT` reproduz idêntico em `main`; nenhum dos 360 testes sobe o dispatcher HTTP de verdade. **Medido, não corrigido** |
+| [ACHADO-10](#achado-10--get-apitracks-devolve-trilhas-desabilitadas-o-filtro-é-só-no-cliente) | `GET /api/tracks` devolve todas as trilhas, inclusive desabilitadas — filtro é só em `app.html`. **Medido, não corrigido** |
 
 ---
 
@@ -331,6 +332,30 @@ decisão separada da cobertura de teste. O que motivaria investigar: o `catch` g
 guard ali (`if (!res.headersSent) json(res, 500, ...)`) provavelmente silenciaria o sintoma sem
 entender a causa raiz (por que dois code-paths respondem a mesma conexão), o que teria o mesmo
 cheiro do CLASSE-01: tratar o sintoma, não a classe do defeito.
+
+### ACHADO-10 · `GET /api/tracks` devolve trilhas desabilitadas — o filtro é só no cliente
+
+**Medido, não corrigido** — achado do harness in-process (`tests/e2e/server-http.test.ts`,
+ACHADO-09), promovido de nota de rodapé a achado próprio por pedido do operador.
+
+`src/server/index.ts`, rota `GET /api/tracks`, chama `listTracks()` sem `{ onlyEnabled: true }` —
+devolve TODAS as trilhas, `enabled: 0` incluído. O dropdown da fila (`app.html`,
+`loadTrackFilter()`) filtra depois de receber a lista inteira (`.filter(t => t.enabled)`); o
+painel de CRUD em CONFIG (`loadTracksAdmin()`) usa a mesma rota e precisa ver as desabilitadas
+pra poder reabilitá-las — foi por isso que o servidor não filtra, não por descuido.
+
+**Por que isso é ACHADO e não só um detalhe de implementação**: o contrato da rota, hoje, só é
+seguro porque o único consumidor é `app.html`, que sabe filtrar. Qualquer consumidor NOVO que
+chame `GET /api/tracks` esperando "as trilhas que valem" (o nome da rota sugere isso, não "todas
+as trilhas, filtre você") recebe trilha desabilitada sem sinal nenhum de que ela está fora de
+uso — a não ser ler `enabled` e saber que precisa checar. A Fase A da vigilância por empresa é
+exatamente esse consumidor novo em potencial, se algum dia precisar consultar trilhas via HTTP
+em vez de importar `listTracks()` direto do repo.
+
+**Correção proposta (não feita nesta sessão)**: `GET /api/tracks` aceitar `?enabled=true`
+(default mantém o comportamento atual — todas — pra não quebrar o painel de CONFIG), e
+`loadTrackFilter()` passar a pedir só as habilitadas ao servidor em vez de filtrar depois de
+baixar tudo. Nada alterado.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
