@@ -11,6 +11,7 @@ import {
   parseModalityState,
   blocksGeneration,
 } from "../../src/core/modality.js";
+import { resolveLocality } from "../../src/core/locality.js";
 
 /** Localidades resolvidas, na forma que `blocksGeneration` consome. */
 const EM_CASA = { level: "city", isHomeUf: true };
@@ -27,14 +28,52 @@ describe("blocksGeneration — cobra a modalidade onde ela custa caro", () => {
     assert.equal(blocksGeneration({ remote_type: null, location: "Belo Horizonte, MG" }, EM_CASA), null);
   });
 
-  it("pendente SEM localidade não bloqueia — não se pune ausência com ausência", () => {
-    assert.equal(blocksGeneration({ remote_type: null, location: null }, SEM_LOCAL), null);
+  it("pendente SEM localidade também bloqueia — zero sinal não é ausência aceitável", () => {
+    // Comportamento ANTERIOR (invertido nesta sessão, Fase 1): "sem localidade não
+    // bloqueia" soava como não punir ausência com ausência, mas esse par de sinais —
+    // modalidade nunca extraída E location NUNCA PREENCHIDA (null/vazia) — é
+    // exatamente o que uma vaga adicionada por `/vaga <url>` produz. Deixar passar
+    // era zero verificação, não ausência tolerável. (Location PRESENTE mas não
+    // reconhecida é um caso diferente — resolve para "foreign", não "unknown", e já
+    // bloqueava antes desta sessão; ver describe abaixo com `resolveLocality()` real.)
+    assert.ok(blocksGeneration({ remote_type: null, location: null }, SEM_LOCAL));
   });
 
   it("estado afirmado nunca bloqueia, seja qual for", () => {
     for (const rt of ["remote", "hybrid", "onsite"]) {
       assert.equal(blocksGeneration({ remote_type: rt, location: "São Paulo, SP" }, FORA), null, rt);
     }
+  });
+});
+
+describe("blocksGeneration × resolveLocality() de verdade — ausente vs. não-reconhecida", () => {
+  // O par acima (SEM_LOCAL etc.) testa blocksGeneration isolada, com `loc` fabricado à
+  // mão — nunca prova o que uma location de verdade produz. `resolveLocality()` só
+  // devolve "unknown" para location AUSENTE (null/vazia/só espaço —
+  // src/core/locality.ts: `if (!raw?.trim()) return UNKNOWN`). Uma string PRESENTE mas
+  // não reconhecida por nenhum nível do léxico (cidade/UF/país) cai em "foreign", não
+  // "unknown" — e "foreign" já bloqueava ANTES desta sessão, porque o código velho só
+  // liberava `level === "unknown"`. O buraco que a Fase 1 fechou é mais estreito do
+  // que "location fora do léxico" sugere: é location NUNCA PREENCHIDA.
+
+  it("location ausente (null) → resolveLocality devolve 'unknown' → bloqueia", () => {
+    const loc = resolveLocality(null);
+    assert.equal(loc.level, "unknown");
+    assert.ok(blocksGeneration({ remote_type: null, location: null }, loc));
+  });
+
+  it("location vazia/só espaço → também 'unknown' → bloqueia", () => {
+    const loc = resolveLocality("   ");
+    assert.equal(loc.level, "unknown");
+    assert.ok(blocksGeneration({ remote_type: null, location: "   " }, loc));
+  });
+
+  it("REGRESSÃO-GUARD: location presente e não reconhecida ('Marte') é 'foreign', não 'unknown' — já bloqueava antes desta sessão e continua bloqueando agora", () => {
+    // Se um dia alguém "liberar" foreign em blocksGeneration achando que é o mesmo
+    // caso de unknown, este teste reprova.
+    const loc = resolveLocality("Marte");
+    assert.equal(loc.level, "foreign");
+    assert.ok(blocksGeneration({ remote_type: null, location: "Marte" }, loc));
   });
 });
 

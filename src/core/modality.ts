@@ -104,18 +104,27 @@ export function modalityLabel(m: Modality): string {
  * min, e a pergunta "isso é remoto?" precisa de resposta ANTES de escrever uma
  * carta dizendo que ele topa o cargo.
  *
- * Só bloqueia FORA da UF-base: em Belo Horizonte, presencial, híbrido e remoto
+ * Só NÃO bloqueia na UF-base: em Belo Horizonte, presencial, híbrido e remoto
  * são todos aceitáveis, então a modalidade não muda a decisão e não vale a
- * interrupção. `unknown` sem localidade reconhecida também passa — bloquear ali
- * seria punir ausência com ausência.
+ * interrupção.
+ *
+ * `unknown` sem localidade reconhecida (`loc.level === "unknown"`) TAMBÉM
+ * bloqueia — não bloqueava antes ("não punir ausência com ausência"), mas essa
+ * leitura tinha um buraco: é exatamente o par de sinais que uma vaga adicionada
+ * por `/vaga <url>` produz (o adapter manual não extrai modalidade, e a string
+ * de `location` às vezes não bate com nada em `config/locality.yaml`) — ou
+ * seja, zero verificação em vez de "ausência aceitável". Zero sinal não é
+ * menos arriscado que sinal-fora-de-casa; é o mesmo risco sem o alarme.
  */
 export function blocksGeneration(
   job: ModalityInput & { location?: string | null },
   loc: { level: string; isHomeUf: boolean }
 ): string | null {
   if (resolveModality(job).state !== "unknown") return null;
-  if (loc.level === "unknown" || loc.isHomeUf) return null;
-  return `modalidade não verificada e a vaga é fora da UF-base (${job.location ?? "?"})`;
+  if (loc.isHomeUf) return null;
+  const motivo =
+    loc.level === "unknown" ? "e a localidade não foi reconhecida" : "e a vaga é fora da UF-base";
+  return `modalidade não verificada ${motivo} (${job.location ?? "?"})`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

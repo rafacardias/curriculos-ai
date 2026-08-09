@@ -44,6 +44,7 @@ achadas de novo, não redescobertas):
 | [ACHADO-06](#achado-06--detectseniority-mapeia-especialistaspecialist--senior-e-filtra-51-do-acervo) | "Specialist" tratado como sênior filtra 5 vagas vivas de ai-builder. **Corrigido** (`src/core/dedup.ts:37`) |
 | [Erro só em memória](#erro-de-pipeline-que-só-existe-em-memória) | cartão de erro some no restart — [promovido](#prioridade-movida-generation_runs-sai-da-fase-3) para logo depois da segmentação |
 | [ACHADO-07](#achado-07--migration-002testts-prova-o-lint-anti-droprename-só-contra-migrations-limpas) | lint anti-`DROP`/`RENAME` nunca testado contra migration que deveria falhar. **Medido, não corrigido** |
+| [ACHADO-08](#achado-08--remote_only-do-config-de-busca-é-decorativo-em-toda-a-stack) | nenhum adapter lê `remote_only`; `doSearch` do servidor nem repassa o campo. **Medido, não corrigido** |
 
 ---
 
@@ -232,6 +233,34 @@ acaso", porque a regex nunca teve chance de falhar contra um input que deveria r
 **Correção proposta (próxima rodada):** uma migration sintética fixture com `DROP TABLE` (ou
 `RENAME`), e um teste que afirma que o lint a rejeita. Uma linha de asserção nova, não redesenho.
 Nada foi alterado.
+
+### ACHADO-08 · `remote_only` do config de busca é decorativo em toda a stack
+
+**Medido, não corrigido** — achado da exploração da Fase 1 (filtro dual de localização pedido
+pelo operador; decisão foi fechar o buraco real de modalidade/localidade em vez de construir a
+UI de busca dual, exatamente por causa deste achado).
+
+`config.yaml → searches[].remote_only` existe no schema (`src/core/config.ts`), é salvo e
+exibido na UI de CONFIG ("BUSCAS CONFIGURADAS"), mas **nenhum adapter o lê**: `gupy.ts`,
+`remotive.ts`, `remoteok.ts` e `wwr.ts` desestruturam só `{ query, limit }` do `SearchParams`;
+`linkedin-guest.ts` é o único que usa `location` de fato (na URL da busca), mas também ignora
+`remoteOnly`. O toggle é armazenado e mostrado, sem nunca mudar um resultado de busca.
+
+Consequência prática: duas buscas salvas com a mesma query e `location`/`remote_only`
+diferentes, para 4 das 5 fontes, buscam exatamente o mesmo resultado bruto — a dedup por
+`jobFingerprint` (que usa a localização do PRÓPRIO anúncio, não o filtro de busca) absorve a
+duplicata silenciosamente, e nenhum filtro real acontece.
+
+**Achado paralelo**: `doSearch()` no servidor (`src/server/index.ts`, usado pelo `/api/search`)
+nem repassa `remote_only` para `runSearch` — só `location` — diferente do CLI (`src/cli/search.ts`),
+que passa os dois. Mesma vaga, mesmo config, comportamento diferente dependendo de quem disparou
+a busca.
+
+A proteção real que o operador queria (BH aceita qualquer modalidade, fora disso só remoto) não
+vem daqui — vem do filtro pós-coleta (`exclude_onsite_outside_home_uf` + `blocksGeneration`,
+ver Fase 1 desta sessão). Corrigir `remote_only` para filtrar de verdade exigiria investigar a
+API de cada fonte individualmente (nem toda API de vaga aceita filtro de modalidade na busca) —
+escopo maior que o que foi pedido. Nada foi alterado.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
