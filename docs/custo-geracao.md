@@ -326,6 +326,35 @@ Registrado como custo real, não como defeito. A consequência operacional é qu
 comparativa precisa checar a modalidade das vagas da amostra **antes** de começar, senão a
 amostra encolhe no meio.
 
+## O gargalo do exit 5, atacado na origem — medido, não prometido (Fase A da vigilância)
+
+O parágrafo acima é o sintoma: `E — Analista de Automação` e `10x Advisory` caíram em exit 5
+porque a modalidade nunca foi extraída na coleta (LinkedIn e `/vaga <url>` não extraem
+`remote_type` — ver `src/core/modality.ts`). A vigilância por empresa (Gupy, Fase A,
+2026-08-09) ataca essa causa, não o sintoma: **782 vagas efetivas coletadas de Localiza+Algar,
+782 com `workplaceType` estruturado — 100%, zero inferência.**
+
+| | valor |
+|---|---:|
+| vagas efetivas coletadas | 782 |
+| com modalidade estruturada na origem | **782 (100%)** |
+| distribuição | remote 10 · hybrid 80 · on-site 692 |
+
+Medido em duas empresas reais, não prometido a partir de "ATS costuma expor modalidade" — a
+premissa original da Fase A era mais fraca do que o resultado. Para vagas capturadas por este
+caminho, o exit 5 deixa de ser um risco: a resposta "isso é remoto?" já vem no board, antes de
+qualquer `kit prepare`. Não generaliza sozinho para outros ATS (Greenhouse/HTML entram na Fase
+B, cada um com sua própria taxa a medir) — este número vale para Gupy especificamente.
+
+**O outro lado da mesma medição, que não é boa notícia**: o filtro léxico título+departamento
+que decide o que passa pra dentro do funil teve recall de **2/782 (0,3%)** — não "baixo", quase
+zero. A assimetria de erro importa mais que a taxa: falso positivo custa um `scoreJob` (~nada);
+falso negativo custa a vaga inteira, que é a única coisa que a feature existe para não perder.
+Registrado em `KNOWN-BUGS.md` (ACHADO-11) como filtro calibrado na direção errada — correção não
+feita nesta sessão; a pergunta certa para a Fase B não é "como melhorar o filtro", é se o filtro
+pré-insert deveria existir, dado que `scoreJob`/`decidePolicy` já são um classificador melhor
+que keyword match e o volume (782/poll) é trivial para o pipeline absorver sem filtro nenhum.
+
 ## Não-regressão (F2) — **REPROVOU**. O `--via=cli` não virou default
 
 Critério do operador, em código: nenhuma vaga pode piorar mais de **5 pontos de cobertura**, e

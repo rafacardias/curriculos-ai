@@ -405,6 +405,21 @@ TÊM `workplaceType` sempre presente (distribuição real: remote 10, hybrid 80,
 ausente 0). Pra este par de empresas, o gargalo do exit 5 (modalidade não verificada) **é
 eliminado por inteiro** nas vagas que a vigilância captura — não parcialmente, 100%. Isso é
 melhor do que a premissa original ("ATS quase sempre expõe modalidade de forma limpa") assumia.
+Ver também `docs/custo-geracao.md`, seção "O gargalo do exit 5, atacado na origem".
+
+**0,3% não é "recall baixo" — é o filtro calibrado na direção errada.** 2 de 782 é quase zero, e
+a assimetria de erro importa mais que a taxa: falso positivo custa um `scoreJob` (~nada); falso
+negativo custa a vaga inteira, a única coisa que a feature existe para não perder. Não corrigido
+nesta sessão, por decisão explícita — mas a pergunta certa pra Fase B não é "como melhorar o
+léxico", é **por que filtrar antes do `insertJob`**. `scoreJob`+`decidePolicy` já são um
+classificador mais rico que keyword match contra título+departamento, o gate de score
+(`blocksGenerationByScore`, sessão anterior) já cuida do que não presta, e 782 vagas por poll é
+trivial pra HTTP+SQL absorver sem filtro léxico nenhum. Inverter — inserir tudo, deixar o score
+decidir — ressuscita a pergunta que a investigação de dedup desta sessão descartou (tabela de
+"vistos" pros que o filtro léxico rejeita nunca era necessária porque nada era filtrado antes do
+insert): sem filtro léxico, TODA vaga vira `insertJob`, e o dedup por `(source, source_job_id)`
+(007_watch_dedup.sql) passa a ser o único guarda-corpo contra floodar `jobs` com vaga de
+motorista a cada poll. Decisão de fase, não desta sessão.
 
 ### ACHADO-12 · `totvs.gupy.io` é 404 de verdade — handle removido do cadastro
 
