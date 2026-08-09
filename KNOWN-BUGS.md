@@ -45,6 +45,7 @@ achadas de novo, não redescobertas):
 | [Erro só em memória](#erro-de-pipeline-que-só-existe-em-memória) | cartão de erro some no restart — [promovido](#prioridade-movida-generation_runs-sai-da-fase-3) para logo depois da segmentação |
 | [ACHADO-07](#achado-07--migration-002testts-prova-o-lint-anti-droprename-só-contra-migrations-limpas) | lint anti-`DROP`/`RENAME` nunca testado contra migration que deveria falhar. **Medido, não corrigido** |
 | [ACHADO-08](#achado-08--remote_only-do-config-de-busca-é-decorativo-em-toda-a-stack) | nenhum adapter lê `remote_only`; `doSearch` do servidor nem repassa o campo. **Medido, não corrigido** |
+| [ACHADO-09](#achado-09--err_http_headers_sent-pré-existente-em-mainnenhum-teste-sobe-o-servidor-http-real) | `ERR_HTTP_HEADERS_SENT` reproduz idêntico em `main`; nenhum dos 360 testes sobe o dispatcher HTTP de verdade. **Medido, não corrigido** |
 
 ---
 
@@ -261,6 +262,42 @@ vem daqui — vem do filtro pós-coleta (`exclude_onsite_outside_home_uf` + `blo
 ver Fase 1 desta sessão). Corrigir `remote_only` para filtrar de verdade exigiria investigar a
 API de cada fonte individualmente (nem toda API de vaga aceita filtro de modalidade na busca) —
 escopo maior que o que foi pedido. Nada foi alterado.
+
+### ACHADO-09 · `ERR_HTTP_HEADERS_SENT` pré-existente em `main`; nenhum teste sobe o servidor HTTP real
+
+**Medido, não corrigido** — achado do smoke test manual da Fase 1-3 (2026-08-09). Subir
+`src/server/index.ts` manualmente (`CURRICULOS_ROOT` apontando pro sandbox de teste, porta 4780)
+crashou dentro de ~3s de boot, antes de qualquer `curl` deliberado:
+
+```
+Error [ERR_HTTP_HEADERS_SENT]: Cannot write headers after they are sent to the client
+    at ServerResponse.writeHead (node:_http_server:365:11)
+    at json (src/server/index.ts — catch genérico do dispatcher)
+    at Server.<anonymous> (src/server/index.ts, mesmo catch)
+```
+
+O `catch` genérico do dispatcher HTTP (`} catch (err) { json(res, 500, ...) }`) tenta escrever
+uma resposta numa conexão que **já recebeu resposta** de outro código-path da mesma requisição.
+
+**Reproduzido igual em `main`** (checkout limpo, mesmo sandbox, mesma janela de 3s, mesmo
+stacktrace, só a linha muda porque `main` não tem as rotas novas de `/api/tracks` antes) — não é
+regressão dos 3 commits de Fase 1-3 (`feature/queue-improvements`). É bug pré-existente, nunca
+detectado porque **nenhum dos 360 testes da suíte sobe o servidor HTTP de verdade** — todos
+chamam as funções (`apiQueue`, `doApply`, `doFeedback` etc.) diretamente, pulando o dispatcher
+`createServer(...)` inteiro. É por isso que rotas HTTP passam 100% verde nos testes e ainda assim
+podem quebrar ao vivo.
+
+**Hipótese não verificada** (não investigada a fundo — registrado como acha, não como causa
+confirmada): a instância manual crashou sem eu ter enviado request nenhum, o que sugere um
+cliente já conectado de antes (aba de browser com `loadAll()` fazendo poll a cada 4s, ou o
+terminal WebSocket com sua lógica de reconexão automática) bateu na porta assim que o processo
+novo assumiu, correndo com o ciclo de resposta de outra rota. A instância gerenciada por
+`launchd` (`ui-service.ts`), reiniciada logo depois nas mesmas condições, não crashou — o que é
+consistente com a hipótese (nenhum cliente reconectando na janela exata), mas não a prova.
+
+**Correção proposta (não feita nesta sessão):** um teste que sobe `createServer` de verdade (não
+só as funções) e dispara requisições HTTP reais contra ele fecharia esse buraco de cobertura —
+teria pego este bug antes de qualquer smoke test manual. Nada foi alterado no dispatcher.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
