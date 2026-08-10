@@ -20,7 +20,7 @@ Verificação em lotes, cada lote revisado antes do próximo (pedido do operador
 | Centro Universitário Una | A | Sem board Gupy | `una`, `grupouna`, `unaeducacional` (404) | — | Pode ter Gupy sob outro handle — não descartada |
 | Centro Universitário Uni-BH | A | Sem board Gupy | `unibh`, `uni-bh` (404) | — | Idem |
 | Martins | A | Sem board Gupy | `martins`, `gruposmartins`, `martinsatacado` (404) | — | Idem |
-| Bretas | B | **Verificada, escopo pendente** | `cencosudbrasil` | 298 | Handle é da holding Cencosud Brasil, não da Bretas — cadastrar assim traz vagas de todo o grupo. Decisão do operador, não técnica |
+| Bretas | B | **Em produção** | `cencosudbrasil` | 298 | Handle é da holding Cencosud Brasil, não da Bretas — cadastrada assim de propósito (decisão do operador, 2026-08-09): filtro de localização + classificador determinístico cobrem a maior parte do ruído, reversível numa linha se incomodar. `name` no YAML carrega a ressalva |
 | Grupo Zema | B | Sem board Gupy | `zema`, `grupozema` (404) | — | Indício de ATS diferente — 404 confirma |
 | 3corações | B | **Verificada** | `3coracoes` | 174 | |
 | BHS Soluções Digitais | B | **Verificada** | `bhs` | 13 | |
@@ -66,12 +66,16 @@ Verificação em lotes, cada lote revisado antes do próximo (pedido do operador
 | Ipê Digital | H | Pendente | — | — | |
 | Rumo Soluções | H | Pendente | — | — | |
 
-## Taxa de conversão (parcial — 14/52 tentadas)
+## Taxa de conversão, por grupo (não só acumulada — grupos maiores/mais estruturados
+convertem melhor, e misturar tudo esconde isso)
 
-- **Verificada e limpa**: 7/14 (Localiza, Algar, Banco Mercantil, 3corações, BHS, Montreal, IOASYS)
-- **Verificada, escopo pendente**: 1/14 (Bretas — handle é de holding, não da empresa)
-- **Sem board Gupy acessível**: 6/14
+| Grupo | Tentadas | Convertidas (produção) | Taxa |
+|---|---:|---:|---:|
+| A+B | 14 | 8 (Localiza, Algar, Bretas, Banco Mercantil, 3corações, BHS, Montreal, IOASYS) | **57%** |
+| C–H | 0/38 | — | pendente |
 
-Número final só depois dos grupos C–H (38 empresas restantes). Se a taxa se mantiver perto de
-50%, o argumento "Gupy sozinho não sustenta a vigilância" (favorável a priorizar Greenhouse na
-Fase B) ganha força — mas é cedo pra concluir com 14/52.
+A/B são as empresas maiores e mais estruturadas do cadastro — esperável que tenham ATS. C–H tem
+cartórios, Sicoobs regionais e consultorias pequenas, categorias com prior mais baixo de usar um
+ATS de mercado. A hipótese de trabalho, a confirmar: a taxa por grupo vai cair de A/B pra E–H, e
+o número acumulado final vale menos do que a curva — se A/B der 57% e E–H der 10%, isso diz mais
+sobre "quando vale a pena cadastrar por Gupy" do que uma média de 30%.

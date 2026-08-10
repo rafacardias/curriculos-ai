@@ -11,6 +11,13 @@
 # "não confirmada em GPTW/BH" como a nota anterior dizia — 5 variações óbvias
 # de handle também deram 404). Se um dia quiser incluir a TOTVS, precisa achar
 # o handle certo primeiro — não adivinhar de novo.
+#
+# Bretas não tem board Gupy próprio: o handle que responde é o da holding que
+# a controla (Cencosud Brasil), então o registro traz vagas de outras marcas
+# do grupo também, não só da Bretas. Aceito deliberadamente (decisão do
+# operador, 2026-08-09) — filtro de localização e o classificador determinístico
+# de trilha já cobrem a maior parte do ruído, e é reversível numa linha (`enabled:
+# false`) se incomodar depois. Ver docs/company-watch-candidates.md.
 
 - name: Localiza
   ats: gupy
@@ -21,5 +28,11 @@
 - name: Algar
   ats: gupy
   handle: algar
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: "Bretas (via Cencosud Brasil — board da holding, traz vagas de outras marcas do grupo)"
+  ats: gupy
+  handle: cencosudbrasil
   tracks: [ai-builder, product]
   enabled: true
