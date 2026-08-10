@@ -174,3 +174,83 @@ no schema anterior — o padrão está em `tests/unit/migration-002.test.ts`.
 Radio e checkbox **não são tratados** pelo form-filler. Heurísticas de detecção de campo entram
 como fonte **adicional** na cascata (`candidate_facts → identity → answer_bank → heurística →
 pausa`), jamais substituindo a pausa: confiança baixa continua sendo pausa. Também: saída `.docx`.
+
+## Onda 3 — `inbox-watch` (Gmail → sinal sobre `applications`)
+
+**Priorizado atrás do BUG-007** (item 1, bloqueador). Não resolve o bloqueador — volume de decisão
+continua sendo volume de decisão — mas tem um efeito colateral que é o argumento mais forte a
+favor: e-mail de resposta de empresa é sinal negativo natural, e rejeição é exatamente o lado que
+falta na amostra 11:1 do BUG-007. `inbox-watch` não fecha o BUG-007, mas pode alimentá-lo.
+
+**Achado de arquitetura, registrado antes de codar**: Gmail é canal de SINAL sobre `applications`
+já existentes, não fonte de vaga nova. Não herda `AdapterCapabilities` (item 4 desta lista) — a
+regra "nenhum adapter novo" das sessões de medição não se aplica aqui, é categoria diferente.
+
+**Fases**: A detectar+notificar · B casar e-mail↔card · C rascunho de resposta.
+
+**Migration aditiva, `008_inbox.sql`** (escrever quando a Fase A começar, não antes): tabela
+`inbox_messages` (`gmail_message_id` único, `gmail_thread_id`, remetente/domínio, classificação,
+`application_id` nullable — `NULL` = não casado) + `inbox_state` (chave/valor, guarda o
+`historyId` do Gmail pra poll incremental idempotente). **Zero coluna nova em `applications`** —
+transição de card escrita pelo mesmo caminho que a UI já usa (`doStatus`/`doFeedback` em
+`server/index.ts`), não um caminho paralelo.
+
+**Transporte**: `gmail-watch.ts` + launchd, `history.list` com poll (mesmo padrão de `/agendar`).
+Pub/Sub descartado — exige endpoint público, não faz sentido numa ferramenta local. `historyId`
+expirado (>7 dias parado) força resync completo.
+
+**Casamento e-mail↔card, cascata**: `gmail_thread_id` já visto → herda `application_id`
+(determinístico) → `from_domain` contra domínio da empresa → remetente de ATS conhecido
+(gupy.io/greenhouse.io/myworkday.com/lever.co) → similaridade de título/empresa extraída do
+corpo (reusaria o estágio trigram/Jaccard do item 6 desta lista — **que também não existe
+ainda**, é pré-requisito real, não "se existir") → sem match, `application_id` fica `NULL`, aba
+"Inbox não casado", operador liga em um clique (`match_method='manual'`, vira dado de avaliação
+da própria heurística).
+
+**Parada dura da Fase A**: medir taxa de match e-mail↔candidatura nas aplicações reais antes de
+escrever qualquer código de transição (Fase B). Abaixo de ~70%, o entregável para na notificação +
+casamento manual — e isso é o resultado, não fracasso.
+
+**Cuidado de medição, direto do ACHADO-16**: `rescore --commit` contaminou `jobs.status` porque a
+medição comparou contra um estado que já tinha sido reescrito depois do fato. A viabilidade de
+match tem o mesmo risco: medir contra `applications.status`/domínio como está gravado HOJE não
+prova nada sobre o que era verdade no momento em que o e-mail chegou, a menos que exista trilha de
+transição DATADA (evento com timestamp) pra comparar contra `received_at`. Se não existir essa
+trilha, isso é um achado a registrar — "só o casamento é mensurável agora, não a acurácia da
+classificação histórica" — não um número a reportar como se fosse.
+
+**Corpus de validação colide com o BUG-007**: as aplicações candidatas a corpus de teste são
+provavelmente as mesmas ~16 decisões pós-fix do BUG-007, com o mesmo desbalanço 11:1
+positivo/negativo. Léxico de `rejected` — o ramo perigoso, falso positivo apaga card ativo — é
+exatamente o que menos tem exemplo real pra testar. Reforça por que regressão de estágio fica
+bloqueada por padrão e por que o léxico de `rejected` é o último a ganhar confiança suficiente
+pra sair de trás da flag.
+
+**Classificação**: léxico primeiro, `unknown` como saída honesta (não adivinha) — `interview` ←
+entrevista/agendar/calendly; `screening` ← teste/triagem/formulário; `offer` ← proposta/oferta;
+`rejected` ← infelizmente/seguimos com outros; `noise` ← confirmação automática. `unknown` vai pra
+Claude, mesmo sanduíche prepare→Claude→finalize do `kit.ts`. Teste de tabela sobre corpus real de
+assunto de e-mail, não sintético.
+
+**Transição de card**: avanço automático; regressão NUNCA — e-mail sugerindo estágio anterior ao
+atual grava o evento e não toca o card. Toda transição registra `classifier` + `gmail_message_id`,
+reversível em um clique na UI ("movido por e-mail", com link). Atrás de flag
+`inbox.autoTransition: false` por default.
+
+**Resposta (Fase C, por último)**: `drafts.create` na própria thread + notificação — nunca
+`send`. Escopo OAuth `gmail.compose`, não `gmail.send`: a garantia de "nunca envia sozinho" fica
+estrutural (permissão da API), não só de código — mesmo espírito de `linkedin-comentar`.
+
+**Notificação**: `osascript "display notification"`, mesmo padrão de `search.ts --auto`, + badge
+em `/status`.
+
+**Sequência combinada com a parada dura**: (1) medir viabilidade de match nas aplicações reais,
+read-only — decide se os passos seguintes acontecem; (2) OAuth + `gmail-watch` só populando
+`inbox_messages`, `applied_transition=0` sempre; (3) classificador léxico + testes de tabela; (4)
+UI — aba não casados + notificação; (5) transição automática atrás de flag; (6) rascunho de
+resposta, por último, `gmail.compose`.
+
+**Riscos registrados**: token OAuth em disco (mesma classe de segredo que `answer_bank` — nunca
+commitar); rate limit do Gmail; `historyId` expirado força resync; e-mail de candidato/thread só
+resolve match depois do primeiro casamento manual (frio na primeira vez); falso positivo de
+`rejected` apagaria card ativo se a regressão não estivesse bloqueada por padrão.
