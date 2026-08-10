@@ -70,6 +70,16 @@ para regressão grande, não de placar para melhoria fina.
 - "ATS score" é heurística — rotular sempre como estimativa; o artefato honesto é o coverage report
 - Submissão default `review_first`; `full_auto` só via policy engine + opt-in por plataforma
 
+## Handoff entre sessões/IAs
+
+`docs/HANDOFF.md` é o resumo curto e sempre-atual do estado do projeto — feito para ser colado no
+início de uma conversa com outra IA (ou outra sessão) sem reler o repo inteiro. **Ao fim de
+qualquer sessão com mudança material** (feature mesclada, bug corrigido, achado medido e
+documentado em `KNOWN-BUGS.md`, decisão de arquitetura): atualize "Estado agora", "O que mudou" e
+"Próximos passos" nele. Não duplique conteúdo de `KNOWN-BUGS.md`/`docs/roadmap.md` — aponte pra
+lá. Sessão sem mudança material (só leitura, discussão, pergunta pontual) não precisa tocar o
+arquivo.
+
 ## Dado pessoal nunca entra no repositório — nem como fixture
 
 O repo é **público**. `profile/`, `output/` e `db/` guardam nome, e-mail, telefone, currículos
