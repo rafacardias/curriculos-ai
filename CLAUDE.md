@@ -76,9 +76,10 @@ para regressão grande, não de placar para melhoria fina.
 início de uma conversa com outra IA (ou outra sessão) sem reler o repo inteiro. **Ao fim de
 qualquer sessão com mudança material** (feature mesclada, bug corrigido, achado medido e
 documentado em `KNOWN-BUGS.md`, decisão de arquitetura): atualize "Estado agora", "O que mudou" e
-"Próximos passos" nele. Não duplique conteúdo de `KNOWN-BUGS.md`/`docs/roadmap.md` — aponte pra
-lá. Sessão sem mudança material (só leitura, discussão, pergunta pontual) não precisa tocar o
-arquivo.
+"Próximos passos" nele. **Teto de ~100 linhas, regra dura**: pointer para `KNOWN-BUGS.md` /
+`docs/roadmap.md` / `git log`, nunca conteúdo copiado deles — um arquivo de handoff sem gatilho de
+atualização apodrece, e um sem teto de tamanho vira o quarto changelog do repo. Sessão sem mudança
+material (só leitura, discussão, pergunta pontual) não precisa tocar o arquivo.
 
 ## Dado pessoal nunca entra no repositório — nem como fixture
 

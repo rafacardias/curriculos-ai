@@ -809,22 +809,26 @@ Rodado de novo depois do fix: os dois testes passam (o de empate real e o de inv
 de inserção). Suíte completa 393/393, typecheck limpo.
 
 **Varredura pedida — outras consultas sem `ORDER BY` cujo resultado alimenta decisão, não só
-exibição** (medido, não corrigido nesta rodada):
+exibição** (medido, não corrigido nesta rodada). As duas candidatas abaixo estão **ranqueadas**:
+`answers.ts:45` é a mais forte candidata a virar o próximo BUG numerado; `feedback.ts:39` é dívida
+registrada, mas sem sangramento ativo hoje.
 
-- `src/db/repo/feedback.ts:39` (`preferenceKeysFor`) — `SELECT keywords FROM profile_tracks`
-  (sem `ORDER BY`, e nem filtra `enabled`) alimenta `termsPresent(...).slice(0, 8)`: QUAIS
-  keywords viram chave `kw:*` em `preference_weights` depende da ordem das trilhas na consulta.
-  Mesma classe de bug que o `scoreJob`. Impacto atual baixo porque o componente `preference` está
-  desarmado (peso 0, decisão do BUG-007) — mas os dados continuam sendo gravados "para
-  reprocessamento futuro" (decisions.md, 2026-07-12), e herdariam essa não-determinismo se o
-  componente for reativado.
-- `src/cli/answers.ts:45` (comando `answers add`) — `SELECT id FROM answer_bank WHERE
-  question_fingerprint = ? AND language = ? AND track_id IS ? AND company_id IS ?` sem `ORDER BY`,
-  e a tabela não tem `UNIQUE` nessa tupla (só índice não-único em `question_fingerprint,
-  language` — `001_init.sql:105`). Se alguma vez existirem duas linhas duplicadas na mesma tupla
-  (hoje o próprio comando evita criar, mas nada no schema impede), `.get()` decide qual delas
-  recebe o `UPDATE` sem critério. Risco baixo (operador único, sem concorrência), mas é a mesma
-  falta de garantia.
+1. **`src/cli/answers.ts:45`** (comando `answers add`) — `SELECT id FROM answer_bank WHERE
+   question_fingerprint = ? AND language = ? AND track_id IS ? AND company_id IS ?` sem
+   `ORDER BY`, **e a tabela não tem `UNIQUE` nessa tupla** (só índice não-único em
+   `question_fingerprint, language` — `001_init.sql:105`). É o pior dos dois: falta ordenação
+   *e* falta a constraint que tornaria a ordenação irrelevante. Se alguma vez existirem duas
+   linhas duplicadas na mesma tupla (hoje o próprio comando evita criar, mas nada no schema
+   impede), `.get()` decide qual delas recebe o `UPDATE` sem critério — dedup decidido por ordem
+   de leitura, a mesma classe de falha que o BUG-010 media, só que sem teste algum em cima.
+   Candidata mais forte ao próximo BUG.
+2. **`src/db/repo/feedback.ts:39`** (`preferenceKeysFor`) — `SELECT keywords FROM profile_tracks`
+   (sem `ORDER BY`, e nem filtra `enabled`) alimenta `termsPresent(...).slice(0, 8)`: QUAIS
+   keywords viram chave `kw:*` em `preference_weights` depende da ordem das trilhas na consulta.
+   Mesma classe de bug que o `scoreJob`. **Dívida sem sangramento agora**: o componente
+   `preference` está desarmado (peso 0, decisão do BUG-007), então nada de decisão viva depende
+   disto hoje — mas os dados continuam sendo gravados "para reprocessamento futuro"
+   (decisions.md, 2026-07-12), e herdariam essa não-determinismo se o componente for reativado.
 - Checado e descartado: `src/cli/kit.ts:131` (despeja TODAS as trilhas no bundle pro redator, não
   escolhe uma vencedora por código — ordem não decide nada); `src/core/company-watch.ts:56` (une
   keywords num `Set`, união é comutativa); `src/core/policy.ts` (checagens de existência/`COUNT`,

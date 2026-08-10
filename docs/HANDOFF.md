@@ -7,6 +7,11 @@
 >
 > Mantido por quem trabalha no repo (humano ou IA) ao fim de toda sessão com mudança material.
 > Ver a regra em `CLAUDE.md` → "Handoff entre sessões/IAs".
+>
+> **Teto: ~100 linhas.** Isto é um resumo, não um changelog — se crescer, corte primeiro "O que
+> mudou nas últimas sessões" para as 2-3 mais recentes (o resto já está no `git log` e em
+> `KNOWN-BUGS.md`) antes de encurtar qualquer outra seção. Pointer para outro arquivo, nunca
+> conteúdo copiado dele.
 
 ## O projeto, em 3 frases
 
@@ -18,13 +23,14 @@ inventa fato, só descobre keyword sem lastro. `src/core|adapters|submit` nunca 
 
 ## Estado agora (atualizado em 2026-08-09)
 
-- **`main`**: `f1e9d7b` — company-watch Fase A (vigilância de vagas por empresa via scrape Gupy)
-  e queue-improvements (filtro dual-location, dropdown de trilha, confirmação de score baixo)
-  mesclados e pushados.
-- **Branch aberta, não mesclada**: `fix/track-hint-order-bug-010` — corrige BUG-010 (`ORDER BY`
-  ausente em `scoreJob`), commit `ec23192`. Aguardando decisão de merge.
-- **Suíte**: 393/393 testes verdes, typecheck limpo, nessa branch.
+- **`main`**: BUG-010 mesclado e pushado — `ORDER BY` determinístico em `scoreJob`, junto com
+  company-watch Fase A e queue-improvements de sessões anteriores.
+- **Suíte**: 393/393 testes verdes, typecheck limpo.
 - **Perfil real**: ingerido (`profile/master-profile.yaml` existe, `/perfil` já rodou).
+- **Próxima branch a abrir**: desempate por especificidade de trilha — deliberadamente NÃO
+  empacotado com o BUG-010 (fix isolado com teste vs. mudança de comportamento de classificação;
+  se o desempate reclassificar vagas de forma indesejada, precisa dar pra isolar sem desfazer o
+  fix já estável).
 
 ## O que mudou nas últimas sessões (mais recente primeiro)
 
@@ -43,6 +49,10 @@ inventa fato, só descobre keyword sem lastro. `src/core|adapters|submit` nunca 
    fila, confirmação obrigatória para gerar kit de vaga com score abaixo do corte.
 4. **Harness in-process de HTTP** (`createApp()` em `src/server/index.ts`) fechou um buraco de
    cobertura: nenhum teste antes booteava o dispatcher HTTP real.
+5. **Varredura do BUG-010 achou 2 candidatos ao próximo bug** (mesma classe: decisão que depende
+   de ordem de leitura não-garantida) — `KNOWN-BUGS.md` → BUG-010 → "Varredura pedida".
+   `answers.ts:45` (sem `ORDER BY` **e** sem `UNIQUE` na tupla de dedup) é o mais forte; `feedback.ts:39`
+   é dívida sem sangramento hoje (componente `preference` desarmado).
 
 ## Próximos passos (ordem travada pelo operador)
 
