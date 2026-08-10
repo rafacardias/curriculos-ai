@@ -36,7 +36,15 @@ export function preferenceKeysFor(job: JobRow): string[] {
   // não volta por descuido. Ver `PREFERENCE_KINDS`.
   const keys = [`company:${job.company_name.toLowerCase()}`];
   if (job.seniority) keys.push(`seniority:${job.seniority}`);
-  const tracks = db.prepare("SELECT keywords FROM profile_tracks").all() as unknown as Array<{ keywords: string }>;
+  // `WHERE enabled = 1 ORDER BY id ASC` — mesma convenção de `scoring.ts:47` e
+  // `listTracks()` (`profile-tracks.ts:18`). Sem isto, QUAIS das >8 keywords
+  // batidas sobrevivem ao `.slice(0, 8)` abaixo dependia da ordem de leitura da
+  // tabela (mesma classe do BUG-010), e uma trilha desativada continuava
+  // contribuindo keyword. `id ASC` é arbitrário-mas-estável, não semanticamente
+  // correto — ver o mesmo aviso em `scoring.ts`.
+  const tracks = db
+    .prepare("SELECT keywords FROM profile_tracks WHERE enabled = 1 ORDER BY id ASC")
+    .all() as unknown as Array<{ keywords: string }>;
   const lexicon = tracks.flatMap((t) => JSON.parse(t.keywords) as string[]);
   for (const kw of termsPresent(`${job.title} ${job.description ?? ""}`, lexicon).slice(0, 8)) {
     keys.push(`kw:${kw.toLowerCase()}`);
