@@ -36,3 +36,51 @@
   handle: cencosudbrasil
   tracks: [ai-builder, product]
   enabled: true
+
+- name: Banco Mercantil
+  ats: gupy
+  handle: mercantil
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: 3corações
+  ats: gupy
+  handle: 3coracoes
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: BHS Soluções Digitais
+  ats: gupy
+  handle: bhs
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: Montreal Informática
+  ats: gupy
+  handle: montreal
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: IOASYS
+  ats: gupy
+  handle: ioasys
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: Queima Diária
+  ats: gupy
+  handle: queimadiaria
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: Sabin Diagnóstico e Saúde
+  ats: gupy
+  handle: gruposabin
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: Unidas Locadora
+  ats: gupy
+  handle: unidas
+  tracks: [ai-builder, product]
+  enabled: true
