@@ -177,10 +177,15 @@ pausa`), jamais substituindo a pausa: confiança baixa continua sendo pausa. Tam
 
 ## Onda 3 — `inbox-watch` (Gmail → sinal sobre `applications`)
 
-**Priorizado atrás do BUG-007** (item 1, bloqueador). Não resolve o bloqueador — volume de decisão
-continua sendo volume de decisão — mas tem um efeito colateral que é o argumento mais forte a
-favor: e-mail de resposta de empresa é sinal negativo natural, e rejeição é exatamente o lado que
-falta na amostra 11:1 do BUG-007. `inbox-watch` não fecha o BUG-007, mas pode alimentá-lo.
+> **Posição neste arquivo é ordem de leitura, não fila de prioridade.** Esta seção está por
+> último porque foi escrita por último, não porque vem depois de tudo. **Prioridade real:
+> atrás do BUG-007 (item 1, bloqueador) — e só dele.** Não compete com os itens 2–10 da Onda 1
+> nem com a Onda 2; nenhum dos dois foi comparado contra `inbox-watch` pra decidir ordem.
+
+Não resolve o bloqueador do BUG-007 — volume de decisão continua sendo volume de decisão — mas
+tem um efeito colateral que é o argumento mais forte a favor: e-mail de resposta de empresa é
+sinal negativo natural, e rejeição é exatamente o lado que falta na amostra 11:1 do BUG-007.
+`inbox-watch` não fecha o BUG-007, mas pode alimentá-lo.
 
 **Achado de arquitetura, registrado antes de codar**: Gmail é canal de SINAL sobre `applications`
 já existentes, não fonte de vaga nova. Não herda `AdapterCapabilities` (item 4 desta lista) — a
@@ -199,17 +204,30 @@ transição de card escrita pelo mesmo caminho que a UI já usa (`doStatus`/`doF
 Pub/Sub descartado — exige endpoint público, não faz sentido numa ferramenta local. `historyId`
 expirado (>7 dias parado) força resync completo.
 
-**Casamento e-mail↔card, cascata**: `gmail_thread_id` já visto → herda `application_id`
-(determinístico) → `from_domain` contra domínio da empresa → remetente de ATS conhecido
-(gupy.io/greenhouse.io/myworkday.com/lever.co) → similaridade de título/empresa extraída do
-corpo (reusaria o estágio trigram/Jaccard do item 6 desta lista — **que também não existe
-ainda**, é pré-requisito real, não "se existir") → sem match, `application_id` fica `NULL`, aba
-"Inbox não casado", operador liga em um clique (`match_method='manual'`, vira dado de avaliação
-da própria heurística).
+**Casamento e-mail↔card, cascata — só 2 dos 3 estágios existem hoje**:
 
-**Parada dura da Fase A**: medir taxa de match e-mail↔candidatura nas aplicações reais antes de
-escrever qualquer código de transição (Fase B). Abaixo de ~70%, o entregável para na notificação +
-casamento manual — e isso é o resultado, não fracasso.
+1. `gmail_thread_id` já visto → herda `application_id` (determinístico). **Pronto** — nenhuma
+   construção nova, só leitura de thread já casada antes.
+2. `from_domain` contra o domínio da empresa da `application`. **Pronto** — dado já existe em
+   `applications`/`companies`, é comparação direta.
+3. Remetente de ATS conhecido (gupy.io/greenhouse.io/myworkday.com/lever.co) sem match nos dois
+   primeiros → extrair empresa/título do corpo e casar por similaridade. **NÃO existe** — dependia
+   do estágio trigram/Jaccard do item 6 desta lista, que também não foi construído. É
+   pré-requisito real a construir, não reuso de algo pronto.
+
+Sem match em nenhum estágio: `application_id` fica `NULL`, aba "Inbox não casado", operador liga
+em um clique (`match_method='manual'`, vira dado de avaliação da própria heurística).
+
+**Parada dura da Fase A, medida só com os estágios 1+2**: taxa de match e-mail↔candidatura nas
+aplicações reais, usando thread+domínio, ANTES de decidir se o estágio 3 (similaridade) precisa
+ser construído. Se thread+domínio já derem taxa aceitável sozinhos, o estágio 3 pode nunca ser
+necessário — **esse é o melhor resultado possível, não um atalho**: significa menos código pra
+manter, não medição incompleta.
+
+**Critério de abandono, não só de prosseguir**: se a taxa de match com os dois estágios prontos
+ficar abaixo de ~60% nas aplicações reais, `inbox-watch` **volta pro backlog** em vez de ganhar o
+estágio 3. Construir similaridade de título pra salvar um casamento ruim custa mais do que casar
+manualmente um punhado de cards à mão — a feature não se justifica só porque foi começada.
 
 **Cuidado de medição, direto do ACHADO-16**: `rescore --commit` contaminou `jobs.status` porque a
 medição comparou contra um estado que já tinha sido reescrito depois do fato. A viabilidade de
