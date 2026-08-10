@@ -21,6 +21,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | [BUG-004](#bug-004) | Baixa | Sem cobertura | `src/submit/linkedin-easyapply.ts` |
 | [BUG-008](#bug-008) | **Alta** | **Corrigido** | `src/cli/kit.ts` (gates de conteúdo) |
 | [BUG-009](#bug-009) | Média | **Corrigido** | `src/core/scoring.ts` (filtro de idioma) |
+| [BUG-010](#bug-010) | **Alta** | Medido, não corrigido | `src/core/scoring.ts:46` (`scoreJob`) |
 | [REQ-004](#req-004) | **Alta** | Medido; veredito pontual | `src/core/master-resume.ts` |
 | [REQ-003](#req-003) | **Alta** | Medido; correção é do operador | `profile/tracks.yaml` |
 | [REQ-002](#req-002--segmentação-por-seção-implementada-em-2026-08-07) | — | **IMPLEMENTADO** (`src/core/jd-sections.ts`) — 92% do acervo segmentado | `src/core/jd-sections.ts` |
@@ -49,7 +50,7 @@ achadas de novo, não redescobertas):
 | [ACHADO-10](#achado-10--get-apitracks-devolve-trilhas-desabilitadas-o-filtro-é-só-no-cliente) | `GET /api/tracks` devolve todas as trilhas, inclusive desabilitadas — filtro é só em `app.html`. **Medido, não corrigido** |
 | [ACHADO-11](#achado-11--o-board-da-gupy-por-empresa-não-tem-api-é-scrape-de-__next_data__) | `<handle>.gupy.io/api/v1/jobs` é 404 — o board por empresa é scrape de `__NEXT_DATA__`, não integração estável. Filtro léxico da Fase A é título+departamento, sem descrição: 2/782 vagas passaram na validação real. Modalidade estruturada: 782/782 (100%). **Corrigido** (adapter redesenhado) |
 | [ACHADO-12](#achado-12--totvsgupyio-é-404-de-verdade-handle-removido-do-cadastro) | `totvs.gupy.io` e 5 variações óbvias são 404 — handle errado, não "não confirmada". TOTVS removida de `config/companies.yaml`. **Corrigido** (removida) |
-| [ACHADO-13](#achado-13--track_hintqa-sobre-captura--sistêmico-não-isolado-agile-transformation-analyst-não-foi-acidente) | 44% das 95 vagas `track_hint='qa'` não têm nenhuma keyword QA-específica — 6 keywords idênticas às de `product`, sem desempate. `SCRUM MASTER PL/SR` (deveria ser `product`) capturadas por `qa`. **Medido, não corrigido** |
+| [ACHADO-13](#achado-13--léxico-de-qaproduct-compartilha-6-keywords-genéricas--sobre-captura-real-mas-menor-do-que-a-primeira-medição) | 6 keywords idênticas entre `qa`/`product`. Medição original (44%/95) não reproduzível — carregava o BUG-010; sob ordem fixa: 19% (11/57). **Medido, não corrigido** |
 
 ---
 
@@ -435,47 +436,46 @@ Localiza + Algar (2 empresas reais e verificadas) — a prova de dedup (segunda 
 vagas novas) funciona igual com n=2. Se um dia fizer sentido incluir a TOTVS, o handle certo
 precisa ser achado primeiro (busca dedicada, não adivinhação de padrão).
 
-### ACHADO-13 · `track_hint='qa'` sobre-captura — sistêmico, não isolado (AGILE TRANSFORMATION ANALYST não foi acidente)
+### ACHADO-13 · léxico de `qa`/`product` compartilha 6 keywords genéricas — sobre-captura real, mas menor do que a primeira medição
 
-**Medido, não corrigido** — pedido do operador depois de notar que "AGILE TRANSFORMATION ANALYST
+**Medido, não corrigido.** Pedido do operador depois de notar que "AGILE TRANSFORMATION ANALYST
 SÊNIOR" (vaga real da vigilância, Localiza) caiu em `qa` quando deveria competir com `product`.
-Medido contra as 95 vagas com `track_hint='qa'` hoje no banco, recalculando overlap com
-`termsPresent` contra o léxico atual de `profile_tracks`:
 
-| | valor |
-|---|---:|
-| vagas com `track_hint='qa'` | 95 |
-| com pelo menos 1 keyword QA-específica (playwright, cypress, istqb, testrail, ...) | 53 (56%) |
-| **só keywords genéricas, nenhuma QA-específica** | **42 (44%)** |
-| empatariam ou perderiam pra outra trilha sob o léxico atual | **38 (40%)** |
+**A primeira medição (44%, 42/95) não era reproduzível** — ela usou o `track_hint` GRAVADO no
+banco, que carrega o BUG-010 (consulta sem `ORDER BY`, desempate por acidente de ordem). Refeita
+com `ORDER BY id ASC` explícito (determinístico, ainda que não "correto" — ver BUG-010) antes de
+tratar qualquer número como baseline:
 
-**Não é ruído isolado — é estrutural.** Seis keywords do léxico de `qa` são IDÊNTICAS às de
-`product`: `jira`, `agile`, `scrum`, `kanban`, `critérios de aceite`, `acceptance criteria`
-(`profile/tracks.yaml` ou `profile_tracks`, comparar os dois arrays). Nenhuma delas é
-QA-específica — são vocabulário de metodologia ágil que pertence às duas trilhas por igual, e
-`scoreJob` (`src/core/scoring.ts`) não tem critério de desempate: a trilha vencedora é a de
-`frac` estritamente MAIOR (`if (frac > overlap)`), e a consulta que carrega as trilhas
-(`SELECT id, keywords FROM profile_tracks WHERE enabled = 1`) **não tem `ORDER BY`** — em
-empate, quem vence é a ordem que o SQLite devolve as linhas, não uma decisão.
+| | valor original (não reproduzível) | valor sob ordem fixa |
+|---|---:|---:|
+| vagas classificadas `qa` | 95 | **57** |
+| sem nenhuma keyword QA-específica | 42 (44%) | **11 (19%)** |
 
-**Caso concreto, não hipotético**: `"SCRUM MASTER PL"` e `"SCRUM MASTER SR"` — cargo que o
-próprio léxico de `product` reconhece por nome (`"scrum master"` é keyword literal ali) — estão
-classificadas `qa`, porque `sql`+`scrum` (ambas genéricas, ambas em `qa`) empataram ou superaram
-o overlap de `product` sob a ordem de iteração atual. Isso toca exatamente a trilha que o
-operador pediu (PM/PO/SM) — não é um efeito colateral distante.
+**O número mudou — e isso já prova o ponto que motivou medir de novo**: 38 das 95 vagas
+originais só estavam em `qa` por causa do empate não-determinístico (BUG-010), não por overlap
+de léxico genuíno. Descontado o ruído do BUG-010, a sobre-captura real por léxico compartilhado
+é **19%, não 44%** — menor, mas ainda não-zero, e ainda estrutural: seis keywords do léxico de
+`qa` são IDÊNTICAS às de `product` (`jira`, `agile`, `scrum`, `kanban`, `critérios de aceite`,
+`acceptance criteria` — comparar os dois arrays em `profile_tracks`), nenhuma delas
+QA-específica.
 
-**Vagas claramente não-QA capturadas só por termo genérico**: `Analista de CRM Júnior` (só
-`sql`), `Senior AML Analyst` (só `sql`), `Lead FP&A Analyst` (`sql`+`agile`), `Customer Analytics
-Manager` (só `sql`), `Pessoa Coordenadora de Growth Marketing` (`sql`+`scrum`+`kanban`), `Senior
-React Developer`/`Senior Web Developer` (`sql`+`agile`/`cypress`+`bug`) — nenhuma é vaga de QA.
+**Caso concreto, verificado sob ordem fixa**: `"SCRUM MASTER PL"` e `"SCRUM MASTER SR"` — cargo
+que o próprio léxico de `product` reconhece por nome (`"scrum master"` é keyword literal ali) —
+recalculadas com `ORDER BY id ASC` viram `product`, corrigindo o exemplo original. Mas isso é
+`product` vencer por vir antes de `qa` na ordem alfabética dos ids, não por especificidade — o
+BUG-010 sozinho (`ORDER BY`, sem peso por especificidade) resolveria ESTE par por coincidência
+de nomenclatura, não resolveria a classe.
 
-**Correção proposta (não feita nesta sessão, por pedido explícito — medir, não consertar)**:
-duas direções independentes, cada uma resolveria parte do problema —
-(a) remover de `qa` as 6 keywords compartilhadas com `product` (ou vice-versa, decisão de
-léxico, não de código);
-(b) `ORDER BY` determinístico na consulta de `scoreJob` (não resolve o overlap, só torna o
-empate previsível em vez de acidental — sintoma, não causa).
-Nenhuma das duas foi aplicada.
+**11 vagas que sob ordem fixa continuam em `qa` só por termo genérico** (`sql`/`agile` sem
+nenhum termo QA-específico) — a lista completa está no output da medição, não reproduzida aqui;
+inclui casos como `Analista de CRM Júnior`, `Senior AML Analyst`, que não são vagas de QA.
+
+**Correção proposta (não feita nesta sessão)**: remover de `qa` as 6 keywords compartilhadas com
+`product` (ou vice-versa, decisão de léxico) — resolve os 19% remanescentes depois que BUG-010
+for corrigido. Antes disso não faz sentido tocar o léxico: parte do sinal de "sobre-captura"
+ainda vinha do bug de ordenação, não do léxico em si.
+
+### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
 Barreira de entrada por trilha, sobre as 375 vagas (2026-08-06):
 
@@ -747,6 +747,45 @@ Português, inglês e espanhol ficam fora da lista de propósito.
 
 A vaga foi retirada do funil (`applications.status = 'withdrawn'`) e o kit ficou em
 disco como evidência.
+
+---
+
+## BUG-010 — `scoreJob` não tem `ORDER BY` na consulta de trilhas: `track_hint` é parcialmente não-determinístico
+
+Achado inicial: ACHADO-13 (vigilância por empresa, "AGILE TRANSFORMATION ANALYST SÊNIOR"
+classificada `qa` quando deveria competir com `product`). Reclassificado de achado pra bug
+depois de medir — ausência de `ORDER BY` numa consulta que decide empate é defeito objetivo, o
+fix é trivial e isolado, não é uma questão de léxico.
+
+`src/core/scoring.ts:46`, `scoreJob`: `SELECT id, keywords FROM profile_tracks WHERE enabled =
+1` — sem `ORDER BY`. Quando duas trilhas empatam em `frac` de overlap (`if (frac > overlap)` é
+estritamente maior, nunca `>=`), a vencedora é a que a consulta devolve primeiro — e SQLite não
+garante ordem sem `ORDER BY` explícito. Na prática, a ordem tende a ser estável entre execuções
+do mesmo processo (ordem de inserção/rowid), mas não é uma garantia da linguagem, muda com
+`VACUUM`, reindexação, ou qualquer mudança na tabela.
+
+**Medido (2026-08-09), recalculando as 733 vagas que hoje têm `track_hint`, com `ORDER BY id
+ASC` × `ORDER BY id DESC` explícitos:**
+
+| | valor |
+|---|---:|
+| vagas cujo `track_hint` recalculado difere do valor GRAVADO hoje no banco | **72/733 (9,8%)** |
+| a MESMA vaga, mesmo texto, classificação diferente só trocando ASC↔DESC | **72/733 (9,8%)** — os mesmos 72 |
+
+Os dois números baterem exatos confirma: são exatamente os casos de empate, e são casos reais,
+não hipotéticos — quase 1 em cada 10 vagas já classificadas no banco tem uma trilha que depende
+de ordem de leitura, não de sinal.
+
+**Verificado com um par concreto**: `SCRUM MASTER PL` e `SCRUM MASTER SR` (gravadas `qa`) viram
+`product` sob `ORDER BY id ASC` — mas por ACIDENTE alfabético (`product` vem antes de `qa` na
+ordem alfabética dos ids das trilhas), não porque `ORDER BY id` seja uma correção de verdade.
+`ORDER BY` sozinho torna o resultado REPRODUTÍVEL, não CORRETO — o desempate continua arbitrário
+(a trilha "primeira na ordem" vence, não a trilha com o sinal mais específico). A correção real
+é desempate por especificidade (keyword exclusiva de uma trilha pesa mais que keyword
+compartilhada com outra) — não feita nesta sessão. Ver ACHADO-13 pra a consequência disso na
+contagem de sobre-captura de `qa`.
+
+Nada alterado em `src/core/scoring.ts`.
 
 ---
 
