@@ -21,7 +21,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | [BUG-004](#bug-004) | Baixa | Sem cobertura | `src/submit/linkedin-easyapply.ts` |
 | [BUG-008](#bug-008) | **Alta** | **Corrigido** | `src/cli/kit.ts` (gates de conteúdo) |
 | [BUG-009](#bug-009) | Média | **Corrigido** | `src/core/scoring.ts` (filtro de idioma) |
-| [BUG-010](#bug-010) | **Alta** | **Corrigido** (`ORDER BY id ASC` — desempate por especificidade ainda pendente) | `src/core/scoring.ts:46` (`scoreJob`) |
+| [BUG-010](#bug-010) | **Alta** | **Corrigido** (`ORDER BY id ASC` + desempate por especificidade, branches separadas) | `src/core/scoring.ts:46` (`scoreJob`) |
 | [REQ-004](#req-004) | **Alta** | Medido; veredito pontual | `src/core/master-resume.ts` |
 | [REQ-003](#req-003) | **Alta** | Medido; correção é do operador | `profile/tracks.yaml` |
 | [REQ-002](#req-002--segmentação-por-seção-implementada-em-2026-08-07) | — | **IMPLEMENTADO** (`src/core/jd-sections.ts`) — 92% do acervo segmentado | `src/core/jd-sections.ts` |
@@ -50,7 +50,7 @@ achadas de novo, não redescobertas):
 | [ACHADO-10](#achado-10--get-apitracks-devolve-trilhas-desabilitadas-o-filtro-é-só-no-cliente) | `GET /api/tracks` devolve todas as trilhas, inclusive desabilitadas — filtro é só em `app.html`. **Medido, não corrigido** |
 | [ACHADO-11](#achado-11--o-board-da-gupy-por-empresa-não-tem-api-é-scrape-de-__next_data__) | `<handle>.gupy.io/api/v1/jobs` é 404 — o board por empresa é scrape de `__NEXT_DATA__`, não integração estável. Filtro léxico da Fase A é título+departamento, sem descrição: 2/782 vagas passaram na validação real. Modalidade estruturada: 782/782 (100%). **Corrigido** (adapter redesenhado) |
 | [ACHADO-12](#achado-12--totvsgupyio-é-404-de-verdade-handle-removido-do-cadastro) | `totvs.gupy.io` e 5 variações óbvias são 404 — handle errado, não "não confirmada". TOTVS removida de `config/companies.yaml`. **Corrigido** (removida) |
-| [ACHADO-13](#achado-13--léxico-de-qaproduct-compartilha-6-keywords-genéricas--sobre-captura-real-mas-menor-do-que-a-primeira-medição) | 6 keywords idênticas entre `qa`/`product`. Medição original (44%/95) não reproduzível — carregava o BUG-010; sob ordem fixa: 19% (11/57), **confirmado reproduzível pós-fix**. Léxico não tocado |
+| [ACHADO-13](#achado-13--léxico-de-qaproduct-compartilha-6-keywords-genéricas--sobre-captura-real-mas-menor-do-que-a-primeira-medição) | 6 keywords idênticas entre `qa`/`product`. 44%/95 → 19%/57 (ordem fixa) → **18%/60 (ordem fixa + especificidade)**. Léxico não tocado |
 
 ---
 
@@ -470,10 +470,18 @@ de nomenclatura, não resolveria a classe.
 nenhum termo QA-específico) — a lista completa está no output da medição, não reproduzida aqui;
 inclui casos como `Analista de CRM Júnior`, `Senior AML Analyst`, que não são vagas de QA.
 
+**Atualização (2026-08-09, depois do desempate por especificidade)**: com `ORDER BY` +
+especificidade (ver BUG-010 → "Desempate por especificidade"), o número passa de 19%/57 para
+**18%/60** — praticamente igual, mas o CONJUNTO de vagas mudou: 2 vagas obviamente mal
+classificadas por acidente alfabético entraram em `qa` corretamente (`QA Automation Engineer`,
+`Analista Automação Testes Pleno`), e 1 falso-positivo novo entrou por outro motivo (`quality
+assurance` como boilerplate de JD, não sinal real — ver detalhe no BUG-010). A especificidade não
+substitui a correção de léxico abaixo; ataca um bug de critério, não o léxico compartilhado em si.
+
 **Correção proposta (não feita nesta sessão)**: remover de `qa` as 6 keywords compartilhadas com
-`product` (ou vice-versa, decisão de léxico) — resolve os 19% remanescentes depois que BUG-010
-for corrigido. Antes disso não faz sentido tocar o léxico: parte do sinal de "sobre-captura"
-ainda vinha do bug de ordenação, não do léxico em si.
+`product` (ou vice-versa, decisão de léxico) — resolve os ~18% remanescentes. Antes do BUG-010 não
+fazia sentido tocar o léxico porque parte do sinal de "sobre-captura" vinha do bug de ordenação;
+agora o número é limpo o bastante pra essa correção valer a pena, quando for a vez do léxico.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
@@ -843,7 +851,53 @@ número medido antes sob `ORDER BY id ASC` manual. **O baseline é reproduzível
 ainda não passou por `rescore --commit` com o fix; nenhum `--commit` rodado nesta sessão, por
 não estar no escopo pedido.)
 
-Desempate por especificidade continua fora do escopo — próxima sessão.
+### Desempate por especificidade (2026-08-09, branch separada)
+
+**Deliberadamente numa branch própria** (`feature/track-specificity-tiebreak`), não empacotada
+com o `ORDER BY`: um é fix isolado com teste que falha sem ele, o outro é mudança de comportamento
+de classificação — se reclassificar vagas de forma indesejada, precisa dar pra isolar sem desfazer
+o fix já estável.
+
+**Achado antes de implementar**: exclusividade sozinha (keyword que só uma trilha tem, peso
+uniforme) NÃO quebra o empate real de `SCRUM MASTER PL`/`SCRUM MASTER SR` (Globalweb) — os dois
+lados têm exatamente 1 keyword exclusiva + 1 compartilhada: `product` = `["scrum master"
+(exclusiva), "scrum" (compartilhada)]`, `qa` = `["sql" (exclusiva), "scrum" (compartilhada)]`.
+`"sql"` é um falso-positivo do léxico de `qa` (a JD menciona "Sql" como ferramenta de modelagem de
+dados, nada a ver com QA) tão "exclusivo" quanto `"scrum master"` pela definição literal.
+
+**Fix** (`src/core/scoring.ts`, `keywordOwnerCounts` + `specificityScore`): peso por keyword
+batida = `(exclusiva ? 2 : 1) × nº de palavras`. `"scrum master"` (bigrama exclusivo) = 4; `"sql"`
+(palavra solta exclusiva) = 2 — `product` vence 5 a 3. Mesma convenção que `extractKeywords` já
+usa para bigramas (`src/core/keywords.ts:42`, "bigramas valem mais").
+
+**Fronteira dura preservada**: a especificidade só decide `trackHint` quando `frac === overlap`
+(empate de verdade) — o valor de `overlap` que vira `detail.keyword_overlap` **não muda**, nunca.
+Testado explicitamente (`tests/unit/scoring.test.ts`): o score de uma vaga empatada é idêntico
+com ou sem a ponderação por especificidade.
+
+**Critério de aceite cumprido**: `SCRUM MASTER` → `product` sob `ORDER BY id ASC` **e** sob
+`ORDER BY id DESC` — testado nos dois sentidos, não é mais acidente alfabético.
+
+**Recontagem em produção (leitura pura, nada gravado)**: 7/733 vagas mudam de trilha entre
+"só `ORDER BY`" e "`ORDER BY` + especificidade". `ACHADO-13`: **60 vagas em `qa`** (era 57), 11
+sem keyword específica → **18% (11/60)**, praticamente igual ao número anterior (19%/57) — a
+especificidade não teve efeito líquido relevante sobre a taxa de sobre-captura, mas MUDOU QUAIS
+vagas estão no conjunto:
+
+| Vaga | Movimento | Correto? |
+|---|---|---|
+| `QA Automation Engineer \| Mid-Level` | `ai-builder` → `qa` | **Sim** — título literalmente "QA", estava classificada `ai-builder` só porque `ai-builder < qa` alfabeticamente num empate de 3 vias (`automação`/`automation`/`integração` vs `qa`/`testes funcionais`/`casos de teste`, ambos 3 hits) |
+| `Analista Automação Testes Pleno` | `product` → `qa` | **Sim** — mesma classe: "Testes" no título, estava em `product` por empate 2-vias vencido por alfabeto |
+| `B2B SaaS PPC Manager` | `ai-builder` → `qa` | **Não** — falso-positivo novo. Vaga de marketing, sem relação com QA. `"quality assurance"` bateu como frase de boilerplate corporativo genérico (não sobre o trabalho em si), e por ser bigrama pesou mais que os hits igualmente fracos de `ai-builder` (`"automation"`) e `product` (`"stakeholders"`) — 1 hit cada, overlap de 0,067 (6,7%), a mesma característica do caso `sql`: um termo que É exclusivo de uma trilha mas não é SINAL de que a vaga é daquela trilha. **Stakes baixos**: contribuição de `keyword_overlap` ao score é ~4,3 pontos com qualquer um dos três vencedores — a vaga já era baixo-sinal em todas as trilhas antes de qualquer desempate. |
+
+**Limite do mecanismo, registrado e não perseguido nesta rodada**: comprimento de keyword é um
+proxy de especificidade, não uma medida de relevância temática. Resolve o caso que motivou o
+pedido (`scrum master` vs `sql`) e dois casos reais adicionais de vagas obviamente mal
+classificadas, mas pode, em vagas de baixíssimo overlap em todas as trilhas (~0,07, quase ruído),
+trocar um vencedor arbitrário por outro. Não voltar a mexer sem medir de novo — o próximo item
+depende do cadastro de empresas crescer o suficiente para esse tipo de caso aparecer com volume.
+
+Suíte 397/397, typecheck limpo.
 
 ---
 

@@ -307,3 +307,78 @@ describe("scoreJob — desempate de trilha é determinístico (BUG-010)", () => 
     assert.equal(trackHint, "product");
   });
 });
+
+describe("scoreJob — desempate por especificidade (keyword exclusiva > compartilhada)", () => {
+  beforeEach(() => resetDb());
+
+  // Caso real: "SCRUM MASTER PL"/"SCRUM MASTER SR" (Globalweb) empatavam 2 a 2 —
+  // product = ["scrum master", "scrum"], qa = ["sql", "scrum"]. Um esquema
+  // binário "exclusiva > compartilhada" NÃO quebra este empate: as duas têm
+  // exatamente 1 keyword exclusiva (nenhuma outra trilha tem) + 1 compartilhada
+  // ("scrum"). O que desempata de verdade é o COMPRIMENTO da exclusiva —
+  // "scrum master" (bigrama) é mais específico que "sql" (palavra solta, e um
+  // falso-positivo do léxico de qa: a JD menciona "Sql" como ferramenta de
+  // modelagem de dados, nada a ver com QA). Mesma convenção que
+  // `extractKeywords` já usa para bigramas (`src/core/keywords.ts:42`).
+  it("keyword exclusiva composta ('scrum master') vence keyword exclusiva solta ('sql') — não por acidente alfabético", () => {
+    // 'qa' criada ANTES de 'product': se o desempate ainda fosse por ordem de
+    // leitura (BUG-010 sem a especificidade), 'qa' venceria por ter sido
+    // encontrada primeiro. A especificidade tem que virar isso.
+    createTrack({ id: "qa", name: "QA", keywords: ["sql", "scrum"] });
+    createTrack({ id: "product", name: "Produto", keywords: ["scrum master", "scrum"] });
+
+    const job = insertJob(raw({ title: "Scrum Master", description: "Requisitos: Sql, metodologias ágeis, Scrum." }))!;
+    const { trackHint, detail } = scoreJob(config, getJob(job.id)!);
+
+    assert.equal(
+      trackHint,
+      "product",
+      `esperado 'product' por especificidade ('scrum master' é bigrama exclusivo, 'sql' é palavra solta exclusiva), veio '${trackHint}' — detail: ${JSON.stringify(detail)}`
+    );
+  });
+
+  it("o critério de aceite: inverter ORDER BY id para DESC não muda o vencedor — é isso que separa especificidade de acidente de ordem", () => {
+    // Mesmo cenário do teste acima, mas com as trilhas criadas na ordem OPOSTA
+    // ('product' primeiro). Sob o BUG-010 puro (sem especificidade), a ordem de
+    // criação decidiria; aqui tem de dar o MESMO resultado nos dois sentidos.
+    createTrack({ id: "product", name: "Produto", keywords: ["scrum master", "scrum"] });
+    createTrack({ id: "qa", name: "QA", keywords: ["sql", "scrum"] });
+
+    const job = insertJob(raw({ title: "Scrum Master", description: "Requisitos: Sql, metodologias ágeis, Scrum." }))!;
+    const { trackHint } = scoreJob(config, getJob(job.id)!);
+
+    assert.equal(trackHint, "product");
+  });
+
+  it("empate sem NENHUMA keyword exclusiva de nenhum dos lados continua caindo no ORDER BY id ASC (não há especificidade a favor de ninguém)", () => {
+    // Regression guard: a especificidade não pode inventar um vencedor onde não
+    // há sinal — o fallback continua sendo `ORDER BY id ASC` (BUG-010), não uma
+    // escolha aleatória.
+    createTrack({ id: "qa", name: "QA", keywords: ["scrum", "agile"] });
+    createTrack({ id: "product", name: "Produto", keywords: ["scrum", "agile"] });
+
+    const job = insertJob(raw({ title: "Scrum Master Agile PL/SR" }))!;
+    const { trackHint } = scoreJob(config, getJob(job.id)!);
+
+    assert.equal(trackHint, "product", "sem exclusiva de nenhum lado, cai no id ASC — 'product' < 'qa'");
+  });
+
+  it("a especificidade NÃO muda o score — só a identidade do trackHint em empate", () => {
+    // Fronteira dura do escopo: `keyword_overlap` (o número que soma no score)
+    // continua vindo da fração simples de hits, igual antes do BUG-010. Só a
+    // ESCOLHA de qual trilha empatada vence é que passa a considerar
+    // especificidade. Cada trilha aqui tem só 2 keywords e as 2 batem — fração
+    // simples = 2/min(2,15) = 1.0 (overlap pleno) × peso 0.65 × 100 = 65,
+    // pesado ou não. O ponto não é o número em si, é que ele NÃO varia por
+    // especificidade — se a ponderação por especificidade tivesse vazado pro
+    // score, o overlap de 'product' (keyword mais específica) sairia maior que
+    // o de 'qa', e não sai: os dois teriam saturado em 1.0 igual.
+    createTrack({ id: "qa", name: "QA", keywords: ["sql", "scrum"] });
+    createTrack({ id: "product", name: "Produto", keywords: ["scrum master", "scrum"] });
+
+    const job = insertJob(raw({ title: "Scrum Master", description: "Requisitos: Sql, metodologias ágeis, Scrum." }))!;
+    const { detail } = scoreJob(config, getJob(job.id)!);
+
+    assert.equal(detail.keyword_overlap, 65, "overlap continua a fração simples de hits, não pesada por especificidade");
+  });
+});

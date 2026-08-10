@@ -23,47 +23,37 @@ inventa fato, só descobre keyword sem lastro. `src/core|adapters|submit` nunca 
 
 ## Estado agora (atualizado em 2026-08-09)
 
-- **`main`**: BUG-010 mesclado e pushado — `ORDER BY` determinístico em `scoreJob`, junto com
-  company-watch Fase A e queue-improvements de sessões anteriores.
-- **Suíte**: 393/393 testes verdes, typecheck limpo.
+- **`main`**: BUG-010 completo (`ORDER BY` determinístico + desempate por especificidade, duas
+  branches/commits separados de propósito), junto com company-watch Fase A e queue-improvements
+  de sessões anteriores.
+- **Suíte**: 397/397 testes verdes, typecheck limpo.
 - **Perfil real**: ingerido (`profile/master-profile.yaml` existe, `/perfil` já rodou).
-- **Próxima branch a abrir**: desempate por especificidade de trilha — deliberadamente NÃO
-  empacotado com o BUG-010 (fix isolado com teste vs. mudança de comportamento de classificação;
-  se o desempate reclassificar vagas de forma indesejada, precisa dar pra isolar sem desfazer o
-  fix já estável).
 
 ## O que mudou nas últimas sessões (mais recente primeiro)
 
-1. **BUG-010 corrigido** — `scoreJob` (`src/core/scoring.ts`) desempatava trilha por ordem
-   não-especificada do SQLite (medido: 9,8% das vagas do banco real mudavam de `track_hint` só
-   invertendo `ORDER BY`). Fix: `ORDER BY id ASC` — reprodutível, não semanticamente correto
-   (desempate por especificidade de keyword fica para depois). `ACHADO-13` (sobre-captura de
-   `qa`) recontado sobre base determinística: **19% (11/57)**, não os 44% da primeira medição —
-   número confirmado reproduzível.
+1. **BUG-010 completo** — `scoreJob` desempatava trilha por ordem não-garantida do SQLite (9,8%
+   das vagas reais mudavam de `track_hint` invertendo `ORDER BY`). Fix em duas etapas: `ORDER BY
+   id ASC` (reprodutível) + desempate por especificidade (keyword exclusiva e mais longa pesa
+   mais — resolve `SCRUM MASTER` → `product` sem depender de alfabeto). `ACHADO-13`: 44%→19%→
+   **18% (11/60)** de sobre-captura em `qa`, com um falso-positivo novo documentado
+   (`quality assurance` como boilerplate). Detalhe completo: `KNOWN-BUGS.md` → BUG-010.
 2. **Vigilância por empresa (Fase A)** — `config/companies.yaml` + scrape do board Gupy
-   (`__NEXT_DATA__`, não API JSON — Gupy não tem API por empresa) + dedup por
-   `(source, source_job_id)`. `docs/custo-geracao.md` tem a medição completa (100% captura de
-   modalidade, 0,3% de recall do filtro léxico pré-insert — decisão de "filtrar ou inserir tudo"
-   ainda aberta, ver Próximos passos).
-3. **queue-improvements** — filtro de localização dupla, dropdown de trilha salva na busca da
-   fila, confirmação obrigatória para gerar kit de vaga com score abaixo do corte.
-4. **Harness in-process de HTTP** (`createApp()` em `src/server/index.ts`) fechou um buraco de
-   cobertura: nenhum teste antes booteava o dispatcher HTTP real.
-5. **Varredura do BUG-010 achou 2 candidatos ao próximo bug** (mesma classe: decisão que depende
-   de ordem de leitura não-garantida) — `KNOWN-BUGS.md` → BUG-010 → "Varredura pedida".
-   `answers.ts:45` (sem `ORDER BY` **e** sem `UNIQUE` na tupla de dedup) é o mais forte; `feedback.ts:39`
-   é dívida sem sangramento hoje (componente `preference` desarmado).
+   (`__NEXT_DATA__`, não API JSON) + dedup por `(source, source_job_id)`. Filtro léxico
+   pré-insert mede 0,3% de recall — decisão de "filtrar ou inserir tudo" ainda aberta.
+3. **queue-improvements** — filtro de localização dupla, dropdown de trilha salva, confirmação
+   obrigatória para gerar kit de vaga com score abaixo do corte.
+4. **Harness in-process de HTTP** fechou um buraco de cobertura (nenhum teste antes booteava o
+   dispatcher HTTP real).
 
-## Próximos passos (ordem travada pelo operador)
+## Próximos passos
 
-1. ~~BUG-010~~ ✅ feito nesta sessão.
-2. Desempate por especificidade de trilha (keyword exclusiva pesa mais que compartilhada) —
-   resolve a *classe* do problema que o `ORDER BY` só tornou reprodutível.
-3. ~~Recontar ACHADO-13~~ ✅ feito, 19%/57 confirmado.
-4. Expandir `config/companies.yaml` (mais empresas GPTW/BH, ATS verificado um a um) e decidir
-   filtrar-no-pré-insert vs. inserir-tudo-e-deixar-o-score-decidir — reaberta pelo BUG-010 (um
-   classificador com desempate instável piora com mais volume, não melhora).
-5. **Fase B (Greenhouse) bloqueada até 1–4 fecharem.**
+1. ~~BUG-010 (ordem + especificidade)~~ ✅ feito.
+2. **`answers.ts:45`** — candidato mais forte a próximo bug: sem `ORDER BY` **e** sem `UNIQUE` na
+   tupla de dedup do answer bank. `feedback.ts:39` é a mesma classe, mas dormente (componente
+   `preference` desarmado) — prioridade menor. Detalhe: `KNOWN-BUGS.md` → BUG-010 → "Varredura".
+3. Expandir `config/companies.yaml` (mais empresas GPTW/BH) e decidir
+   filtrar-no-pré-insert vs. inserir-tudo — reaberto pelo BUG-010.
+4. **Fase B (Greenhouse) bloqueada até 2–3 fecharem.**
 
 Backlog mais antigo, não reordenado por isto: `docs/roadmap.md` (BUG-007 é o maior bloqueador de
 lá — componente de preferência desarmado, 98 chaves aprendidas preservadas para reprocessamento).

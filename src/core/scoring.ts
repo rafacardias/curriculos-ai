@@ -32,6 +32,37 @@ interface TrackRow {
   keywords: string;
 }
 
+/** Quantas trilhas habilitadas têm cada keyword — base do desempate por especificidade. */
+function keywordOwnerCounts(tracks: TrackRow[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const t of tracks) {
+    for (const kw of JSON.parse(t.keywords) as string[]) {
+      const key = kw.toLowerCase();
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/**
+ * Score de especificidade de um conjunto de keywords batidas — só serve para
+ * DESEMPATAR `trackHint` (BUG-010, próxima etapa), nunca entra no `score`.
+ * Keyword exclusiva de uma trilha pesa 2×, compartilhada pesa 1×; dentro de
+ * cada categoria, o número de palavras pesa junto — "scrum master" (bigrama,
+ * exclusiva de `product`) tem de vencer "sql" (palavra solta, exclusiva de
+ * `qa` só por acidente de vocabulário genérico da JD), a mesma convenção que
+ * `extractKeywords` já usa para bigramas (keywords.ts).
+ */
+function specificityScore(hits: string[], ownerCounts: Map<string, number>): number {
+  let score = 0;
+  for (const kw of hits) {
+    const owners = ownerCounts.get(kw.toLowerCase()) ?? 1;
+    const words = kw.trim().split(/\s+/).length;
+    score += (owners <= 1 ? 2 : 1) * words;
+  }
+  return score;
+}
+
 /**
  * Score determinístico 0-100 por componentes ponderados (config.scoring).
  * Sem trilhas no DB (perfil ainda não ingerido), o overlap usa os termos do
@@ -44,29 +75,43 @@ export function scoreJob(config: AppConfig, job: JobRow): { score: number; detai
 
   // 1. keyword_overlap × melhor trilha (só trilhas habilitadas competem)
   //
-  // ORDER BY id ASC (BUG-010): o desempate abaixo é `>` estrito, então um
-  // empate de overlap entre duas trilhas mantém a PRIMEIRA que a consulta
-  // devolver. Sem ORDER BY, essa ordem é a varredura de tabela do SQLite
-  // (rowid/inserção) — não-especificada e medida como não-determinística em
-  // produção (72/733 vagas mudavam de trilha só invertendo ASC/DESC). `id ASC`
-  // torna o resultado ESTÁVEL e REPRODUZÍVEL, não semanticamente correto: é
-  // ordem alfabética do slug da trilha, não especificidade de keyword. Mesmo
-  // cuidado que o caso SCRUM MASTER pediu — desempate por especificidade fica
-  // para depois, fora do escopo deste fix.
+  // ORDER BY id ASC (BUG-010): sem isto, um empate de overlap entre duas
+  // trilhas dependia da ordem não-especificada da varredura de tabela do
+  // SQLite (rowid/inserção) — medido como não-determinístico em produção
+  // (72/733 vagas mudavam de trilha só invertendo ASC/DESC). `id ASC` sozinho
+  // só torna o resultado REPRODUTÍVEL (ordem alfabética do slug), não
+  // CORRETO — por isso o desempate abaixo, quando há empate de verdade
+  // (`frac === overlap`), consulta `specificityScore` antes de aceitar o
+  // "vencedor por ordem": keyword exclusiva de uma trilha pesa mais que
+  // compartilhada, e dentro disso comprimento da keyword importa (ver
+  // `specificityScore`). Só quando a especificidade TAMBÉM empata (nenhuma
+  // trilha tem keyword mais específica que a outra) é que `id ASC` decide —
+  // nesse caso não haveria de fato nenhum critério melhor disponível.
   const tracks = db
     .prepare("SELECT id, keywords FROM profile_tracks WHERE enabled = 1 ORDER BY id ASC")
     .all() as unknown as TrackRow[];
+  const ownerCounts = keywordOwnerCounts(tracks);
   let trackHint: string | null = null;
   let overlap = 0;
+  let winnerSpecificity = 0;
   if (tracks.length) {
     for (const t of tracks) {
       const kws: string[] = JSON.parse(t.keywords);
       if (!kws.length) continue;
-      const hits = termsPresent(text, kws).length;
-      const frac = hits / Math.min(kws.length, 15); // satura: 15 keywords batendo = overlap pleno
+      const hits = termsPresent(text, kws);
+      const frac = hits.length / Math.min(kws.length, 15); // satura: 15 keywords batendo = overlap pleno
       if (frac > overlap) {
         overlap = Math.min(frac, 1);
         trackHint = t.id;
+        winnerSpecificity = specificityScore(hits, ownerCounts);
+      } else if (frac === overlap && frac > 0) {
+        // Empate de overlap: NÃO mexe no `overlap` (o score não muda), só
+        // decide se a especificidade justifica trocar o `trackHint`.
+        const candidateSpecificity = specificityScore(hits, ownerCounts);
+        if (candidateSpecificity > winnerSpecificity) {
+          trackHint = t.id;
+          winnerSpecificity = candidateSpecificity;
+        }
       }
     }
   } else {
