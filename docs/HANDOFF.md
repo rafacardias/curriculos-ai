@@ -14,30 +14,34 @@
 
 ## Resumo da sessão de 2026-08-10
 
-5 itens sequenciais, parada dura em cada um, todos fechados, `main` verde e pushado:
+Duas rodadas no mesmo dia, parada dura em cada item, `main` verde e pushado a cada um.
 
-1. **Teto de "inserir tudo" medido**: `skipLexicalFilter` em `runCompanyWatch` +
-   `scripts/measure-watch-ceiling.ts` — das 1602 vagas que o filtro léxico descarta, **zero**
-   cruzariam `queue_threshold=40` (melhor 27,5). **Não implementar** "inserir tudo".
+**Rodada 1** — arquitetura da vigilância vs. busca:
+1. **Teto de "inserir tudo" medido**: das 1602 vagas que o filtro léxico da vigilância descarta,
+   **zero** cruzariam `queue_threshold=40` (melhor 27,5). **Não implementar.**
 2. **Mercado vs. calibragem, resolvido por contraste de `score_detail`**: mesmo `scoreJob`, mesmo
-   threshold — vaga da busca geral com `keyword_overlap` real pontua 80–93; vigilância GPTW/BH
-   nunca passa de 31,8 porque `keyword_overlap=0` no corpus inteiro. Veredito: **mercado**.
-   **Prioridade reordenada**: busca geral é canal primário, vigilância secundária/saturada,
-   **Fase B (Solides/Greenhouse) fechada até nova ordem**. Ver `KNOWN-BUGS.md` → `ACHADO-11`.
-3. **`feedback.ts:39` corrigido** — mesma classe `ORDER BY` do BUG-010/`answers.ts`, mais filtro
-   `enabled` ausente. Fecha a classe inteira (`scoring.ts`, `answers.ts`, `feedback.ts`).
-4. **Canal de busca geral instrumentado** (`scripts/measure-search-channel.ts`, leitura de 65
-   rodadas históricas): 789 vagas pontuadas, 7,1% cruzam o corte — mas a taxa NÃO é estável entre
-   rodadas (2,8%→21,5%, ao contrário do filtro léxico). Causa não investigada, registrada como
-   pergunta aberta. Ver `ACHADO-15`.
-5. **Análise, sem implementar**: BUG-007 não muda de prioridade formal, mas o diagnóstico muda —
-   população `ai-builder` cresceu de 1 pra 36 decisões (`queued`+`rejected`), mas só 5/45 eventos
-   de feedback carregam `reason_class`; o servidor (`server/index.ts` → `doFeedback`) trata
-   `reasonClass` como opcional, só o CLI exige. O bottleneck real não é mais volume, é captura na
-   UI. Reativar `preference` continua sendo decisão do operador.
+   threshold — vaga da busca geral com overlap real pontua 80–93; vigilância GPTW/BH nunca passa
+   de 31,8. Veredito: **mercado**. Busca geral = canal primário; vigilância = secundária/saturada;
+   **Fase B (Solides/Greenhouse) fechada até nova ordem**. `KNOWN-BUGS.md` → `ACHADO-11`.
+3. **`feedback.ts:39` corrigido** — mesma classe `ORDER BY` do BUG-010/`answers.ts` + filtro
+   `enabled` ausente. Fecha a classe inteira.
+4. **Busca geral instrumentada** (65 rodadas históricas): 789 pontuadas, 7,1% cruzam o corte.
 
-Suíte 411/411 (era 407 no início da madrugada). Regras respeitadas: nenhum adapter novo, léxico/
-`ACHADO-13-14` intocados, nenhum kit gerado, nenhuma migration.
+**Rodada 2** — explicar/corrigir, sem tocar peso/threshold/léxico:
+5. **`ACHADO-16` corrige o `ACHADO-15`**: o "2,8%→21,5%, instável" da rodada 1 era artefato —
+   coluna `status` contaminada por `rescore --commit` (rodou em 3 datas) + corte de rodada caindo
+   em cima de uma troca de config no mesmo dia. Recalculado via `scoreJob()` puro (ignora `status`
+   armazenado): taxa real ≈ 11%→12%, praticamente plana.
+6. **`docs/roadmap.md` #1 (BUG-007) atualizado — e autocorrigido no mesmo dia.** Primeiro achei
+   (errado) que a UI trata `reason_class` como opcional; era legado pré-fix (commit `f9378e6`,
+   2026-08-07). Desde o fix, captura é 100%. Bloqueador real: volume/tempo de decisão (16 de
+   `ai-builder` pós-fix, desbalanceado 11 positivas : 1 negativa), não captura.
+7. **Custo de fechar BUG-007, medido (plano, não execução)**: 3 dos 4 itens do escopo original já
+   estão implementados — a tabela de status do BUG-007 em `KNOWN-BUGS.md` (linha ~124) está
+   desatualizada nesse ponto, não corrigida ainda. Falta é tempo, não código.
+
+Suíte 411/411. Regras respeitadas: nenhum adapter novo, léxico/`ACHADO-13-14` intocados, nenhum
+kit gerado, nenhuma migration, nenhum peso/threshold/query mudado.
 
 ## Estado agora (atualizado em 2026-08-10)
 
@@ -47,8 +51,9 @@ Suíte 411/411 (era 407 no início da madrugada). Regras respeitadas: nenhum ada
 
 ## O que mudou (mais recente primeiro — sessões anteriores a esta no `git log`)
 
-1. Sessão de hoje (acima): teto de "inserir tudo", veredito mercado-vs-calibragem, fix de
-   `feedback.ts`, instrumentação da busca geral, diagnóstico de BUG-007.
+1. Sessão de hoje (acima, 2 rodadas): teto de "inserir tudo", veredito mercado-vs-calibragem, fix
+   de `feedback.ts`, instrumentação e correção da busca geral (`ACHADO-15`/`16`), diagnóstico e
+   custo de fechar BUG-007.
 2. Madrugada autônoma (2026-08-09→10): cadastro de 17 empresas GPTW/BH, `company-watch-
    registry.ts` (checker doc↔YAML), `answers.ts` `ORDER BY`, `watch run --commit` real.
 3. **BUG-010 completo** — `scoreJob` desempatava trilha por ordem não-garantida do SQLite. Fix:
@@ -59,15 +64,17 @@ Suíte 411/411 (era 407 no início da madrugada). Regras respeitadas: nenhum ada
 
 ## Próximos passos
 
-1. **BUG-007** (`docs/roadmap.md` #1, bloqueador): diagnóstico atualizado nesta sessão — a
-   captura de `reason_class` na UI (`server/index.ts`) é opcional e é aí que a maioria do
-   feedback real acontece, não no CLI que já exige. Decisão do operador se/quando fechar isso.
-2. `UNIQUE` na tupla de dedup do `answer_bank` — decisão de schema registrada em `KNOWN-BUGS.md` →
+1. **BUG-007** (`docs/roadmap.md` #1, bloqueador): captura de motivo na UI já funciona (100% desde
+   08-07); falta é volume de decisão real de `ai-builder` com `reason_class`, hoje 16 (desbalanço
+   11:1 positivo/negativo, alvo é ~25 mais balanceado). Reativar `preference` é decisão do
+   operador — inclui escolher o peso e de onde tirá-lo (`keyword_overlap` está em 0,65 hoje).
+2. `KNOWN-BUGS.md` BUG-007, tabela de status (linha ~124): diz `source:*` "não feito", mas o
+   código já exclui (escrita e leitura) — desatualizada, não corrigida (achado do item 3, plano).
+3. `UNIQUE` na tupla de dedup do `answer_bank` — decisão de schema registrada em `KNOWN-BUGS.md` →
    `answers.ts:45`, não executada (precisa de índices parciais, padrão da migration 007).
-3. Fase B (Solides/Greenhouse) fechada até nova ordem (item 2 do resumo) — reabrir exige critério
-   de busca novo, não adapter novo do mesmo tipo de empresa.
-4. Backlog mais antigo, não reordenado por isto: `docs/roadmap.md` itens 2–10 (barreira de
-   entrada, configuração de busca `ai-builder`, `AdapterCapabilities`, etc.).
+4. Fase B (Solides/Greenhouse) fechada até nova ordem — reabrir exige critério de busca novo, não
+   adapter novo do mesmo tipo de empresa.
+5. Backlog mais antigo, não reordenado por isto: `docs/roadmap.md` itens 2–10.
 
 ## Onde olhar para mais detalhe
 
