@@ -21,10 +21,22 @@ operador — `kw:qa` −7.65, `kw:product manager` −9.50, `seniority:junior` �
 
 **Escopo:** motivo de vocabulário fechado (`nao_elegivel` · `fora_do_tema` · `senioridade` ·
 `remuneracao` · `empresa`); só `fora_do_tema` e `empresa` alimentam `preference_weights`;
-`source:*` deixa de ser chave aprendida; migration aditiva para a coluna de motivo.
+`source:*` deixa de ser chave aprendida; migration aditiva para a coluna de motivo. (A taxonomia
+efetivamente implementada colapsou pra 3 valores — `elegibilidade`/`tema`/`outro` — não os 5
+listados acima; ver `KNOWN-BUGS.md` BUG-007 "Estado — PARCIALMENTE CORRIGIDO".)
 
-**Aceite:** ~25 decisões de `ai-builder` com motivo registrado. Não as 48 rejeições atuais — 41
-delas são de `product` e 0 de 95 vagas `senior` chegaram a ser vistas pelo operador.
+**Aceite — original:** ~25 decisões de `ai-builder` com motivo registrado. Não as 48 rejeições
+atuais (na época) — 41 delas eram de `product` e 0 de 95 vagas `senior` chegaram a ser vistas pelo
+operador.
+
+**Aceite — revisado 2026-08-10, o bloqueador mudou de lugar:** a população de `ai-builder` já
+passou de 1 pra **36 decisões** (19 `queued` + 17 `rejected`) — o volume que faltava em 2026-08-06
+já existe. Mas só **5 dos 45 eventos de feedback de `ai-builder` carregam `reason_class`** (4
+`elegibilidade`, 1 `tema`; 40 sem nenhum motivo) — bem abaixo do aceite de ~25. Causa: `doFeedback`
+(`src/server/index.ts:162`, o caminho que a UI usa no dia a dia) trata `reasonClass` como parâmetro
+**opcional**; só `src/cli/feedback.ts:34-35` exige. **O bloqueador não é mais "poucas decisões de
+`ai-builder` vistas" — é captura de motivo na UI.** Tornar `reasonClass` obrigatório no servidor
+resolveria isso, mas é mudança de comportamento de produto: decisão do operador, não desta nota.
 
 ## 2. Componente de barreira de entrada (ex-1.2d)
 
