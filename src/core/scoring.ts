@@ -43,8 +43,18 @@ export function scoreJob(config: AppConfig, job: JobRow): { score: number; detai
   const text = `${job.title} ${job.description ?? ""}`;
 
   // 1. keyword_overlap × melhor trilha (só trilhas habilitadas competem)
+  //
+  // ORDER BY id ASC (BUG-010): o desempate abaixo é `>` estrito, então um
+  // empate de overlap entre duas trilhas mantém a PRIMEIRA que a consulta
+  // devolver. Sem ORDER BY, essa ordem é a varredura de tabela do SQLite
+  // (rowid/inserção) — não-especificada e medida como não-determinística em
+  // produção (72/733 vagas mudavam de trilha só invertendo ASC/DESC). `id ASC`
+  // torna o resultado ESTÁVEL e REPRODUZÍVEL, não semanticamente correto: é
+  // ordem alfabética do slug da trilha, não especificidade de keyword. Mesmo
+  // cuidado que o caso SCRUM MASTER pediu — desempate por especificidade fica
+  // para depois, fora do escopo deste fix.
   const tracks = db
-    .prepare("SELECT id, keywords FROM profile_tracks WHERE enabled = 1")
+    .prepare("SELECT id, keywords FROM profile_tracks WHERE enabled = 1 ORDER BY id ASC")
     .all() as unknown as TrackRow[];
   let trackHint: string | null = null;
   let overlap = 0;

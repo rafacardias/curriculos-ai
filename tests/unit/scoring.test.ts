@@ -4,6 +4,7 @@ import { resetDb } from "../helpers/sandbox.js";
 import { loadConfig, type AppConfig } from "../../src/core/config.js";
 import { scoreJob, scoreNewJobs, hardFilterReason } from "../../src/core/scoring.js";
 import { insertJob, getJob, confirmModality } from "../../src/db/repo/jobs.js";
+import { createTrack } from "../../src/db/repo/profile-tracks.js";
 import type { RawJob } from "../../src/core/types.js";
 
 let config: AppConfig;
@@ -264,5 +265,45 @@ describe("filtros de elegibilidade — idioma nativo e tecnologia ausente", () =
     confirmModality(j.id, null);
     assert.equal(hardFilterReason(c, getJob(j.id)!), null);
     assert.equal(getJob(j.id)!.modality_confirmed_at, null, "a data também sai, senão fica órfã");
+  });
+});
+
+describe("scoreJob — desempate de trilha é determinístico (BUG-010)", () => {
+  beforeEach(() => resetDb());
+
+  it("empate real de overlap (só keywords compartilhadas) resolve sempre para a mesma trilha", () => {
+    // 'qa' é criada ANTES de 'product' de propósito: sem ORDER BY, a varredura de
+    // tabela do SQLite devolve as linhas em ordem de inserção (rowid), então o
+    // bug (sem fix) faz 'qa' vencer por ser a primeira encontrada — não por ser
+    // mais específica. Isso reproduz o que a medição real (72/733 vagas, ASC vs
+    // DESC) mostrou: o vencedor de empate é acidente de ordem, não critério.
+    createTrack({ id: "qa", name: "QA", keywords: ["scrum", "agile"] });
+    createTrack({ id: "product", name: "Produto", keywords: ["scrum", "agile"] });
+
+    const job = insertJob(raw({ title: "Scrum Master Agile PL/SR" }))!;
+    const { trackHint, detail } = scoreJob(config, getJob(job.id)!);
+
+    // As duas trilhas têm o MESMO overlap (2/2 termos, nenhuma keyword exclusiva
+    // no texto) — é um empate de verdade, não uma vaga que uma trilha descreve
+    // melhor. `ORDER BY id ASC` é arbitrário-mas-estável, não semanticamente
+    // correto: 'product' < 'qa' alfabeticamente é a única razão de vencer aqui.
+    assert.equal(
+      trackHint,
+      "product",
+      `esperado 'product' (ORDER BY id ASC é a regra de desempate), veio '${trackHint}' — detail: ${JSON.stringify(detail)}`
+    );
+  });
+
+  it("o mesmo empate dá o mesmo resultado nas duas ordens de inserção", () => {
+    // Prova a determinismo diretamente: inverter a ordem em que as trilhas são
+    // CRIADAS não pode inverter o vencedor. Se inverter, o critério ainda é a
+    // ordem de alguma consulta, não o id.
+    createTrack({ id: "product", name: "Produto", keywords: ["scrum", "agile"] });
+    createTrack({ id: "qa", name: "QA", keywords: ["scrum", "agile"] });
+
+    const job = insertJob(raw({ title: "Scrum Master Agile PL/SR" }))!;
+    const { trackHint } = scoreJob(config, getJob(job.id)!);
+
+    assert.equal(trackHint, "product");
   });
 });

@@ -21,7 +21,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | [BUG-004](#bug-004) | Baixa | Sem cobertura | `src/submit/linkedin-easyapply.ts` |
 | [BUG-008](#bug-008) | **Alta** | **Corrigido** | `src/cli/kit.ts` (gates de conteúdo) |
 | [BUG-009](#bug-009) | Média | **Corrigido** | `src/core/scoring.ts` (filtro de idioma) |
-| [BUG-010](#bug-010) | **Alta** | Medido, não corrigido | `src/core/scoring.ts:46` (`scoreJob`) |
+| [BUG-010](#bug-010) | **Alta** | **Corrigido** (`ORDER BY id ASC` — desempate por especificidade ainda pendente) | `src/core/scoring.ts:46` (`scoreJob`) |
 | [REQ-004](#req-004) | **Alta** | Medido; veredito pontual | `src/core/master-resume.ts` |
 | [REQ-003](#req-003) | **Alta** | Medido; correção é do operador | `profile/tracks.yaml` |
 | [REQ-002](#req-002--segmentação-por-seção-implementada-em-2026-08-07) | — | **IMPLEMENTADO** (`src/core/jd-sections.ts`) — 92% do acervo segmentado | `src/core/jd-sections.ts` |
@@ -50,7 +50,7 @@ achadas de novo, não redescobertas):
 | [ACHADO-10](#achado-10--get-apitracks-devolve-trilhas-desabilitadas-o-filtro-é-só-no-cliente) | `GET /api/tracks` devolve todas as trilhas, inclusive desabilitadas — filtro é só em `app.html`. **Medido, não corrigido** |
 | [ACHADO-11](#achado-11--o-board-da-gupy-por-empresa-não-tem-api-é-scrape-de-__next_data__) | `<handle>.gupy.io/api/v1/jobs` é 404 — o board por empresa é scrape de `__NEXT_DATA__`, não integração estável. Filtro léxico da Fase A é título+departamento, sem descrição: 2/782 vagas passaram na validação real. Modalidade estruturada: 782/782 (100%). **Corrigido** (adapter redesenhado) |
 | [ACHADO-12](#achado-12--totvsgupyio-é-404-de-verdade-handle-removido-do-cadastro) | `totvs.gupy.io` e 5 variações óbvias são 404 — handle errado, não "não confirmada". TOTVS removida de `config/companies.yaml`. **Corrigido** (removida) |
-| [ACHADO-13](#achado-13--léxico-de-qaproduct-compartilha-6-keywords-genéricas--sobre-captura-real-mas-menor-do-que-a-primeira-medição) | 6 keywords idênticas entre `qa`/`product`. Medição original (44%/95) não reproduzível — carregava o BUG-010; sob ordem fixa: 19% (11/57). **Medido, não corrigido** |
+| [ACHADO-13](#achado-13--léxico-de-qaproduct-compartilha-6-keywords-genéricas--sobre-captura-real-mas-menor-do-que-a-primeira-medição) | 6 keywords idênticas entre `qa`/`product`. Medição original (44%/95) não reproduzível — carregava o BUG-010; sob ordem fixa: 19% (11/57), **confirmado reproduzível pós-fix**. Léxico não tocado |
 
 ---
 
@@ -785,7 +785,61 @@ ordem alfabética dos ids das trilhas), não porque `ORDER BY id` seja uma corre
 compartilhada com outra) — não feita nesta sessão. Ver ACHADO-13 pra a consequência disso na
 contagem de sobre-captura de `qa`.
 
-Nada alterado em `src/core/scoring.ts`.
+### Corrigido (2026-08-09)
+
+**Escopo travado pelo operador: só o `ORDER BY`, nada de desempate por especificidade nesta
+rodada.**
+
+**Teste primeiro, e ele falhava sem o fix.** `tests/unit/scoring.test.ts`, describe `scoreJob —
+desempate de trilha é determinístico`: cria as trilhas `qa` e `product` com o MESMO léxico
+(`scrum`, `agile` — empate real de overlap, não vaga que uma trilha descreve melhor), insere uma
+vaga que só bate essas duas keywords, e afirma qual trilha vence. Rodado ANTES do fix: `qa` vence
+(porque foi criada primeiro — a consulta sem `ORDER BY` devolve em ordem de inserção/rowid),
+teste falha contra o esperado `product`. Isso prova que o teste exercita o bug de verdade, não só
+"a ordem é estável".
+
+**Fix**: `src/core/scoring.ts:47` — `SELECT id, keywords FROM profile_tracks WHERE enabled = 1
+ORDER BY id ASC`. `id ASC` é **arbitrário-mas-estável, não semanticamente correto** — é ordem
+alfabética do slug da trilha (`product` vence `qa` por "p" < "q"), não especificidade de keyword.
+Documentado como tal no comentário do código, para não ser lido como "a" correção no futuro.
+Mesma convenção que `listTracks()` (`src/db/repo/profile-tracks.ts:18`) já usava — a inconsistência
+era `scoreJob` ter sua própria consulta inline sem seguir o padrão que já existia no repo.
+
+Rodado de novo depois do fix: os dois testes passam (o de empate real e o de invariância a ordem
+de inserção). Suíte completa 393/393, typecheck limpo.
+
+**Varredura pedida — outras consultas sem `ORDER BY` cujo resultado alimenta decisão, não só
+exibição** (medido, não corrigido nesta rodada):
+
+- `src/db/repo/feedback.ts:39` (`preferenceKeysFor`) — `SELECT keywords FROM profile_tracks`
+  (sem `ORDER BY`, e nem filtra `enabled`) alimenta `termsPresent(...).slice(0, 8)`: QUAIS
+  keywords viram chave `kw:*` em `preference_weights` depende da ordem das trilhas na consulta.
+  Mesma classe de bug que o `scoreJob`. Impacto atual baixo porque o componente `preference` está
+  desarmado (peso 0, decisão do BUG-007) — mas os dados continuam sendo gravados "para
+  reprocessamento futuro" (decisions.md, 2026-07-12), e herdariam essa não-determinismo se o
+  componente for reativado.
+- `src/cli/answers.ts:45` (comando `answers add`) — `SELECT id FROM answer_bank WHERE
+  question_fingerprint = ? AND language = ? AND track_id IS ? AND company_id IS ?` sem `ORDER BY`,
+  e a tabela não tem `UNIQUE` nessa tupla (só índice não-único em `question_fingerprint,
+  language` — `001_init.sql:105`). Se alguma vez existirem duas linhas duplicadas na mesma tupla
+  (hoje o próprio comando evita criar, mas nada no schema impede), `.get()` decide qual delas
+  recebe o `UPDATE` sem critério. Risco baixo (operador único, sem concorrência), mas é a mesma
+  falta de garantia.
+- Checado e descartado: `src/cli/kit.ts:131` (despeja TODAS as trilhas no bundle pro redator, não
+  escolhe uma vencedora por código — ordem não decide nada); `src/core/company-watch.ts:56` (une
+  keywords num `Set`, união é comutativa); `src/core/policy.ts` (checagens de existência/`COUNT`,
+  agregados não dependem de ordem); `src/cli/submit.ts:107` (itera TODAS as `applications
+  kit_ready`, não escolhe uma).
+
+**Recontagem do ACHADO-13 sobre base determinística de verdade** (não o script standalone da
+medição anterior — o `scoreJob()` real, pós-fix, rodado contra as 733 vagas do banco de produção,
+leitura pura, nada gravado): **57 vagas em `qa`, 11 sem keyword específica (19%)** — idêntico ao
+número medido antes sob `ORDER BY id ASC` manual. **O baseline é reproduzível**: não muda de novo.
+(72/733 vagas recalculadas divergem do `track_hint` hoje GRAVADO no banco — esperado, o banco
+ainda não passou por `rescore --commit` com o fix; nenhum `--commit` rodado nesta sessão, por
+não estar no escopo pedido.)
+
+Desempate por especificidade continua fora do escopo — próxima sessão.
 
 ---
 
