@@ -52,7 +52,8 @@ achadas de novo, não redescobertas):
 | [ACHADO-12](#achado-12--totvsgupyio-é-404-de-verdade-handle-removido-do-cadastro) | `totvs.gupy.io` e 5 variações óbvias são 404 — handle errado, não "não confirmada". TOTVS removida de `config/companies.yaml`. **Corrigido** (removida) |
 | [ACHADO-13](#achado-13--léxico-de-qaproduct-compartilha-6-keywords-genéricas--sobre-captura-real-mas-menor-do-que-a-primeira-medição) | 6 keywords idênticas entre `qa`/`product`. 44%/95 → 19%/57 (ordem fixa) → **18%/60 (ordem fixa + especificidade)** — 7 vagas mudaram: 4 correções genuínas, 2 ambíguas, 1 falso-positivo (ver ACHADO-14). Léxico não tocado |
 | [ACHADO-14](#achado-14--desempate-por-comprimento-de-keyword-tem-uma-classe-própria-de-falso-positivo-termo-longo-e-genérico-de-boilerplate) | Peso por nº de palavras (BUG-010) trata "comprido" como "discriminante" sem checar domínio — `"quality assurance"`/`"ciclo de vida"` como boilerplate genérico classificaram 3 vagas errado. **Medido, stakes baixos, não perseguido** |
-| [ACHADO-15](#achado-15--o-canal-de-busca-geral-instrumentado-789-vagas-pontuadas-71-cruzam-o-corte-mas-a-taxa-não-é-estável-entre-rodadas) | `scripts/measure-search-channel.ts`, leitura de 65 `search_runs` históricos: 789 vagas pontuadas, 56 (7,1%) cruzam `queue_threshold`. Taxa NÃO estável como o filtro léxico — 2,8% (1ª metade cronológica) → 21,5% (2ª). **Medido, canal primário confirmado, instabilidade registrada** |
+| [ACHADO-15](#achado-15--o-canal-de-busca-geral-instrumentado-789-vagas-pontuadas-71-cruzam-o-corte-mas-a-taxa-não-é-estável-entre-rodadas) | `scripts/measure-search-channel.ts`, leitura de 65 `search_runs` históricos: 789 vagas pontuadas, 56 (7,1%) cruzam `queue_threshold`. Volume/canal primário confirmados. Taxa "2,8%→21,5%, instável": **REVISADO por ACHADO-16** — era artefato de medição |
+| [ACHADO-16](#achado-16--o-28-215-do-achado-15-era-artefato-de-medição-a-taxa-real-é-praticamente-plana) | O "2,8%→21,5%" veio de coluna `status` contaminada por `rescore --commit` (rodou 3× em datas diferentes) + corte por contagem de rodada caindo no meio de uma troca de config. Recalculado via `scoreJob()` puro: taxa real ≈ 11%→12%, efeito de peso pequeno e NEGATIVO, efeito de query pequeno e positivo. **Corrigido — não perseguir a "instabilidade" original** |
 
 ---
 
@@ -652,6 +653,13 @@ explicar): candidatos plausíveis são mudança nas queries de `config.yaml` ao 
 composição diferente do mercado nas duas janelas. **Registrado como pergunta em aberto, não
 resolvida aqui.**
 
+> **⚠ Revisado em ACHADO-16 (2026-08-10, sessão seguinte)**: a causa raiz FOI investigada, e o
+> "2,8%→21,5%" em si se revelou artefato de medição — a coluna `status` usada aqui está
+> contaminada por `rescore --commit` (rodou em 3 datas diferentes) e o corte por contagem de
+> rodada caiu no meio de uma troca de config. A taxa real, recalculada sem essa contaminação, é
+> praticamente plana (~11%→12%). Ver ACHADO-16 para a decomposição completa. O volume/canal
+> primário (789 pontuadas, 56 na fila) continua válido — só a leitura de "instabilidade" caiu.
+
 **Limite do número, registrado**: atribuição de vaga→rodada é por janela de tempo
 (`jobs.seen_at` dentro de `[search_runs.started_at, finished_at]`), não por FK — `jobs` não guarda
 o `search_runs.id` que a inseriu. Fontes que não vêm de `search.ts` (`gupy-watch`, `manual`) foram
@@ -663,6 +671,76 @@ excluídas do pool antes da atribuição, então a aproximação nunca precisa a
 **Conclusão**: busca geral confirmada como canal primário por volume (789 pontuadas vs. 1602 da
 vigilância, mas com taxa de aproveitamento muito maior: 7,1% vs. 0%) — reforça `ACHADO-11`.
 Instabilidade de taxa entre rodadas é um achado novo, registrado, não perseguido nesta sessão.
+
+### ACHADO-16 · o 2,8%→21,5% do ACHADO-15 era artefato de medição — a taxa real é praticamente plana
+
+**Pedido**: explicar a subida de taxa do ACHADO-15 — query nova, mistura de fonte, ou deriva de
+léxico/perfil? `git log -- config/config.yaml` achou dois commits no MESMO DIA, 51 minutos de
+diferença, que a comparação "1ª metade vs. 2ª metade" não conseguia separar:
+
+| commit | quando (UTC) | o quê |
+|---|---|---|
+| `d23b6e2` | 2026-08-06T19:09:48Z | `scoring.preference` 0,10→0 · `keyword_overlap` 0,55→0,65 |
+| `e57feb1` | 2026-08-06T20:00:35Z | `searches:` retargetadas de QA/Product pra ai-builder (9→13 queries) |
+
+Nenhuma rodada de busca aconteceu entre os dois (checado: 0 `jobs.seen_at` na janela de 51 min) —
+todo job pontuado depois de 20:00:35Z tem peso novo E query nova ao mesmo tempo.
+
+**Léxico/perfil (terceiro candidato original) — descartado por verificação direta, não suposição**:
+`profile/tracks.yaml` (fonte versionada) não tem commit desde 2026-07-12; `git diff`/`git status`
+no arquivo hoje estão limpos. O `profile_tracks.updated_at = 2026-08-08` que aparece no banco é
+carimbo de um re-sync idempotente (`ingest-profile.ts sync` sempre escreve `updated_at`, mesmo sem
+mudança de conteúdo — `src/cli/ingest-profile.ts:67`), não uma edição real de keyword.
+
+**O problema descoberto no meio do caminho**: `rescore --commit` rodou em 2026-08-06, 08-07 E
+08-08 (`docs/baseline-onda1.md`, `KNOWN-BUGS.md`). `listRescorableJobs()` (`src/db/repo/
+jobs.ts:182`) reprocessa `status IN ('new','queued','rejected')` sem `applications` associada —
+ou seja, a coluna `jobs.score`/`status` de uma vaga antiga pode ter sido reescrita 0, 1, 2 ou 3
+vezes com configs diferentes, dependendo só de quando cada rescore encontrou aquela vaga elegível.
+E `expired` (`doDiscard(..., "closed")`, `src/server/index.ts:373` — ação do operador, "anúncio
+não está mais no ar") **sobrescreve `status` sem preservar se a vaga tinha cruzado `queue_threshold`
+antes**. No pool anterior ao corte (371 vagas), 323 (87%) já estão `expired` — o outcome original
+delas é irrecuperável da coluna `status`. Confirmado como contaminação real, não hipótese: a taxa
+"real" armazenada desse pool (1/371 = 0,3%) e a taxa recalculada do ZERO sob os MESMOS pesos
+originais (41/371 = 11,1%, ver abaixo) divergem demais pra serem a mesma medição.
+
+**Método corrigido**: ignorar `jobs.score`/`status` armazenados inteiramente. `scoreJob()` e
+`hardFilterReason()` são puros (só leitura) — dá pra recalcular do zero cada vaga real (título/
+descrição/empresa são imutáveis) sob um config simulado. `scripts/explain-search-rate-shift.ts`
+pontua os dois pools (371 vagas de antes do corte, 418 de depois) sob os DOIS regimes de peso —
+2×2 limpo, sem depender de quando ou quantas vezes aquela vaga foi rescorada:
+
+| | peso velho (0,55 / 0,10) | peso novo (0,65 / 0) |
+|---|---:|---:|
+| **query velha** (371 vagas) | 41 cruzariam (**11,1%**) | 36 cruzariam (9,7%) |
+| **query nova** (418 vagas) | 67 cruzariam (16%) | 50 cruzariam (**12%**) |
+
+As duas células em negrito são o que de fato aconteceu (peso e query certos pro período de cada
+pool). **11,1% → 12%: quase plano.** Nada parecido com o 2,8%→21,5% original.
+
+**Decomposição**: efeito do peso é PEQUENO e NEGATIVO (−1,4pp sob query velha, −4pp sob query
+nova — neutralizar `preference` tirou tanto quanto `keyword_overlap`+0,10 deu); efeito da query é
+pequeno e POSITIVO (+4,9pp sob peso velho, +2,3pp sob peso novo — a retargetagem ajudou, mas bem
+menos do que a comparação ingênua sugeria). Os dois quase se cancelam.
+
+**Mistura de fonte, reportada à parte**: `gupy` foi de 48% pra 53% do pool, `remotive`/`remoteok`
+caíram de ~10% cada pra ~3% cada (as queries EN perderam `gupy`/`linkedin` como fonte na
+retargetagem — efeito colateral do mesmo commit). `source` não é termo de `scoreJob` (só existia
+como `preference_weights` aprendido, já neutralizado), então isso é composicional, não causal
+direto — não teve como isolar o quanto pesa sem mais uma simulação, não feita.
+
+**Validação da simulação**: pro pool "depois" (418 vagas, nascidas após o corte, teoricamente
+menos expostas a rescore), a taxa simulada (50, 12%) fica perto da armazenada (55, 13,2%) —
+diferença pequena, dentro do esperado por `preference_weights` ter avançado um pouco desde então
+(poucos eventos `tema` no período) e por filtros de elegibilidade terem mudado em 2026-08-07
+(commits `8441497`, `5a71d09` — não isolados nesta medição, usa filtro ATUAL nos dois lados).
+
+**Veredito**: os dados distinguem, sim — mas não a favor de nenhum dos três candidatos originais
+como "a alavanca". A causa dominante do "2,8%→21,5%" reportado foi a MEDIÇÃO (coluna `status`
+contaminada por rescore multi-data + corte de rodada caindo em cima da troca de config), não uma
+mudança real e grande no canal. O efeito real da retargetagem de query existe e é positivo
+(+2,3 a +4,9pp), só muito menor do que parecia — e a neutralização do `preference` (BUG-007) teve
+um efeito real, pequeno e NEGATIVO, não positivo como a suspeita inicial de "peso" sugeria.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
