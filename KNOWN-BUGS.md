@@ -482,6 +482,44 @@ ATUAIS, num único poll (board muda dia a dia: 1816 vs. 1828 de ontem, variaçã
 que nenhuma empresa nova traria vaga boa — só que, PARA este cadastro de 17 empresas, relaxar o
 filtro léxico não teria ajudado.
 
+**Mercado ou calibragem? A decomposição do score, não só o número, decide (2026-08-10)**. As 10
+vagas de maior pontuação da rodada sem filtro têm a MESMA decomposição, sem exceção:
+`keyword_overlap=0 · recency=7,5 · location_fit=15 · language_fit=5 · preference=0 → 27,5`. Zero
+overlap de keyword em toda a amostra — a pontuação inteira vem de recência/local/idioma, nenhum
+sinal de relevância real. Mas esse top-10 é enviesado por construção: "novas hoje" exclui, por
+dedup, as próprias 9 vagas que passaram o filtro léxico ontem (já commitadas, não são "novas").
+Comparar contra elas exige ler `score_detail` já gravado no banco (consulta pura, sem rodar nada):
+
+| vaga | fonte | score | `keyword_overlap` |
+|---|---|---:|---:|
+| Product Owner Sênior @ Itix | busca geral | **93,3** | **60,7** |
+| Senior AI Engineer @ Lemon.io | busca geral | **84,4** | **52** |
+| AI Engineer (RAG/Agents) @ 10x Advisory | busca geral | **82,2** | **60,7** |
+
+Mesmo `scoreJob`, mesmos pesos, mesmo `queue_threshold=40`: quando existe overlap de keyword de
+verdade (52–65 pontos só nesse componente), o score passa de 80. **O sistema reconhece vaga boa
+quando ela existe — o teto baixo na vigilância por empresa não é o classificador mudo, é ausência
+de `keyword_overlap` nesse corpus específico.** Threshold mal calibrado não se comportaria assim
+(não distinguiria 0 de 60 de overlap com a mesma régua que também produz 93 alhures). **Veredicto:
+mercado, não calibragem.**
+
+**Achado embutido, e ele reordena prioridade**: as três vagas acima de 80 pontos vieram da
+**busca geral** (`/buscar` — Remotive/RemoteOK/WWR/Gupy agregador), não da vigilância por empresa.
+O canal que produz candidato de verdade é o que já existia antes desta feature; a vigilância por
+empresa GPTW/BH entregou, com dado real, zero vaga acima do corte em duas medições independentes
+(com filtro e sem filtro). Isso não invalida o trabalho de cadastro — as 17 empresas estão
+corretamente verificadas, o checker doc↔YAML (`company-watch-registry.ts`) vale por si — mas muda
+o que é canal principal e o que é secundário:
+
+- **Busca geral é o canal primário.** É onde vaga acima de 40 de fato aparece.
+- **Vigilância por empresa (Fase A) é secundária**, e está saturada com o cadastro atual (17
+  empresas GPTW/BH) — mais poll, mais empresa do mesmo perfil, ou relaxar o filtro léxico não
+  mudam esse resultado, porque o problema já foi isolado: ausência de `keyword_overlap`, não
+  captura.
+- **Fase B (Solides/Greenhouse) fica fechada até nova ordem.** Trocar de ATS só troca *quais*
+  empresas GPTW/BH continuam sem postar a vaga certa — não ataca a causa medida. Fora do topo do
+  backlog; reabrir exige razão nova (ex.: expandir o critério de busca, não o adapter).
+
 ### ACHADO-12 · `totvs.gupy.io` é 404 de verdade — handle removido do cadastro
 
 **Corrigido** — a nota original de `config/companies.yaml` dizia "TOTVS está em Gupy mas NÃO foi
