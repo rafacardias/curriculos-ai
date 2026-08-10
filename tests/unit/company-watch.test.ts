@@ -105,6 +105,33 @@ describe("runCompanyWatch — commit", () => {
   });
 });
 
+describe("runCompanyWatch — skipLexicalFilter (medição)", () => {
+  it("com a flag, a vaga barrada pelo léxico também é inserida e pontuada — mas o rollback continua valendo", async () => {
+    stub = installFetchStub(ROUTES);
+    const r = await runCompanyWatch({ companyHandle: "ficticia-holding", skipLexicalFilter: true });
+
+    const holding = r.outcomes.find((o) => o.handle === "ficticia-holding")!;
+    assert.equal(holding.found, 3);
+    assert.equal(holding.filteredOut, 1, "continua reportando quantas TERIAM sido barradas");
+    assert.equal(holding.inserted, 3, "com a flag, as 3 vagas passam — inclusive a de Motorista");
+    assert.equal(r.scored.length, 3);
+    assert.ok(
+      r.scored.some((s) => s.title === "Motorista de Frota"),
+      "a vaga que o filtro léxico barraria também chega a scoreJob com a flag ligada"
+    );
+
+    const count = (getDb().prepare("SELECT COUNT(*) AS n FROM jobs").get() as { n: number }).n;
+    assert.equal(count, 0, "skipLexicalFilter não muda o dry-run — ainda é rollback garantido");
+  });
+
+  it("sem a flag (default), comportamento idêntico ao caminho já testado — filtro continua ativo", async () => {
+    stub = installFetchStub(ROUTES);
+    const r = await runCompanyWatch({ companyHandle: "ficticia-holding" });
+    const holding = r.outcomes.find((o) => o.handle === "ficticia-holding")!;
+    assert.equal(holding.inserted, 2, "sem a flag, Motorista continua barrado");
+  });
+});
+
 describe("runCompanyWatch — resiliência", () => {
   it("empresa com erro não impede as outras de processar no mesmo lote", async () => {
     stub = installFetchStub(ROUTES);
