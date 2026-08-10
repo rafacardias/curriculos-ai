@@ -12,69 +12,62 @@
 > **Teto de ~100 linhas, regra dura.** Se crescer, corte primeiro "O que mudou" pras 2-3 sessões
 > mais recentes antes de encurtar qualquer outra seção. Pointer, nunca conteúdo copiado.
 
-## Resumo da sessão de 2026-08-10 (manhã)
+## Resumo da sessão de 2026-08-10
 
-Decisão em aberto da madrugada anterior — "filtrar vs. inserir tudo" — **respondida por
-medição real**: `skipLexicalFilter` novo em `runCompanyWatch` (dry-run, sem risco) +
-`scripts/measure-watch-ceiling.ts` rodado contra o cadastro completo de 17 empresas. Resultado:
-das 1602 vagas que o filtro léxico descarta e nunca tinham sido pontuadas, **zero** cruzariam o
-`queue_threshold` (40) — maior pontuação 27,5. Ver `KNOWN-BUGS.md` → `ACHADO-11`, addendum
-2026-08-10. **Conclusão prática: não implementar "inserir tudo"** — o gargalo é adequação de
-mercado (BH não tem volume de vaga de tecnologia/produto nessas 17 empresas), não o filtro nem a
-captura. A decisão de Fase B (Solides vs. Greenhouse) segue em aberto, é sobre tipo de empresa
-vigiada, não quantidade processada. Suíte 409/409 (era 407), typecheck limpo.
+5 itens sequenciais, parada dura em cada um, todos fechados, `main` verde e pushado:
 
-## Resumo da madrugada autônoma (2026-08-09→10)
+1. **Teto de "inserir tudo" medido**: `skipLexicalFilter` em `runCompanyWatch` +
+   `scripts/measure-watch-ceiling.ts` — das 1602 vagas que o filtro léxico descarta, **zero**
+   cruzariam `queue_threshold=40` (melhor 27,5). **Não implementar** "inserir tudo".
+2. **Mercado vs. calibragem, resolvido por contraste de `score_detail`**: mesmo `scoreJob`, mesmo
+   threshold — vaga da busca geral com `keyword_overlap` real pontua 80–93; vigilância GPTW/BH
+   nunca passa de 31,8 porque `keyword_overlap=0` no corpus inteiro. Veredito: **mercado**.
+   **Prioridade reordenada**: busca geral é canal primário, vigilância secundária/saturada,
+   **Fase B (Solides/Greenhouse) fechada até nova ordem**. Ver `KNOWN-BUGS.md` → `ACHADO-11`.
+3. **`feedback.ts:39` corrigido** — mesma classe `ORDER BY` do BUG-010/`answers.ts`, mais filtro
+   `enabled` ausente. Fecha a classe inteira (`scoring.ts`, `answers.ts`, `feedback.ts`).
+4. **Canal de busca geral instrumentado** (`scripts/measure-search-channel.ts`, leitura de 65
+   rodadas históricas): 789 vagas pontuadas, 7,1% cruzam o corte — mas a taxa NÃO é estável entre
+   rodadas (2,8%→21,5%, ao contrário do filtro léxico). Causa não investigada, registrada como
+   pergunta aberta. Ver `ACHADO-15`.
+5. **Análise, sem implementar**: BUG-007 não muda de prioridade formal, mas o diagnóstico muda —
+   população `ai-builder` cresceu de 1 pra 36 decisões (`queued`+`rejected`), mas só 5/45 eventos
+   de feedback carregam `reason_class`; o servidor (`server/index.ts` → `doFeedback`) trata
+   `reasonClass` como opcional, só o CLI exige. O bottleneck real não é mais volume, é captura na
+   UI. Reativar `preference` continua sendo decisão do operador.
 
-Plano de 4 itens, ordem travada, parada dura em cada um. Todos fechados, `main` verde e pushado.
+Suíte 411/411 (era 407 no início da madrugada). Regras respeitadas: nenhum adapter novo, léxico/
+`ACHADO-13-14` intocados, nenhum kit gerado, nenhuma migration.
 
-1. **Cadastro de empresas mesclado** — 17 empresas GPTW/BH verificadas (57%→43%→0%→...→33% no
-   acumulado por grupo, ver `company-watch-candidates.md`). Ranking de ATS: Solides lidera 6×,
-   Greenhouse 1× — **não implementado**, decisão de Fase B é do operador.
-2. **`company-watch-registry.ts` + teste** — detecta divergência entre o log de verificação e
-   `companies.yaml` (o bug real do lote 1: 5 empresas "verificadas" nunca chegaram ao YAML).
-3. **`answers.ts:45`**: `ORDER BY updated_at DESC` corrigido e testado (mesma classe do BUG-010).
-   `UNIQUE` na tupla de dedup **parado e registrado** — exige migration e decisão de schema (NULL
-   não colide em índice único simples), não executado.
-4. **`watch run --commit` real, cadastro completo**: 1828 vagas, 9 passaram o filtro (0,49% —
-   confere com o 0,3% da Fase A), 6 novas, **0 cruzaram `queue_threshold`** (melhor pontuação
-   31,8). Dado novo pra decisão filtrar-vs-inserir-tudo, ainda não tomada.
+## Estado agora (atualizado em 2026-08-10)
 
-Regras respeitadas: nenhum adapter novo (nem Solides, líder do ranking), léxico/`ACHADO-13-14`
-intocados, nenhum kit gerado. Suíte 407/407 em cada merge.
-
-## Estado agora (atualizado em 2026-08-10, manhã)
-
-- **`main`**: tudo dos dois resumos acima mesclado e pushado. Suíte 409/409, typecheck limpo.
-- **`config/companies.yaml`**: 17 empresas (era 2 no início da sessão da madrugada).
+- **`main`**: tudo acima mesclado e pushado. Suíte 411/411, typecheck limpo.
+- **`config/companies.yaml`**: 17 empresas (fechado — ver item 2 acima, Fase B parada).
 - **Perfil real**: ingerido (`profile/master-profile.yaml` existe, `/perfil` já rodou).
-- **filtrar-vs-inserir-tudo**: decidido por dado, não implementar (ver resumo desta manhã).
 
 ## O que mudou (mais recente primeiro — sessões anteriores a esta no `git log`)
 
-1. Madrugada autônoma (acima): cadastro de 17 empresas, checker doc↔YAML, `answers.ts` ORDER BY,
-   `watch run` real.
-2. **BUG-010 completo** — `scoreJob` desempatava trilha por ordem não-garantida do SQLite. Fix:
-   `ORDER BY id ASC` + desempate por especificidade (keyword exclusiva e mais longa pesa mais).
-   `ACHADO-13`: 44%→19%→18%. `ACHADO-14`: termo longo mas genérico (boilerplate) também engana o
-   peso por comprimento — classe registrada, não perseguida.
-3. Vigilância por empresa (Fase A) — scrape `__NEXT_DATA__` da Gupy, dedup por
-   `(source, source_job_id)`; queue-improvements (filtro dual-location, dropdown de trilha,
-   confirmação de score baixo); harness HTTP in-process.
+1. Sessão de hoje (acima): teto de "inserir tudo", veredito mercado-vs-calibragem, fix de
+   `feedback.ts`, instrumentação da busca geral, diagnóstico de BUG-007.
+2. Madrugada autônoma (2026-08-09→10): cadastro de 17 empresas GPTW/BH, `company-watch-
+   registry.ts` (checker doc↔YAML), `answers.ts` `ORDER BY`, `watch run --commit` real.
+3. **BUG-010 completo** — `scoreJob` desempatava trilha por ordem não-garantida do SQLite. Fix:
+   `ORDER BY id ASC` + desempate por especificidade. `ACHADO-13`/`ACHADO-14`: sobre-captura e
+   falso-positivo de termo longo genérico, medidos, stakes baixos, não perseguidos.
+4. Vigilância por empresa (Fase A) — scrape `__NEXT_DATA__` da Gupy; queue-improvements; harness
+   HTTP in-process.
 
 ## Próximos passos
 
-1. **Fase B, decisão do operador**: filtrar-vs-inserir-tudo está resolvida (não implementar —
-   ver resumo desta manhã). Em aberto: se/quando abrir Fase B com empresa de outro ATS — Solides
-   (6 ocorrências no ranking, scrape) ou Greenhouse (1, mas API estável de verdade). Nenhum dos
-   dois implementado.
+1. **BUG-007** (`docs/roadmap.md` #1, bloqueador): diagnóstico atualizado nesta sessão — a
+   captura de `reason_class` na UI (`server/index.ts`) é opcional e é aí que a maioria do
+   feedback real acontece, não no CLI que já exige. Decisão do operador se/quando fechar isso.
 2. `UNIQUE` na tupla de dedup do `answer_bank` — decisão de schema registrada em `KNOWN-BUGS.md` →
-   `answers.ts:45`, não executada (NULL em `track_id`/`company_id` não colide em índice único
-   simples; precisa de índices parciais, padrão da migration 007).
-3. `feedback.ts:39` — mesma classe de `ORDER BY` ausente que `answers.ts` tinha, mas dormente
-   (componente `preference` desarmado). Prioridade menor.
-4. Backlog mais antigo, não reordenado por isto: `docs/roadmap.md` (BUG-007 é o maior bloqueador —
-   componente de preferência desarmado, 98 chaves aprendidas preservadas).
+   `answers.ts:45`, não executada (precisa de índices parciais, padrão da migration 007).
+3. Fase B (Solides/Greenhouse) fechada até nova ordem (item 2 do resumo) — reabrir exige critério
+   de busca novo, não adapter novo do mesmo tipo de empresa.
+4. Backlog mais antigo, não reordenado por isto: `docs/roadmap.md` itens 2–10 (barreira de
+   entrada, configuração de busca `ai-builder`, `AdapterCapabilities`, etc.).
 
 ## Onde olhar para mais detalhe
 
