@@ -50,7 +50,8 @@ achadas de novo, não redescobertas):
 | [ACHADO-10](#achado-10--get-apitracks-devolve-trilhas-desabilitadas-o-filtro-é-só-no-cliente) | `GET /api/tracks` devolve todas as trilhas, inclusive desabilitadas — filtro é só em `app.html`. **Medido, não corrigido** |
 | [ACHADO-11](#achado-11--o-board-da-gupy-por-empresa-não-tem-api-é-scrape-de-__next_data__) | `<handle>.gupy.io/api/v1/jobs` é 404 — o board por empresa é scrape de `__NEXT_DATA__`, não integração estável. Filtro léxico da Fase A é título+departamento, sem descrição: 2/782 vagas passaram na validação real. Modalidade estruturada: 782/782 (100%). **Corrigido** (adapter redesenhado) |
 | [ACHADO-12](#achado-12--totvsgupyio-é-404-de-verdade-handle-removido-do-cadastro) | `totvs.gupy.io` e 5 variações óbvias são 404 — handle errado, não "não confirmada". TOTVS removida de `config/companies.yaml`. **Corrigido** (removida) |
-| [ACHADO-13](#achado-13--léxico-de-qaproduct-compartilha-6-keywords-genéricas--sobre-captura-real-mas-menor-do-que-a-primeira-medição) | 6 keywords idênticas entre `qa`/`product`. 44%/95 → 19%/57 (ordem fixa) → **18%/60 (ordem fixa + especificidade)**. Léxico não tocado |
+| [ACHADO-13](#achado-13--léxico-de-qaproduct-compartilha-6-keywords-genéricas--sobre-captura-real-mas-menor-do-que-a-primeira-medição) | 6 keywords idênticas entre `qa`/`product`. 44%/95 → 19%/57 (ordem fixa) → **18%/60 (ordem fixa + especificidade)** — 7 vagas mudaram: 4 correções genuínas, 2 ambíguas, 1 falso-positivo (ver ACHADO-14). Léxico não tocado |
+| [ACHADO-14](#achado-14--desempate-por-comprimento-de-keyword-tem-uma-classe-própria-de-falso-positivo-termo-longo-e-genérico-de-boilerplate) | Peso por nº de palavras (BUG-010) trata "comprido" como "discriminante" sem checar domínio — `"quality assurance"`/`"ciclo de vida"` como boilerplate genérico classificaram 3 vagas errado. **Medido, stakes baixos, não perseguido** |
 
 ---
 
@@ -483,6 +484,36 @@ substitui a correção de léxico abaixo; ataca um bug de critério, não o léx
 fazia sentido tocar o léxico porque parte do sinal de "sobre-captura" vinha do bug de ordenação;
 agora o número é limpo o bastante pra essa correção valer a pena, quando for a vez do léxico.
 
+### ACHADO-14 · desempate por comprimento de keyword tem uma classe própria de falso-positivo: termo longo e genérico de boilerplate
+
+**Medido, não perseguido.** Nasceu checando o efeito colateral do desempate por especificidade
+(BUG-010) — não é o mesmo achado que o `sql` do BUG-010 (aquele era palavra CURTA e exclusiva por
+acaso de vocabulário). Este é o oposto: palavra **longa** e exclusiva, mas de **baixo poder
+discriminante** — aparece em rodapé/boilerplate genérico de vaga, não descreve o trabalho.
+
+Dois casos reais confirmados, mesma causa:
+
+- `"quality assurance"` (2 palavras, exclusiva de `qa`) classificou `B2B SaaS PPC Manager`
+  (vaga de marketing) como `qa` — a frase apareceu como frase de compromisso corporativo
+  genérico, não sobre o cargo.
+- `"ciclo de vida"` (3 palavras, exclusiva de `product`) classificou duas vagas de CRM/marketing
+  (`Analista de Dados e CRM`, `ANALISTA DE MARKETING E CRM JR`) como `product` — mesmo padrão:
+  termo longo o bastante para vencer qualquer outra keyword por peso de comprimento, curto em
+  informação sobre a vaga real.
+
+**A causa raiz não é a keyword ser compartilhada** (isso é ACHADO-13) — é o peso `nº de palavras`
+do BUG-010 tratar "comprido" como sinônimo de "discriminante" sem checar se o termo é
+específico DO DOMÍNIO ou só uma frase longa qualquer. `extractKeywords` (`keywords.ts:42`) tem o
+mesmo viés estrutural ("bigramas valem mais"), com o mesmo risco não auditado.
+
+**Stakes medidos, hoje baixos**: nas 3 vagas afetadas, o overlap de `keyword_overlap` é 0,067–0,133
+em TODAS as trilhas concorrentes — contribuição de 4 a 9 pontos ao score, o mesmo baixo-sinal
+independente de qual trilha vence. Não vale desenhar correção com 3 casos e stakes baixos.
+**Reabrir se**: o cadastro de empresas crescer (mais volume real) e esses casos aparecerem com
+overlap alto o bastante para decidir geração de kit — aí sim vale uma lista de termos
+"comprido mas genérico" a excluir do peso, ou trocar comprimento por um sinal melhor de
+especificidade (frequência do termo fora do léxico da trilha, por exemplo).
+
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
 Barreira de entrada por trilha, sobre as 375 vagas (2026-08-06):
@@ -880,22 +911,27 @@ com ou sem a ponderação por especificidade.
 
 **Recontagem em produção (leitura pura, nada gravado)**: 7/733 vagas mudam de trilha entre
 "só `ORDER BY`" e "`ORDER BY` + especificidade". `ACHADO-13`: **60 vagas em `qa`** (era 57), 11
-sem keyword específica → **18% (11/60)**, praticamente igual ao número anterior (19%/57) — a
-especificidade não teve efeito líquido relevante sobre a taxa de sobre-captura, mas MUDOU QUAIS
-vagas estão no conjunto:
+sem keyword específica → **18% (11/60)**, praticamente igual ao número anterior (19%/57).
 
-| Vaga | Movimento | Correto? |
+**A leitura importante não é a taxa — é a composição.** 18% ≈ 19% sozinho sugeriria que o fix não
+fez nada. Não é o caso: das 7 vagas que mudaram, a decomposição por movimento é o que sustenta a
+confiança no mecanismo, e ela **não é** "3 mexem em `qa`, 4 neutras" — checadas as 7, uma a uma:
+
+| Vaga | Movimento | Veredito |
 |---|---|---|
-| `QA Automation Engineer \| Mid-Level` | `ai-builder` → `qa` | **Sim** — título literalmente "QA", estava classificada `ai-builder` só porque `ai-builder < qa` alfabeticamente num empate de 3 vias (`automação`/`automation`/`integração` vs `qa`/`testes funcionais`/`casos de teste`, ambos 3 hits) |
-| `Analista Automação Testes Pleno` | `product` → `qa` | **Sim** — mesma classe: "Testes" no título, estava em `product` por empate 2-vias vencido por alfabeto |
-| `B2B SaaS PPC Manager` | `ai-builder` → `qa` | **Não** — falso-positivo novo. Vaga de marketing, sem relação com QA. `"quality assurance"` bateu como frase de boilerplate corporativo genérico (não sobre o trabalho em si), e por ser bigrama pesou mais que os hits igualmente fracos de `ai-builder` (`"automation"`) e `product` (`"stakeholders"`) — 1 hit cada, overlap de 0,067 (6,7%), a mesma característica do caso `sql`: um termo que É exclusivo de uma trilha mas não é SINAL de que a vaga é daquela trilha. **Stakes baixos**: contribuição de `keyword_overlap` ao score é ~4,3 pontos com qualquer um dos três vencedores — a vaga já era baixo-sinal em todas as trilhas antes de qualquer desempate. |
+| `Group Product Manager (GPM)` | `ai-builder` → `product` | **Correta** — "product manager" no título, empatava 4-4 raw, resolvido por `"product manager"` (bigrama) vencer `"automação"` (palavra solta) |
+| `QA Automation Engineer \| Mid-Level` | `ai-builder` → `qa` | **Correta** — título literalmente "QA", empatava 3-3, resolvido por `"testes funcionais"`/`"casos de teste"` (bigrama/trigrama) vencerem `"automação"`/`"automation"` (palavras soltas) |
+| `Analista Automação Testes Pleno` | `product` → `qa` | **Correta** — mesma classe: "Testes" no título |
+| `Marketing Automation SaaS + Services... Owner` | `ai-builder` → `product` | **Correta** — "...Line of Business **Owner**", resolvido por `"product owner"` vencer `"automation"` |
+| `Analista de Dados e CRM` | `ai-builder` → `product` | **Ambígua** — nem uma trilha nem outra descreve bem a vaga; resolvido por `"ciclo de vida"` (trigrama) vencer `"python"`/`"whatsapp"` (palavras soltas). Não é claramente melhor, só mais específico |
+| `ANALISTA DE MARKETING E CRM JR` | `ai-builder` → `product` | **Ambígua**, mesma causa — `"ciclo de vida"` venceu por comprimento, não por a vaga ser de produto |
+| `B2B SaaS PPC Manager` | `ai-builder` → `qa` | **Falso-positivo** — `"quality assurance"` como boilerplate de rodapé, não sinal da vaga (ver ACHADO-14) |
 
-**Limite do mecanismo, registrado e não perseguido nesta rodada**: comprimento de keyword é um
-proxy de especificidade, não uma medida de relevância temática. Resolve o caso que motivou o
-pedido (`scrum master` vs `sql`) e dois casos reais adicionais de vagas obviamente mal
-classificadas, mas pode, em vagas de baixíssimo overlap em todas as trilhas (~0,07, quase ruído),
-trocar um vencedor arbitrário por outro. Não voltar a mexer sem medir de novo — o próximo item
-depende do cadastro de empresas crescer o suficiente para esse tipo de caso aparecer com volume.
+**4 correções genuínas** (título da vaga bate com a trilha nova), **2 trocas ambíguas** (`"ciclo de
+vida"` — mesmo padrão do ACHADO-14, ainda não com stakes altos), **1 falso-positivo** confirmado
+(ACHADO-14). Saldo líquido positivo, e agora é determinístico — nenhuma das 7 depende de ordem de
+leitura. Ver ACHADO-14 para a classe de defeito que `"quality assurance"` e `"ciclo de vida"`
+compartilham.
 
 Suíte 397/397, typecheck limpo.
 

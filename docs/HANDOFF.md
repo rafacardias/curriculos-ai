@@ -35,8 +35,9 @@ inventa fato, só descobre keyword sem lastro. `src/core|adapters|submit` nunca 
    das vagas reais mudavam de `track_hint` invertendo `ORDER BY`). Fix em duas etapas: `ORDER BY
    id ASC` (reprodutível) + desempate por especificidade (keyword exclusiva e mais longa pesa
    mais — resolve `SCRUM MASTER` → `product` sem depender de alfabeto). `ACHADO-13`: 44%→19%→
-   **18% (11/60)** de sobre-captura em `qa`, com um falso-positivo novo documentado
-   (`quality assurance` como boilerplate). Detalhe completo: `KNOWN-BUGS.md` → BUG-010.
+   **18% (11/60)**; das 7 vagas que mudaram, 4 correções genuínas, 2 ambíguas, 1 falso-positivo
+   novo (`ACHADO-14`: termo longo mas genérico de boilerplate vence por comprimento, não por
+   sinal). Detalhe: `KNOWN-BUGS.md` → BUG-010 / ACHADO-14.
 2. **Vigilância por empresa (Fase A)** — `config/companies.yaml` + scrape do board Gupy
    (`__NEXT_DATA__`, não API JSON) + dedup por `(source, source_job_id)`. Filtro léxico
    pré-insert mede 0,3% de recall — decisão de "filtrar ou inserir tudo" ainda aberta.
