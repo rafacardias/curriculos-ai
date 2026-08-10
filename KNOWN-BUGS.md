@@ -52,6 +52,7 @@ achadas de novo, não redescobertas):
 | [ACHADO-12](#achado-12--totvsgupyio-é-404-de-verdade-handle-removido-do-cadastro) | `totvs.gupy.io` e 5 variações óbvias são 404 — handle errado, não "não confirmada". TOTVS removida de `config/companies.yaml`. **Corrigido** (removida) |
 | [ACHADO-13](#achado-13--léxico-de-qaproduct-compartilha-6-keywords-genéricas--sobre-captura-real-mas-menor-do-que-a-primeira-medição) | 6 keywords idênticas entre `qa`/`product`. 44%/95 → 19%/57 (ordem fixa) → **18%/60 (ordem fixa + especificidade)** — 7 vagas mudaram: 4 correções genuínas, 2 ambíguas, 1 falso-positivo (ver ACHADO-14). Léxico não tocado |
 | [ACHADO-14](#achado-14--desempate-por-comprimento-de-keyword-tem-uma-classe-própria-de-falso-positivo-termo-longo-e-genérico-de-boilerplate) | Peso por nº de palavras (BUG-010) trata "comprido" como "discriminante" sem checar domínio — `"quality assurance"`/`"ciclo de vida"` como boilerplate genérico classificaram 3 vagas errado. **Medido, stakes baixos, não perseguido** |
+| [ACHADO-15](#achado-15--o-canal-de-busca-geral-instrumentado-789-vagas-pontuadas-71-cruzam-o-corte-mas-a-taxa-não-é-estável-entre-rodadas) | `scripts/measure-search-channel.ts`, leitura de 65 `search_runs` históricos: 789 vagas pontuadas, 56 (7,1%) cruzam `queue_threshold`. Taxa NÃO estável como o filtro léxico — 2,8% (1ª metade cronológica) → 21,5% (2ª). **Medido, canal primário confirmado, instabilidade registrada** |
 
 ---
 
@@ -609,6 +610,59 @@ independente de qual trilha vence. Não vale desenhar correção com 3 casos e s
 overlap alto o bastante para decidir geração de kit — aí sim vale uma lista de termos
 "comprido mas genérico" a excluir do peso, ou trocar comprimento por um sinal melhor de
 especificidade (frequência do termo fora do léxico da trilha, por exemplo).
+
+### ACHADO-15 · o canal de busca geral, instrumentado: 789 vagas pontuadas, 7,1% cruzam o corte — mas a taxa NÃO é estável entre rodadas
+
+**Contexto**: `ACHADO-11` (addendum 2026-08-10) estabeleceu, por contraste de `score_detail`, que
+a busca geral (`/buscar`, `src/cli/search.ts`) é o canal primário — produz vaga com
+`keyword_overlap` real (52–65 pontos, score 80–93), o que a vigilância por empresa GPTW/BH não
+produziu em duas medições. Faltava instrumentar esse canal com o mesmo rigor que a vigilância já
+tinha. `scripts/measure-search-channel.ts` faz isso: leitura pura de `search_runs` (65 rodadas
+históricas, 2026-07-12→2026-08-09) e dos `jobs` que cada rodada gerou — **nenhuma busca nova
+disparada**.
+
+| | valor |
+|---|---:|
+| rodadas (`search_runs`) | 65 |
+| vagas encontradas (soma exata de `per_source`) | 2795 |
+| vagas novas (soma exata de `per_source`) | 794 |
+| pool pontuado atribuível a alguma rodada | 789 (0 fora de qualquer janela de tempo) |
+| cruzaram `queue_threshold` (40) | **56 (7,1%)** |
+
+**Distribuição de `keyword_overlap`** (789 vagas): 71 com zero overlap, 411 entre 1–20, 212 entre
+21–40, 88 entre 41–60, 7 acima de 61. A maior parte do pool tem ALGUM overlap — diferente do teto
+de zero absoluto medido na vigilância por empresa (ACHADO-11) — mas a maioria fica na faixa baixa
+(1–20), consistente com 7,1% cruzando um corte de 40.
+
+**A pergunta pedida — a taxa se mantém estável como o filtro léxico (0,3%→0,49%)? Não.** Dividindo
+as 65 rodadas em duas metades cronológicas:
+
+| | 1ª metade (32 rodadas) | 2ª metade (33 rodadas) |
+|---|---:|---:|
+| encontradas | 1396 | 1399 |
+| novas | 613 | 181 |
+| pontuadas | 608 | 181 |
+| na fila (cruzou 40) | 17 | 39 |
+| **taxa de cruzamento** | **2,8%** | **21,5%** |
+
+Quase 8× de diferença — o oposto do que o filtro léxico da vigilância mostrou (mesma ordem de
+grandeza em duas escalas). Não investigado a causa raiz nesta medição (fora de escopo — medir, não
+explicar): candidatos plausíveis são mudança nas queries de `config.yaml` ao longo do período,
+`preference_weights` divergindo com o tempo (decay + feedback acumulado), ou simplesmente
+composição diferente do mercado nas duas janelas. **Registrado como pergunta em aberto, não
+resolvida aqui.**
+
+**Limite do número, registrado**: atribuição de vaga→rodada é por janela de tempo
+(`jobs.seen_at` dentro de `[search_runs.started_at, finished_at]`), não por FK — `jobs` não guarda
+o `search_runs.id` que a inseriu. Fontes que não vêm de `search.ts` (`gupy-watch`, `manual`) foram
+excluídas do pool antes da atribuição, então a aproximação nunca precisa arriscar confundir canal;
+0 vagas do pool ficaram fora de toda janela nesta leitura. `totalNewAgg` (794, direto de
+`per_source`) e o pool atribuído (789) divergem por 5 — provável arredondamento de vagas sem
+`score` gravado; não investigado, marginal para a conclusão.
+
+**Conclusão**: busca geral confirmada como canal primário por volume (789 pontuadas vs. 1602 da
+vigilância, mas com taxa de aproveitamento muito maior: 7,1% vs. 0%) — reforça `ACHADO-11`.
+Instabilidade de taxa entre rodadas é um achado novo, registrado, não perseguido nesta sessão.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
