@@ -60,6 +60,8 @@ const out = {
     company: s.company,
     score: s.score,
     status: s.status,
+    trackHint: s.trackHint,
+    scoreDetail: s.scoreDetail,
   })),
   erros,
 };
@@ -74,9 +76,13 @@ if (values.json) {
   console.log(`Cruzaram queue_threshold: ${out.crossedThreshold}`);
   console.log(`Maior pontuação: ${out.maxScore.toFixed(1)}`);
   if (out.top10.length) {
-    console.log("\nTop 10 por pontuação:");
+    console.log("\nTop 10 por pontuação (decomposição por componente):");
     for (const j of out.top10) {
-      console.log(`  [${j.score.toFixed(1).padStart(5)}] ${j.title} @ ${j.company} — ${j.status}`);
+      const detail = Object.entries(j.scoreDetail)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(" · ");
+      console.log(`  [${j.score.toFixed(1).padStart(5)}] ${j.title} @ ${j.company} — ${j.status} · trilha=${j.trackHint ?? "?"}`);
+      console.log(`          ${detail}`);
     }
   }
   if (erros.length) {
