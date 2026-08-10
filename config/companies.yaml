@@ -96,3 +96,21 @@
   handle: kinross
   tracks: [ai-builder, product]
   enabled: true
+
+- name: Grupo UbyAgro
+  ats: gupy
+  handle: vemprauby
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: BH Airport
+  ats: gupy
+  handle: bh-airport
+  tracks: [ai-builder, product]
+  enabled: true
+
+- name: IGL
+  ats: gupy
+  handle: vagasgrupoigl
+  tracks: [ai-builder, product]
+  enabled: true

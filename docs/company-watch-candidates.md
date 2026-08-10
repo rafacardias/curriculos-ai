@@ -54,12 +54,12 @@ verificação por empresa faz a auditoria sozinho — não é mais preciso revis
 | Kinross Brasil Mineração | F | **Em produção** | `kinross` | 1 | 2 no board, 1 talent pool |
 | Eletrozema | F | Sem board Gupy | `eletrozema`, `zema`, `grupozema`, `eletrozemavarejo` (404) | — | Sem ATS de terceiros — formulário próprio |
 | Lear Corporation | F | Sem board Gupy | `lear`, `learcorporation`, `learcorp`, `learbrasil`, `lear-brasil`, `learbr`, `learjundiai`, `learautomotive` (404) | — | Portal próprio da matriz (`jobs.lear.com`), não Gupy |
-| CNH | G | Pendente | — | — | |
-| SEST SENAT | G | Pendente | — | — | |
-| Grupo UbyAgro | G | Pendente | — | — | |
-| iCrop | G | Pendente | — | — | |
-| BH Airport | G | Pendente | — | — | |
-| IGL – Importação e Comércio de Materiais de Construção | G | Pendente | — | — | |
+| CNH | G | Sem board Gupy | 7 variações tentadas (404) | — | Portal global próprio (`join.cnh.com`/`careers.cnh.com`), provavelmente Workday/SuccessFactors |
+| SEST SENAT | G | Sem board Gupy | `sestsenat`, `sest`, `senat`, `sistemas`, `sestsenatmg` (404) | — | Usa Plooral (`sestsenatvagas.enlizt.me`) — recrutamento nacional centralizado, confirma o padrão dos sistemas S (como Sicoob) |
+| Grupo UbyAgro | G | **Em produção** | `vemprauby` | 9 | 10 brutas, 1 banco de talentos. Handle não óbvio (nome no board: "Ubyfol Agroquímica") — achado via busca web |
+| iCrop | G | Sem board Gupy | `icrop`, `icropirrigacao`, `icropgestaodeirrigacao`, `icropagricola`, `icroptecnologia` (404) | — | Usa Mindsight (`oportunidades.mindsight.com.br/icrop`) |
+| BH Airport | G | **Em produção** | `bh-airport` | 0 | Board real, sem vaga aberta agora (1 bruta é banco de talentos) — mantido registrado, `watch run` reflete quando abrir vaga |
+| IGL – Importação e Comércio de Materiais de Construção | G | **Em produção** | `vagasgrupoigl` | 5 | Handle não óbvio — achado via busca web. Dono das marcas Viveza e BEL LAR |
 | Alctel Telecom | H | Pendente | — | — | |
 | TQI | H | Pendente | — | — | |
 | Framework | H | Pendente | — | — | |
@@ -78,11 +78,13 @@ convertem melhor, e misturar tudo esconde isso)
 | D | 6 | 0 — Algar Tech tem board respondendo, mas é o MESMO handle de "Algar" já em produção: zero cobertura nova | 0% |
 | E | 6 | 1 (Supergasbras) | 17% |
 | F | 6 | 1 (Kinross Brasil Mineração) | 17% |
-| G–H | 0/13 | — | pendente |
+| G | 6 | 3 (Grupo UbyAgro, BH Airport, IGL) | 50% |
+| H | 0/7 | — | pendente |
 
-Acumulado até aqui: **13/39 (33%)**. As 3 cooperativas Sicoob confirmaram a hipótese de recrutamento
-centralizado no sistema nacional (Empregare/Solides), não Gupy — nenhuma delas tem board próprio.
-G–H seguem em aberto.
+Acumulado até aqui: **16/45 (36%)**. G rompeu a curva de queda que vinha de D/E/F (0%/17%/17%) —
+50%, quase o nível de A/B. Não invalida a hipótese original (grande/estruturada converte mais),
+G só teve mais empresas médias/grandes (multinacional agro, aeroporto, importador) do que pequenas.
+H fecha a amostra.
 
 ## Ranking de ATS concorrentes (por ocorrência, atualizado a cada lote fechado)
 
@@ -100,4 +102,7 @@ decidir por Fase B: cada empresa sem board Gupy que expõe outro ATS conta um vo
 | Flash Vagas | 1 | JDC Tech e People (D) |
 | Sinergy RH | 1 | Algar Tech (D) — já coberta pelo handle de "Algar", não candidata a registro próprio |
 | jobs.lear.com (portal próprio de matriz) | 1 | Lear Corporation (F) |
+| Plooral | 1 | SEST SENAT (G) — recrutamento nacional centralizado, mesmo padrão dos sistemas S visto no Sicoob |
+| Mindsight | 1 | iCrop (G) |
+| CNH próprio (Workday/SuccessFactors, não confirmado o produto exato) | 1 | CNH (G) |
 | Sem ATS identificável (formulário próprio, e-mail, LinkedIn, ou não localizado) | 7 | Bridge Transportes (C), Cartório 2º Ofício de Notas (D), Conquista Intermediadora (E), NTW Contabilidade (E), UaiRango (E), Rede Inova Drogarias (E), Eletrozema (F) |
