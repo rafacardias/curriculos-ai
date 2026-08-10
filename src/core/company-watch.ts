@@ -13,6 +13,12 @@
  *
  * Erro de UMA empresa nunca aborta o lote — cada empresa é isolada em
  * try/catch própria.
+ *
+ * `skipLexicalFilter` (opts) é uma via interna de MEDIÇÃO — nunca exposta em
+ * `src/cli/watch.ts`. Serve só para `scripts/measure-watch-ceiling.ts` rodar
+ * o mesmo fetch+dedup+score reais sem o corte léxico, dentro do mesmo
+ * dry-run com rollback, e medir quantas vagas hoje descartadas cruzariam o
+ * `queue_threshold`.
  */
 import { getDb } from "../db/client.js";
 import { transaction } from "../db/client.js";
@@ -83,7 +89,7 @@ interface CompanyFetchOutcome {
  * verdade sem escrever nada. `commit=true` aplica.
  */
 export async function runCompanyWatch(
-  opts: { companyHandle?: string; commit?: boolean } = {}
+  opts: { companyHandle?: string; commit?: boolean; skipLexicalFilter?: boolean } = {}
 ): Promise<WatchRunResult> {
   const commit = opts.commit === true;
   const config = loadConfig();
@@ -106,10 +112,9 @@ export async function runCompanyWatch(
       let filteredOut = 0;
       for (const raw of jobs) {
         const text = `${raw.title} ${raw.description ?? ""}`;
-        if (keywords.length && termsPresent(text, keywords).length === 0) {
-          filteredOut++;
-          continue;
-        }
+        const wouldFilter = keywords.length > 0 && termsPresent(text, keywords).length === 0;
+        if (wouldFilter) filteredOut++;
+        if (wouldFilter && !opts.skipLexicalFilter) continue;
         passed.push(raw);
       }
       perCompany.push({ company, passed, found: jobs.length, filteredOut, error: null, modalityStats });

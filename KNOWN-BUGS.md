@@ -449,6 +449,39 @@ filtro léxico parece ser mais sobre volume de dados armazenados/rastreados do q
 fila de decisão do operador. Decisão continua não tomada nesta sessão — dado registrado pra quando
 for.
 
+**A pergunta em aberto, respondida (2026-08-10, `scripts/measure-watch-ceiling.ts`, dry-run real
+contra o cadastro completo, `skipLexicalFilter: true`)**:
+
+| | valor |
+|---|---:|
+| total de vagas buscadas | 1816 |
+| teriam sido barradas pelo filtro léxico | 1807 |
+| pontuadas nesta rodada (novas, pós-dedup) | **1602** |
+| cruzaram `queue_threshold` (40) | **0** |
+| maior pontuação entre as 1602 | **27,5** |
+
+**Resposta: nenhuma.** De 1602 vagas que o filtro léxico descarta e que nunca tinham sido vistas
+pelo `scoreJob`, zero cruzaram o corte — e a melhor pontuou 27,5, abaixo até das 31,8 do lote que
+JÁ passava o filtro. "Inserir tudo" não perde vaga boa na fila: sob os pesos atuais de `scoreJob`,
+não existe vaga boa nessas 1602 pra perder. As 10 de pontuação mais alta são todas a mesma vaga da
+Localiza ("ADMINISTRATIVO — vaga afirmativa PCD") repetida por filial, o que reforça o padrão: é
+inventário administrativo de grande empresa, não vaga de tecnologia/produto compatível com as
+trilhas do candidato.
+
+**Isso resolve a pergunta original da sessão (2026-08-09→10)**: o gargalo não é o filtro léxico
+nem a captura (volume de empresas cadastradas) — é adequação de mercado. BH não tem volume de vaga
+de tecnologia/produto nas empresas GPTW cadastradas na faixa que o candidato mira. Relaxar o
+filtro léxico agora só trocaria "1819 vagas nunca vistas" por "1811 vagas vistas, pontuadas e
+descartadas pelo score" — mesmo resultado prático, custo de armazenamento maior. **Não implementar
+"inserir tudo"** com os dados de hoje; a decisão de Fase B (Solides vs. Greenhouse, `docs/company-
+watch-candidates.md`) é sobre aumentar o *tipo* de empresa vigiada, não a quantidade de vagas
+processadas pela mesma safra de empresas GPTW/BH.
+
+**Limite deste número, registrado**: mede o teto sob o `queue_threshold` e os pesos de `scoreJob`
+ATUAIS, num único poll (board muda dia a dia: 1816 vs. 1828 de ontem, variação natural). Não prova
+que nenhuma empresa nova traria vaga boa — só que, PARA este cadastro de 17 empresas, relaxar o
+filtro léxico não teria ajudado.
+
 ### ACHADO-12 · `totvs.gupy.io` é 404 de verdade — handle removido do cadastro
 
 **Corrigido** — a nota original de `config/companies.yaml` dizia "TOTVS está em Gupy mas NÃO foi
