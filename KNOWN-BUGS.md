@@ -874,10 +874,20 @@ cadastro de empresas)**: `docs/company-watch-candidates.md` (log de verificaçã
 `config/companies.yaml` (registro que o código de fato lê) podem divergir silenciosamente — 5
 empresas do lote 1 da expansão ficaram marcadas "Verificada" no log por uma sessão inteira sem
 nunca entrar no YAML, e nada reclamou. Cadastro que existe só no doc de log é cadastro que não
-roda. Proposta de teste (não escrito ainda): ler os dois arquivos e falhar se houver empresa
-"Em produção" no doc sem entrada correspondente no YAML, ou vice-versa. Registrado junto do
-`answers.ts:45` como candidato, não como bug numerado — não é a mesma classe (não é falta de
-`ORDER BY`/`UNIQUE`, é ausência de verificação cruzada entre dois artefatos).
+roda. Registrado junto do `answers.ts:45` como candidato, não como bug numerado — não é a mesma
+classe (não é falta de `ORDER BY`/`UNIQUE`, é ausência de verificação cruzada entre dois
+artefatos).
+
+**Fechado (2026-08-09, madrugada)**: `src/core/company-watch-registry.ts` +
+`tests/unit/company-watch-registry.test.ts`. Compara por HANDLE (não por nome — o nome exibido no
+doc e o `name` do YAML podem divergir de propósito, ex. "IGL – Importação e Comércio..." no doc
+vs `name: IGL` no YAML, sem ser bug). Três invariantes: (1) handle "Em produção" no doc sem
+entrada no YAML — reproduzido em fixture, o exato formato do bug real do lote 1; (2) entrada no
+YAML sem linha "Em produção" correspondente no doc; (3) handle duplicado entre duas entradas do
+YAML — a classe Algar Tech (evitada na hora, nunca chegou a acontecer de verdade, mas o detector
+pegaria se acontecesse). Teste de regressão a mais roda contra os arquivos REAIS do repo e
+confirma zero divergência hoje. Nenhuma migration, nenhum arquivo de produção tocado além dos dois
+novos.
 
 - Checado e descartado: `src/cli/kit.ts:131` (despeja TODAS as trilhas no bundle pro redator, não
   escolhe uma vencedora por código — ordem não decide nada); `src/core/company-watch.ts:56` (une
