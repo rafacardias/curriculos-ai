@@ -424,6 +424,31 @@ insert): sem filtro léxico, TODA vaga vira `insertJob`, e o dedup por `(source,
 (007_watch_dedup.sql) passa a ser o único guarda-corpo contra floodar `jobs` com vaga de
 motorista a cada poll. Decisão de fase, não desta sessão.
 
+**Confirmado com volume real (2026-08-09, madrugada — `watch run --commit`, cadastro completo de
+17 empresas, não mais só Localiza+Algar)**:
+
+| | valor |
+|---|---:|
+| total de vagas buscadas | **1828** |
+| passaram o filtro título+departamento | **9 (0,49%)** |
+| das 9, genuinamente novas (resto já existia no banco) | **6** |
+| das 6 novas, pontuação máxima | **31,8** |
+| das 6 novas, quantas cruzaram `queue_threshold` (40) | **0** |
+
+A ordem de grandeza do 0,3%/2-em-782 (Localiza+Algar) se repete quase idêntica em 17 empresas:
+0,49%/9-em-1828. Não é característica de duas empresas — é o filtro, em qualquer escala testada
+até agora.
+
+**O dado novo que só o volume real revela**: das 6 vagas que passaram o filtro E foram inseridas,
+NENHUMA cruzou o `queue_threshold` de 40 pontos — a melhor pontuou 31,8. Isso não decide a
+pergunta "filtrar vs. inserir tudo" sozinho (não sabemos quantas das 1819 vagas FILTRADAS teriam
+pontuado acima de 40 se tivessem sido inseridas — é exatamente o que o filtro impede de medir),
+mas muda o cálculo de risco: o `queue_threshold` já filtra o que entra na fila **depois** do
+insert, então "inserir tudo" não floodaria a fila de trabalho — só o banco. O custo de relaxar o
+filtro léxico parece ser mais sobre volume de dados armazenados/rastreados do que sobre poluir a
+fila de decisão do operador. Decisão continua não tomada nesta sessão — dado registrado pra quando
+for.
+
 ### ACHADO-12 · `totvs.gupy.io` é 404 de verdade — handle removido do cadastro
 
 **Corrigido** — a nota original de `config/companies.yaml` dizia "TOTVS está em Gupy mas NÃO foi
