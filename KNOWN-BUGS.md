@@ -868,6 +868,17 @@ registrada, mas sem sangramento ativo hoje.
    `preference` está desarmado (peso 0, decisão do BUG-007), então nada de decisão viva depende
    disto hoje — mas os dados continuam sendo gravados "para reprocessamento futuro"
    (decisions.md, 2026-07-12), e herdariam essa não-determinismo se o componente for reativado.
+
+**Candidato a BUG de classe diferente, achado fora desta varredura (2026-08-09, expansão do
+cadastro de empresas)**: `docs/company-watch-candidates.md` (log de verificação, humano) e
+`config/companies.yaml` (registro que o código de fato lê) podem divergir silenciosamente — 5
+empresas do lote 1 da expansão ficaram marcadas "Verificada" no log por uma sessão inteira sem
+nunca entrar no YAML, e nada reclamou. Cadastro que existe só no doc de log é cadastro que não
+roda. Proposta de teste (não escrito ainda): ler os dois arquivos e falhar se houver empresa
+"Em produção" no doc sem entrada correspondente no YAML, ou vice-versa. Registrado junto do
+`answers.ts:45` como candidato, não como bug numerado — não é a mesma classe (não é falta de
+`ORDER BY`/`UNIQUE`, é ausência de verificação cruzada entre dois artefatos).
+
 - Checado e descartado: `src/cli/kit.ts:131` (despeja TODAS as trilhas no bundle pro redator, não
   escolhe uma vencedora por código — ordem não decide nada); `src/core/company-watch.ts:56` (une
   keywords num `Set`, união é comutativa); `src/core/policy.ts` (checagens de existência/`COUNT`,

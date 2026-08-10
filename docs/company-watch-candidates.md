@@ -42,12 +42,12 @@ verificação por empresa faz a auditoria sozinho — não é mais preciso revis
 | ABGI Brasil | D | Sem board Gupy | `abgibrasil`, `abgi-brasil`, `abgi` (404) | — | Usa portal próprio ABGi Consulting Jobs (`jobs.abgi-consulting.com/pt-BR`) |
 | Jungle Consultoria e Soluções Sociais | D | Sem board Gupy | `jungleconsultoria`, `jungle-consultoria`, `jungle` (404) | — | Usa Solides (`gesuas.vagas.solides.com.br`) — opera como "Jungle Social"/produto GESUAS |
 | JDC Tech e People | D | Sem board Gupy | `jdctech` (200 mas `__NEXT_DATA__` traz `"page": "/404"` — board desativado), `jdctechpeople`, `jdc-tech-people`, `jdcpeople`, `jdc-people`, `jdctecnologia` (404) | — | Link legado morto no rodapé do site aponta pro Gupy; canal real hoje é Flash Vagas (`jdctechpeople.vagas.flashapp.com.br`) |
-| Conquista Intermediadora de Negócios | E | Pendente | — | — | |
-| Profitto | E | Pendente | — | — | |
-| NTW Contabilidade e Gestão Empresarial | E | Pendente | — | — | |
-| UaiRango | E | Pendente | — | — | |
-| Rede Inova Drogarias | E | Pendente | — | — | |
-| Supergasbras | E | Pendente | — | — | |
+| Conquista Intermediadora de Negócios | E | Sem board Gupy | 10 variações tentadas (404) | — | Entidade legal não identificada com segurança; nenhum ATS de terceiros achado |
+| Profitto | E | Sem board Gupy | 8 variações tentadas (404) | — | Usa Solides (`profitto.vagas.solides.com.br`) |
+| NTW Contabilidade e Gestão Empresarial | E | Sem board Gupy | 9 variações tentadas (404) | — | Formulário próprio no site, sem ATS externo |
+| UaiRango | E | Sem board Gupy | 7 variações tentadas (404) | — | Sem ATS de terceiros identificado |
+| Rede Inova Drogarias | E | Sem board Gupy | 11 variações tentadas (404) | — | Recrutamento via e-mail/LinkedIn, sem ATS |
+| Supergasbras | E | **Em produção** | `supergasbras` | 96 | 111 brutas, 15 talent pool |
 | Sicoob Credicopa | F | Pendente | — | — | |
 | Sicoob Credivaz | F | Pendente | — | — | |
 | Sicoob Carlos Chagas | F | Pendente | — | — | |
@@ -75,15 +75,25 @@ convertem melhor, e misturar tudo esconde isso)
 |---|---:|---:|---:|
 | A+B | 14 | 8 (Localiza, Algar, Bretas, Banco Mercantil, 3corações, BHS, Montreal, IOASYS) | 57% |
 | C | 7 | 3 (Queima Diária, Sabin, Unidas Locadora) | 43% |
-| D | 6 | 0 — Algar Tech tem board respondendo, mas é o MESMO handle de "Algar" já em produção: zero cobertura nova | **0%** |
-| E–H | 0/25 | — | pendente |
+| D | 6 | 0 — Algar Tech tem board respondendo, mas é o MESMO handle de "Algar" já em produção: zero cobertura nova | 0% |
+| E | 6 | 1 (Supergasbras) | 17% |
+| F–H | 0/19 | — | pendente |
 
-**Primeira queda real**: D confirma a hipótese — 0% contra 57%/43% dos grupos anteriores.
-Cartórios e consultorias pequenas não usam Gupy; usam Solides (2×), ABGi Consulting Jobs, Flash
-Vagas, ou nada. Acumulado até aqui: **11/27 (41%)**, caindo. E–H (Sicoobs regionais, mineradora,
-autopeças, telecom pequena, mais consultorias) deve continuar a curva — número final só depois de
-fechar até H.
+Acumulado até aqui: **12/33 (36%)**, ainda caindo. F–H (Sicoobs regionais, mineradora, autopeças,
+telecom pequena, consultorias) segue em aberto.
 
-Achados laterais registrados, não perseguidos: Arqia (lote C) usa Greenhouse; 4 empresas do lote D
-apontam pra ATS concorrentes identificáveis (Solides ×2, ABGi Consulting Jobs, Flash Vagas). Não
-mudam a ordem (Fase B continua bloqueada), mas são dado real pra quando essa decisão for tomada.
+## Ranking de ATS concorrentes (por ocorrência, atualizado a cada lote fechado)
+
+Não é achado isolado — é dado que decide qual adapter importa mais depois de Greenhouse, se
+decidir por Fase B: cada empresa sem board Gupy que expõe outro ATS conta um voto.
+
+| ATS | Ocorrências | Empresas |
+|---|---:|---|
+| **Solides** | 3 | Cartório 1º Ofício de Registro de Imóveis de BH (D), Jungle Consultoria (D), Profitto (E) |
+| Greenhouse | 1 | Arqia (C) |
+| Yapp Rec | 1 | Shippify Tecnologia (C) |
+| Pandapé | 1 | AeC Centro de Contatos (C) |
+| ABGi Consulting Jobs | 1 | ABGI Brasil (D) |
+| Flash Vagas | 1 | JDC Tech e People (D) |
+| Sinergy RH | 1 | Algar Tech (D) — já coberta pelo handle de "Algar", não candidata a registro próprio |
+| Sem ATS identificável (formulário próprio, e-mail, LinkedIn, ou não localizado) | 6 | Bridge Transportes (C), Cartório 2º Ofício de Notas (D), Conquista Intermediadora (E), NTW Contabilidade (E), UaiRango (E), Rede Inova Drogarias (E) |

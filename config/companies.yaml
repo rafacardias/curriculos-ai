@@ -84,3 +84,9 @@
   handle: unidas
   tracks: [ai-builder, product]
   enabled: true
+
+- name: Supergasbras
+  ats: gupy
+  handle: supergasbras
+  tracks: [ai-builder, product]
+  enabled: true
