@@ -36,12 +36,12 @@ verificação por empresa faz a auditoria sozinho — não é mais preciso revis
 | Shippify Tecnologia | C | Sem board Gupy | `shippify`, `shippifytecnologia`, `shippifybrasil`, `shippifybr`, `shippifyco` (404) | — | Usa ATS "Yapp Rec" |
 | Bridge Transportes e Logística | C | Sem board Gupy | `bridge`, `bridgetransportes`, `bridgetransporteslogistica`, `grupobridge`, `bridgelogistica`, `bridgelog`, `grupobridgelog` (404) | — | Formulário próprio no site, sem ATS externo |
 | AeC Centro de Contatos | C | Sem board Gupy | `aec`, `grupoaec`, `aecdigital`, `aecatendimento`, `aeccentrodecontatos`, `aecgrupo`, `aeccontactcenter`, `aec-centrodecontatos` (404) | — | Usa Pandapé (`aeccentrodecontatos.pandape.com.br`) |
-| Algar Tech | D | Pendente | — | — | |
-| Cartório 1º Ofício de Registro de Imóveis de BH | D | Pendente | — | — | |
-| Cartório 2º Ofício de Notas de BH | D | Pendente | — | — | |
-| ABGI Brasil | D | Pendente | — | — | |
-| Jungle Consultoria e Soluções Sociais | D | Pendente | — | — | |
-| JDC Tech e People | D | Pendente | — | — | |
+| Algar Tech | D | Já coberto (não registrada de novo) | `algar` (200, board real) | — | O board que responde é o do **Grupo Algar**, mesmo handle já em produção como "Algar" desde a Fase A — não é canal próprio da Algar Tech. Canal oficial real: Sinergy RH (`portalsinergyrh.com.br`), fora do escopo Gupy. Registrar de novo seria duplicar o mesmo handle sob outro nome, sem ganhar cobertura — decisão: não registrar |
+| Cartório 1º Ofício de Registro de Imóveis de BH | D | Sem board Gupy | `cartorio1registrobh`, `cartorio1registro`, `cartorio1bh`, `registrodeimoveisbh`, `1oficiobh`, `cartorio1oficiobh` (404) | — | Usa Solides (`primeirazona.vagas.solides.com.br`) |
+| Cartório 2º Ofício de Notas de BH | D | Sem board Gupy | `cartorio2notasbh`, `cartorio2notas`, `cartorio2oficionotasbh`, `2oficionotasbh` (404) | — | Nenhuma página de carreiras encontrada — provavelmente sem ATS formal |
+| ABGI Brasil | D | Sem board Gupy | `abgibrasil`, `abgi-brasil`, `abgi` (404) | — | Usa portal próprio ABGi Consulting Jobs (`jobs.abgi-consulting.com/pt-BR`) |
+| Jungle Consultoria e Soluções Sociais | D | Sem board Gupy | `jungleconsultoria`, `jungle-consultoria`, `jungle` (404) | — | Usa Solides (`gesuas.vagas.solides.com.br`) — opera como "Jungle Social"/produto GESUAS |
+| JDC Tech e People | D | Sem board Gupy | `jdctech` (200 mas `__NEXT_DATA__` traz `"page": "/404"` — board desativado), `jdctechpeople`, `jdc-tech-people`, `jdcpeople`, `jdc-people`, `jdctecnologia` (404) | — | Link legado morto no rodapé do site aponta pro Gupy; canal real hoje é Flash Vagas (`jdctechpeople.vagas.flashapp.com.br`) |
 | Conquista Intermediadora de Negócios | E | Pendente | — | — | |
 | Profitto | E | Pendente | — | — | |
 | NTW Contabilidade e Gestão Empresarial | E | Pendente | — | — | |
@@ -71,16 +71,19 @@ verificação por empresa faz a auditoria sozinho — não é mais preciso revis
 ## Taxa de conversão, por grupo (não só acumulada — grupos maiores/mais estruturados
 convertem melhor, e misturar tudo esconde isso)
 
-| Grupo | Tentadas | Convertidas (produção) | Taxa |
+| Grupo | Tentadas | Convertidas (produção, cobertura nova) | Taxa |
 |---|---:|---:|---:|
 | A+B | 14 | 8 (Localiza, Algar, Bretas, Banco Mercantil, 3corações, BHS, Montreal, IOASYS) | 57% |
 | C | 7 | 3 (Queima Diária, Sabin, Unidas Locadora) | 43% |
-| D–H | 0/31 | — | pendente |
+| D | 6 | 0 — Algar Tech tem board respondendo, mas é o MESMO handle de "Algar" já em produção: zero cobertura nova | **0%** |
+| E–H | 0/25 | — | pendente |
 
-A/B (empresas maiores e mais estruturadas) e C (mistura) seguem perto uma da outra — 57% e 43%,
-não a queda abrupta esperada ainda. D–H tem cartórios, Sicoobs regionais e consultorias pequenas,
-categorias com prior mais baixo de usar um ATS de mercado — a hipótese de queda continua de pé,
-só não confirmada com 21/52. O acumulado até aqui: **11/21 (52%)**. Número final só depois de
-D–H; um achado lateral do lote C vale registrar: Arqia usa Greenhouse — primeiro dado real de que
-"ATS diferente" nas empresas sem board Gupy não é só suposição, é observação. Não muda a ordem
-(Fase B continua bloqueada), mas é o tipo de fato que vale ter na mão quando ela abrir.
+**Primeira queda real**: D confirma a hipótese — 0% contra 57%/43% dos grupos anteriores.
+Cartórios e consultorias pequenas não usam Gupy; usam Solides (2×), ABGi Consulting Jobs, Flash
+Vagas, ou nada. Acumulado até aqui: **11/27 (41%)**, caindo. E–H (Sicoobs regionais, mineradora,
+autopeças, telecom pequena, mais consultorias) deve continuar a curva — número final só depois de
+fechar até H.
+
+Achados laterais registrados, não perseguidos: Arqia (lote C) usa Greenhouse; 4 empresas do lote D
+apontam pra ATS concorrentes identificáveis (Solides ×2, ABGi Consulting Jobs, Flash Vagas). Não
+mudam a ordem (Fase B continua bloqueada), mas são dado real pra quando essa decisão for tomada.
