@@ -90,3 +90,9 @@
   handle: supergasbras
   tracks: [ai-builder, product]
   enabled: true
+
+- name: Kinross Brasil Mineração
+  ats: gupy
+  handle: kinross
+  tracks: [ai-builder, product]
+  enabled: true

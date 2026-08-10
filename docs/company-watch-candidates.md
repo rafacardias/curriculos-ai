@@ -48,12 +48,12 @@ verificação por empresa faz a auditoria sozinho — não é mais preciso revis
 | UaiRango | E | Sem board Gupy | 7 variações tentadas (404) | — | Sem ATS de terceiros identificado |
 | Rede Inova Drogarias | E | Sem board Gupy | 11 variações tentadas (404) | — | Recrutamento via e-mail/LinkedIn, sem ATS |
 | Supergasbras | E | **Em produção** | `supergasbras` | 96 | 111 brutas, 15 talent pool |
-| Sicoob Credicopa | F | Pendente | — | — | |
-| Sicoob Credivaz | F | Pendente | — | — | |
-| Sicoob Carlos Chagas | F | Pendente | — | — | |
-| Kinross Brasil Mineração | F | Pendente | — | — | |
-| Eletrozema | F | Pendente | — | — | |
-| Lear Corporation | F | Pendente | — | — | |
+| Sicoob Credicopa | F | Sem board Gupy | `sicoobcredicopa`, `credicopa` (404) | — | Usa Solides (`sicoobcredicopa.vagas.solides.com.br`) |
+| Sicoob Credivaz | F | Sem board Gupy | `sicoobcredivaz`, `credivaz` (404) | — | Usa Empregare (`sicoob.empregare.com`) — portal nacional do sistema Sicoob |
+| Sicoob Carlos Chagas | F | Sem board Gupy | `sicoobcarloschagas`, `carloschagas`, `sicoobcarlos` (404) | — | Usa Empregare, mesmo portal nacional |
+| Kinross Brasil Mineração | F | **Em produção** | `kinross` | 1 | 2 no board, 1 talent pool |
+| Eletrozema | F | Sem board Gupy | `eletrozema`, `zema`, `grupozema`, `eletrozemavarejo` (404) | — | Sem ATS de terceiros — formulário próprio |
+| Lear Corporation | F | Sem board Gupy | `lear`, `learcorporation`, `learcorp`, `learbrasil`, `lear-brasil`, `learbr`, `learjundiai`, `learautomotive` (404) | — | Portal próprio da matriz (`jobs.lear.com`), não Gupy |
 | CNH | G | Pendente | — | — | |
 | SEST SENAT | G | Pendente | — | — | |
 | Grupo UbyAgro | G | Pendente | — | — | |
@@ -77,10 +77,12 @@ convertem melhor, e misturar tudo esconde isso)
 | C | 7 | 3 (Queima Diária, Sabin, Unidas Locadora) | 43% |
 | D | 6 | 0 — Algar Tech tem board respondendo, mas é o MESMO handle de "Algar" já em produção: zero cobertura nova | 0% |
 | E | 6 | 1 (Supergasbras) | 17% |
-| F–H | 0/19 | — | pendente |
+| F | 6 | 1 (Kinross Brasil Mineração) | 17% |
+| G–H | 0/13 | — | pendente |
 
-Acumulado até aqui: **12/33 (36%)**, ainda caindo. F–H (Sicoobs regionais, mineradora, autopeças,
-telecom pequena, consultorias) segue em aberto.
+Acumulado até aqui: **13/39 (33%)**. As 3 cooperativas Sicoob confirmaram a hipótese de recrutamento
+centralizado no sistema nacional (Empregare/Solides), não Gupy — nenhuma delas tem board próprio.
+G–H seguem em aberto.
 
 ## Ranking de ATS concorrentes (por ocorrência, atualizado a cada lote fechado)
 
@@ -89,11 +91,13 @@ decidir por Fase B: cada empresa sem board Gupy que expõe outro ATS conta um vo
 
 | ATS | Ocorrências | Empresas |
 |---|---:|---|
-| **Solides** | 3 | Cartório 1º Ofício de Registro de Imóveis de BH (D), Jungle Consultoria (D), Profitto (E) |
+| **Solides** | 4 | Cartório 1º Ofício de Registro de Imóveis de BH (D), Jungle Consultoria (D), Profitto (E), Sicoob Credicopa (F) |
+| Empregare | 2 | Sicoob Credivaz (F), Sicoob Carlos Chagas (F) — portal nacional do sistema Sicoob |
 | Greenhouse | 1 | Arqia (C) |
 | Yapp Rec | 1 | Shippify Tecnologia (C) |
 | Pandapé | 1 | AeC Centro de Contatos (C) |
 | ABGi Consulting Jobs | 1 | ABGI Brasil (D) |
 | Flash Vagas | 1 | JDC Tech e People (D) |
 | Sinergy RH | 1 | Algar Tech (D) — já coberta pelo handle de "Algar", não candidata a registro próprio |
-| Sem ATS identificável (formulário próprio, e-mail, LinkedIn, ou não localizado) | 6 | Bridge Transportes (C), Cartório 2º Ofício de Notas (D), Conquista Intermediadora (E), NTW Contabilidade (E), UaiRango (E), Rede Inova Drogarias (E) |
+| jobs.lear.com (portal próprio de matriz) | 1 | Lear Corporation (F) |
+| Sem ATS identificável (formulário próprio, e-mail, LinkedIn, ou não localizado) | 7 | Bridge Transportes (C), Cartório 2º Ofício de Notas (D), Conquista Intermediadora (E), NTW Contabilidade (E), UaiRango (E), Rede Inova Drogarias (E), Eletrozema (F) |
