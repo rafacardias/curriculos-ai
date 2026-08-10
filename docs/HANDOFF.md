@@ -75,6 +75,10 @@ kit gerado, nenhuma migration, nenhum peso/threshold/query mudado.
 4. Fase B (Solides/Greenhouse) fechada até nova ordem — reabrir exige critério de busca novo, não
    adapter novo do mesmo tipo de empresa.
 5. Backlog mais antigo, não reordenado por isto: `docs/roadmap.md` itens 2–10.
+6. `inbox-watch` (Gmail → sinal sobre `applications`): brainstorm feito, plano em
+   `docs/roadmap.md` → Onda 3. Parada dura: taxa de match email↔candidatura nas aplicações reais
+   antes de qualquer código de transição. Cuidado ACHADO-16: não medir contra `status`
+   armazenado. Não é adapter — Fase B (Solides/Greenhouse) segue fechada, item separado.
 
 ## Onde olhar para mais detalhe
 
