@@ -49,6 +49,7 @@ achadas de novo, não redescobertas):
 | [ACHADO-10](#achado-10--get-apitracks-devolve-trilhas-desabilitadas-o-filtro-é-só-no-cliente) | `GET /api/tracks` devolve todas as trilhas, inclusive desabilitadas — filtro é só em `app.html`. **Medido, não corrigido** |
 | [ACHADO-11](#achado-11--o-board-da-gupy-por-empresa-não-tem-api-é-scrape-de-__next_data__) | `<handle>.gupy.io/api/v1/jobs` é 404 — o board por empresa é scrape de `__NEXT_DATA__`, não integração estável. Filtro léxico da Fase A é título+departamento, sem descrição: 2/782 vagas passaram na validação real. Modalidade estruturada: 782/782 (100%). **Corrigido** (adapter redesenhado) |
 | [ACHADO-12](#achado-12--totvsgupyio-é-404-de-verdade-handle-removido-do-cadastro) | `totvs.gupy.io` e 5 variações óbvias são 404 — handle errado, não "não confirmada". TOTVS removida de `config/companies.yaml`. **Corrigido** (removida) |
+| [ACHADO-13](#achado-13--track_hintqa-sobre-captura--sistêmico-não-isolado-agile-transformation-analyst-não-foi-acidente) | 44% das 95 vagas `track_hint='qa'` não têm nenhuma keyword QA-específica — 6 keywords idênticas às de `product`, sem desempate. `SCRUM MASTER PL/SR` (deveria ser `product`) capturadas por `qa`. **Medido, não corrigido** |
 
 ---
 
@@ -434,7 +435,47 @@ Localiza + Algar (2 empresas reais e verificadas) — a prova de dedup (segunda 
 vagas novas) funciona igual com n=2. Se um dia fizer sentido incluir a TOTVS, o handle certo
 precisa ser achado primeiro (busca dedicada, não adivinhação de padrão).
 
-### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
+### ACHADO-13 · `track_hint='qa'` sobre-captura — sistêmico, não isolado (AGILE TRANSFORMATION ANALYST não foi acidente)
+
+**Medido, não corrigido** — pedido do operador depois de notar que "AGILE TRANSFORMATION ANALYST
+SÊNIOR" (vaga real da vigilância, Localiza) caiu em `qa` quando deveria competir com `product`.
+Medido contra as 95 vagas com `track_hint='qa'` hoje no banco, recalculando overlap com
+`termsPresent` contra o léxico atual de `profile_tracks`:
+
+| | valor |
+|---|---:|
+| vagas com `track_hint='qa'` | 95 |
+| com pelo menos 1 keyword QA-específica (playwright, cypress, istqb, testrail, ...) | 53 (56%) |
+| **só keywords genéricas, nenhuma QA-específica** | **42 (44%)** |
+| empatariam ou perderiam pra outra trilha sob o léxico atual | **38 (40%)** |
+
+**Não é ruído isolado — é estrutural.** Seis keywords do léxico de `qa` são IDÊNTICAS às de
+`product`: `jira`, `agile`, `scrum`, `kanban`, `critérios de aceite`, `acceptance criteria`
+(`profile/tracks.yaml` ou `profile_tracks`, comparar os dois arrays). Nenhuma delas é
+QA-específica — são vocabulário de metodologia ágil que pertence às duas trilhas por igual, e
+`scoreJob` (`src/core/scoring.ts`) não tem critério de desempate: a trilha vencedora é a de
+`frac` estritamente MAIOR (`if (frac > overlap)`), e a consulta que carrega as trilhas
+(`SELECT id, keywords FROM profile_tracks WHERE enabled = 1`) **não tem `ORDER BY`** — em
+empate, quem vence é a ordem que o SQLite devolve as linhas, não uma decisão.
+
+**Caso concreto, não hipotético**: `"SCRUM MASTER PL"` e `"SCRUM MASTER SR"` — cargo que o
+próprio léxico de `product` reconhece por nome (`"scrum master"` é keyword literal ali) — estão
+classificadas `qa`, porque `sql`+`scrum` (ambas genéricas, ambas em `qa`) empataram ou superaram
+o overlap de `product` sob a ordem de iteração atual. Isso toca exatamente a trilha que o
+operador pediu (PM/PO/SM) — não é um efeito colateral distante.
+
+**Vagas claramente não-QA capturadas só por termo genérico**: `Analista de CRM Júnior` (só
+`sql`), `Senior AML Analyst` (só `sql`), `Lead FP&A Analyst` (`sql`+`agile`), `Customer Analytics
+Manager` (só `sql`), `Pessoa Coordenadora de Growth Marketing` (`sql`+`scrum`+`kanban`), `Senior
+React Developer`/`Senior Web Developer` (`sql`+`agile`/`cypress`+`bug`) — nenhuma é vaga de QA.
+
+**Correção proposta (não feita nesta sessão, por pedido explícito — medir, não consertar)**:
+duas direções independentes, cada uma resolveria parte do problema —
+(a) remover de `qa` as 6 keywords compartilhadas com `product` (ou vice-versa, decisão de
+léxico, não de código);
+(b) `ORDER BY` determinístico na consulta de `scoreJob` (não resolve o overlap, só torna o
+empate previsível em vez de acidental — sintoma, não causa).
+Nenhuma das duas foi aplicada.
 
 Barreira de entrada por trilha, sobre as 375 vagas (2026-08-06):
 
