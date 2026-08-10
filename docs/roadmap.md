@@ -29,14 +29,25 @@ listados acima; ver `KNOWN-BUGS.md` BUG-007 "Estado — PARCIALMENTE CORRIGIDO".
 atuais (na época) — 41 delas eram de `product` e 0 de 95 vagas `senior` chegaram a ser vistas pelo
 operador.
 
-**Aceite — revisado 2026-08-10, o bloqueador mudou de lugar:** a população de `ai-builder` já
-passou de 1 pra **36 decisões** (19 `queued` + 17 `rejected`) — o volume que faltava em 2026-08-06
-já existe. Mas só **5 dos 45 eventos de feedback de `ai-builder` carregam `reason_class`** (4
-`elegibilidade`, 1 `tema`; 40 sem nenhum motivo) — bem abaixo do aceite de ~25. Causa: `doFeedback`
-(`src/server/index.ts:162`, o caminho que a UI usa no dia a dia) trata `reasonClass` como parâmetro
-**opcional**; só `src/cli/feedback.ts:34-35` exige. **O bloqueador não é mais "poucas decisões de
-`ai-builder` vistas" — é captura de motivo na UI.** Tornar `reasonClass` obrigatório no servidor
-resolveria isso, mas é mudança de comportamento de produto: decisão do operador, não desta nota.
+**Aceite — revisado 2026-08-10, corrigido no mesmo dia (a primeira revisão errou o diagnóstico):**
+a primeira leitura desta nota dizia que a UI trata `reason_class` como opcional e que isso explicava
+40 dos 45 eventos de `ai-builder` sem motivo. **Errado** — checado contra `git log` e o dado por
+timestamp: `src/server/app.html` (linha ~516) já bloqueia a rejeição com um prompt obrigatório de
+classe desde o commit `f9378e6` (2026-08-07T12:29-03:00, "reason class decides whether the score
+learns"). Os 12 rejeições de `ai-builder` sem `reason_class` são **legado pré-fix** — as mesmas 12
+da "recaída" já documentada em `KNOWN-BUGS.md` BUG-007 (5× "Hibridas em outras cidades", 5×
+"presenciais em outros estados...", 2 isoladas), já estornadas por
+`scripts/revert-eligibility-feedback.ts`. Desde o fix, **0 de 6 rejeições em qualquer trilha
+ficaram sem `reason_class`** — captura na UI funciona.
+
+O bloqueador real, com o dado limpo (só pós-fix, 2026-08-07T15:29Z em diante): **16 decisões de
+`ai-builder`** (11 aprovações + 4 `elegibilidade` + 1 `tema`), não as 36 que a primeira revisão
+contou — aquele número confundia `status='queued'` (vaga na fila, sem feedback nenhum ainda) com
+"decisão registrada". Abaixo do aceite de ~25, e com um desbalanço que o aceite original não
+previa: das decisões que de fato MOVEM peso (aprovação sempre aprende; só `tema` aprende na
+rejeição), é **11 positivas contra 1 negativa** — amostra útil pra validar uma reativação de
+`preference` precisa de mais rejeição temática, não só mais volume total. **O bloqueador é tempo/
+volume de decisão real, não captura** — a UI já captura corretamente desde 08-07.
 
 ## 2. Componente de barreira de entrada (ex-1.2d)
 
