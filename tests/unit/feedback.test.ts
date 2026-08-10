@@ -163,3 +163,53 @@ describe("applyFeedback — o efeito no banco", () => {
     assert.deepEqual(k, preferenceKeysFor(job), "determinística");
   });
 });
+
+describe("preferenceKeysFor — ORDER BY e `enabled` ausentes (mesma classe do BUG-010)", () => {
+  // KNOWN-BUGS.md, varredura de 2026-08-09: candidato registrado, dívida sem
+  // sangramento (componente `preference` desarmado). `feedback.ts:39` fazia
+  // `SELECT keywords FROM profile_tracks` sem `ORDER BY` e sem `WHERE enabled = 1`
+  // — QUAIS das >8 keywords batidas sobrevivem ao `.slice(0, 8)` dependia da
+  // ordem de leitura da tabela, e uma trilha desativada continuava contribuindo.
+  beforeEach(() => resetDb());
+
+  function seedTrack(id: string, keywords: string[], enabled = 1): void {
+    getDb()
+      .prepare(
+        "INSERT INTO profile_tracks (id, name, keywords, updated_at, enabled) VALUES (?, ?, ?, ?, ?)"
+      )
+      .run(id, id, JSON.stringify(keywords), "2026-08-10T00:00:00Z", enabled);
+  }
+
+  it("o desempate por >8 keywords batidas segue `id ASC`, não a ordem de inserção", () => {
+    // "zzz" inserida ANTES de "aaa" — insertion order (rowid) é zzz→aaa;
+    // ordem alfabética por id é aaa→zzz. Se o slice(0,8) seguir rowid (bug),
+    // as 5 de zzz entram inteiras e só 3 de aaa sobram. Se seguir `id ASC`
+    // (fix), é o oposto: as 5 de aaa entram inteiras e só 3 de zzz sobram.
+    seedTrack("zzz", ["kwz1", "kwz2", "kwz3", "kwz4", "kwz5"]);
+    seedTrack("aaa", ["kwa1", "kwa2", "kwa3", "kwa4", "kwa5"]);
+    const job = getJob(
+      insertJob(
+        raw({
+          title: "Vaga genérica",
+          description: "kwz1 kwz2 kwz3 kwz4 kwz5 kwa1 kwa2 kwa3 kwa4 kwa5",
+        })
+      )!.id
+    )!;
+    const keys = preferenceKeysFor(job);
+    for (const kw of ["kwa1", "kwa2", "kwa3", "kwa4", "kwa5"]) {
+      assert.ok(keys.includes(`kw:${kw}`), `${kw} (trilha "aaa", id ASC vence) deveria sobreviver ao slice`);
+    }
+    for (const kw of ["kwz4", "kwz5"]) {
+      assert.ok(!keys.includes(`kw:${kw}`), `${kw} deveria ter sido cortado pelo slice(0, 8)`);
+    }
+  });
+
+  it("trilha desativada não contribui keyword nenhuma", () => {
+    seedTrack("ativa", ["kwviva"], 1);
+    seedTrack("desativada", ["kwmorta"], 0);
+    const job = getJob(insertJob(raw({ title: "kwviva kwmorta", description: "" }))!.id)!;
+    const keys = preferenceKeysFor(job);
+    assert.ok(keys.includes("kw:kwviva"));
+    assert.ok(!keys.includes("kw:kwmorta"), "trilha desabilitada não pode alimentar preference_weights");
+  });
+});

@@ -980,6 +980,16 @@ registrada, mas sem sangramento ativo hoje.
    disto hoje — mas os dados continuam sendo gravados "para reprocessamento futuro"
    (decisions.md, 2026-07-12), e herdariam essa não-determinismo se o componente for reativado.
 
+   **Corrigido (2026-08-10)**: `WHERE enabled = 1 ORDER BY id ASC`, mesma convenção de
+   `scoring.ts:47`/`listTracks()`. Teste primeiro (`tests/unit/feedback.test.ts`, describe
+   `preferenceKeysFor — ORDER BY e enabled ausentes`): duas trilhas com >8 keywords batidas no
+   total (`zzz` inserida antes de `aaa`) provam que o `.slice(0, 8)` seguia rowid, não `id ASC` —
+   falhou sem o fix (as 5 keywords de `zzz` sobreviviam inteiras, `aaa` cortada em 3), passa com
+   ele (o oposto: `aaa` vence por ordem alfabética). Segundo teste prova que trilha desabilitada
+   parou de contribuir keyword. Fecha a classe inteira (`scoring.ts`, `answers.ts`, `feedback.ts`)
+   — as três consultas a `profile_tracks`/tabelas de decisão sem `ORDER BY` desta varredura estão
+   corrigidas. Sem migration (schema `enabled` já existia, migration 005). Suíte 411/411.
+
 **Candidato a BUG de classe diferente, achado fora desta varredura (2026-08-09, expansão do
 cadastro de empresas)**: `docs/company-watch-candidates.md` (log de verificação, humano) e
 `config/companies.yaml` (registro que o código de fato lê) podem divergir silenciosamente — 5
