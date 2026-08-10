@@ -855,12 +855,27 @@ registrada, mas sem sangramento ativo hoje.
 1. **`src/cli/answers.ts:45`** (comando `answers add`) — `SELECT id FROM answer_bank WHERE
    question_fingerprint = ? AND language = ? AND track_id IS ? AND company_id IS ?` sem
    `ORDER BY`, **e a tabela não tem `UNIQUE` nessa tupla** (só índice não-único em
-   `question_fingerprint, language` — `001_init.sql:105`). É o pior dos dois: falta ordenação
-   *e* falta a constraint que tornaria a ordenação irrelevante. Se alguma vez existirem duas
-   linhas duplicadas na mesma tupla (hoje o próprio comando evita criar, mas nada no schema
-   impede), `.get()` decide qual delas recebe o `UPDATE` sem critério — dedup decidido por ordem
-   de leitura, a mesma classe de falha que o BUG-010 media, só que sem teste algum em cima.
-   Candidata mais forte ao próximo BUG.
+   `question_fingerprint, language` — `001_init.sql:105`). Era o pior dos dois: faltava
+   ordenação *e* faltava a constraint que tornaria a ordenação irrelevante — dedup decidido por
+   ordem de leitura, a mesma classe de falha que o BUG-010 media.
+
+   **`ORDER BY` corrigido (2026-08-09, madrugada)**: `ORDER BY updated_at DESC` — a linha mais
+   recentemente tocada vence o `UPDATE`, não a primeira que a varredura de tabela devolver.
+   Escolha deliberada (não `id DESC`/ULID): preserva o que o operador editou por último em vez de
+   reviver uma resposta velha por acidente de ULID sub-milissegundo. Teste primeiro
+   (`tests/e2e/answers-dedup-order.test.ts`), falhou sem o fix (atualizava a linha ANTIGA quando
+   inserida primeiro — mesma classe de prova do BUG-010: cenário construído pra expor a
+   dependência de ordem, não hipotético) e passa com ele, nas duas ordens de inserção.
+
+   **`UNIQUE` NÃO adicionado — parado e registrado, não executado**: exige migration (mudança de
+   schema, fora do "sem migration se der pra evitar"), e tem uma decisão de verdade embutida:
+   SQLite **não** trata duas linhas com `track_id IS NULL AND company_id IS NULL` como colisão
+   num índice único simples — `NULL` nunca é igual a `NULL` para fins de `UNIQUE`. A constraint
+   certa provavelmente precisa de índices únicos parciais separados por combinação de
+   NULL/não-NULL (o mesmo padrão que a migration 007 já usou para `source_job_id`), não um
+   `UNIQUE (question_fingerprint, language, track_id, company_id)` ingênuo — que pareceria
+   corrigir o problema e não corrigiria as respostas mais comuns (sem trilha, sem empresa).
+   Decisão de schema explícita, para quando alguém quiser resolver de propósito.
 2. **`src/db/repo/feedback.ts:39`** (`preferenceKeysFor`) — `SELECT keywords FROM profile_tracks`
    (sem `ORDER BY`, e nem filtra `enabled`) alimenta `termsPresent(...).slice(0, 8)`: QUAIS
    keywords viram chave `kw:*` em `preference_weights` depende da ordem das trilhas na consulta.

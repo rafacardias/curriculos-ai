@@ -41,8 +41,20 @@ if (cmd === "list") {
   }
   const companyId = values.company ? (getCompanyByName(values.company)?.id ?? null) : null;
   const fp = normalize(question);
+  // ORDER BY updated_at DESC (candidato a BUG registrado em KNOWN-BUGS.md,
+  // BUG-010 → "Varredura"): a tabela não tem UNIQUE nessa tupla, então
+  // duas linhas duplicadas SÃO possíveis (dado histórico, não criável por
+  // este comando hoje). Sem ORDER BY, qual delas recebe o UPDATE dependia da
+  // varredura de tabela do SQLite — não-especificada. `updated_at DESC`
+  // escolhe a linha mais recentemente tocada, não uma ordem arbitrária:
+  // preserva o que o operador editou por último em vez de reviver uma
+  // resposta velha. UNIQUE na tupla fica de fora — NULL em track_id/
+  // company_id não colide por padrão num índice único do SQLite, então a
+  // constraint certa exige decisão de schema, não um UNIQUE simples.
   const existing = db
-    .prepare("SELECT id FROM answer_bank WHERE question_fingerprint = ? AND language = ? AND track_id IS ? AND company_id IS ?")
+    .prepare(
+      "SELECT id FROM answer_bank WHERE question_fingerprint = ? AND language = ? AND track_id IS ? AND company_id IS ? ORDER BY updated_at DESC"
+    )
     .get(fp, values.lang, values.track ?? null, companyId) as { id: string } | undefined;
   if (existing) {
     db.prepare("UPDATE answer_bank SET answer = ?, updated_at = ? WHERE id = ?").run(answer, nowIso(), existing.id);
