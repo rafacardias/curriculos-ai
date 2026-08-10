@@ -114,3 +114,9 @@
   handle: vagasgrupoigl
   tracks: [ai-builder, product]
   enabled: true
+
+- name: Ipê Digital
+  ats: gupy
+  handle: ipedigital
+  tracks: [ai-builder, product]
+  enabled: true

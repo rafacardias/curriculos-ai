@@ -60,13 +60,13 @@ verificação por empresa faz a auditoria sozinho — não é mais preciso revis
 | iCrop | G | Sem board Gupy | `icrop`, `icropirrigacao`, `icropgestaodeirrigacao`, `icropagricola`, `icroptecnologia` (404) | — | Usa Mindsight (`oportunidades.mindsight.com.br/icrop`) |
 | BH Airport | G | **Em produção** | `bh-airport` | 0 | Board real, sem vaga aberta agora (1 bruta é banco de talentos) — mantido registrado, `watch run` reflete quando abrir vaga |
 | IGL – Importação e Comércio de Materiais de Construção | G | **Em produção** | `vagasgrupoigl` | 5 | Handle não óbvio — achado via busca web. Dono das marcas Viveza e BEL LAR |
-| Alctel Telecom | H | Pendente | — | — | |
-| TQI | H | Pendente | — | — | |
-| Framework | H | Pendente | — | — | |
-| Unimed São Sebastião do Paraíso | H | Pendente | — | — | |
-| iGreen Energy | H | Pendente | — | — | |
-| Ipê Digital | H | Pendente | — | — | |
-| Rumo Soluções | H | Pendente | — | — | |
+| Alctel Telecom | H | Sem board Gupy | `alctel`, `alctel-telecom`, `alctel-telecomunicacoes` (404) | — | Usa Solides (`alctel.vagas.solides.com.br`) |
+| TQI | H | Sem board Gupy | `tqi` (404) | — | Portal próprio (`vagas.tqi.com.br`, SPA custom), sem ATS terceirizado identificável |
+| Framework (Framework Digital, BH) | H | Sem board Gupy | `framework`, `framework-digital`, `frameworkdigital`, `framework-digital-consultoria`, `fw-digital` (404); `vempraframe` respondeu 404 HTTP mas com `__NEXT_DATA__` trazendo `"page": "/404"` — mesmo padrão do caso `jdctech` (Grupo D), board desativado, não confirma | — | Usa InHire (`frameworkdigital.inhire.app/vagas`) |
+| Unimed São Sebastião do Paraíso | H | Sem board Gupy | `unimedssp`, `unimedsaosebastiaodoparaiso` (404) | — | Usa Solides (`unimedssp.vagas.solides.com.br`) |
+| iGreen Energy | H | Sem board Gupy | `igreen`, `igreenenergy`, `igreen-energy` (404) | — | Sem ATS terceirizado — site institucional, captação via WhatsApp |
+| Ipê Digital | H | **Em produção** | `ipedigital` | 1 | 3 brutas, 2 talent pool |
+| Rumo Soluções (Lagoa Santa) | H | Sem board Gupy | `rumo`, `rumosolucoes`, `rumo-solucoes` (404) — atenção: `rumolog.gupy.io` existe mas é da Rumo Logística/Grupo Cosan, empresa não relacionada; não tratado como confirmação | — | Usa Compleo (`jobs.compleo.app/rumosolucoes/joblist`) |
 
 ## Taxa de conversão, por grupo (não só acumulada — grupos maiores/mais estruturados
 convertem melhor, e misturar tudo esconde isso)
@@ -79,30 +79,46 @@ convertem melhor, e misturar tudo esconde isso)
 | E | 6 | 1 (Supergasbras) | 17% |
 | F | 6 | 1 (Kinross Brasil Mineração) | 17% |
 | G | 6 | 3 (Grupo UbyAgro, BH Airport, IGL) | 50% |
-| H | 0/7 | — | pendente |
+| H | 7 | 1 (Ipê Digital) | 14% |
+| **Total** | **52** | **17** | **33%** |
 
-Acumulado até aqui: **16/45 (36%)**. G rompeu a curva de queda que vinha de D/E/F (0%/17%/17%) —
-50%, quase o nível de A/B. Não invalida a hipótese original (grande/estruturada converte mais),
-G só teve mais empresas médias/grandes (multinacional agro, aeroporto, importador) do que pequenas.
-H fecha a amostra.
+**Fechado.** 17/52 (33%) convertido. A/B (57%) e G (50%) — empresas maiores/mais estruturadas —
+puxam a média pra cima; C (43%), E/F (17%), D (0%) e H (14%) — mistura de pequenas, cartórios,
+cooperativas regionais e empresas de nicho — puxam pra baixo. A curva não caiu monotonicamente
+(G quebrou a sequência D→E→F), mas o padrão qualitativo se sustentou do início ao fim: **porte e
+estrutura da empresa prevê conversão melhor que "grupo da pesquisa"**.
 
-## Ranking de ATS concorrentes (por ocorrência, atualizado a cada lote fechado)
+## Ranking de ATS concorrentes (por ocorrência) — fechado
 
 Não é achado isolado — é dado que decide qual adapter importa mais depois de Greenhouse, se
 decidir por Fase B: cada empresa sem board Gupy que expõe outro ATS conta um voto.
 
 | ATS | Ocorrências | Empresas |
 |---|---:|---|
-| **Solides** | 4 | Cartório 1º Ofício de Registro de Imóveis de BH (D), Jungle Consultoria (D), Profitto (E), Sicoob Credicopa (F) |
+| **Solides** | 6 | Cartório 1º Ofício de Registro de Imóveis de BH (D), Jungle Consultoria (D), Profitto (E), Sicoob Credicopa (F), Alctel Telecom (H), Unimed São Sebastião do Paraíso (H) |
 | Empregare | 2 | Sicoob Credivaz (F), Sicoob Carlos Chagas (F) — portal nacional do sistema Sicoob |
 | Greenhouse | 1 | Arqia (C) |
 | Yapp Rec | 1 | Shippify Tecnologia (C) |
 | Pandapé | 1 | AeC Centro de Contatos (C) |
 | ABGi Consulting Jobs | 1 | ABGI Brasil (D) |
 | Flash Vagas | 1 | JDC Tech e People (D) |
-| Sinergy RH | 1 | Algar Tech (D) — já coberta pelo handle de "Algar", não candidata a registro próprio |
-| jobs.lear.com (portal próprio de matriz) | 1 | Lear Corporation (F) |
 | Plooral | 1 | SEST SENAT (G) — recrutamento nacional centralizado, mesmo padrão dos sistemas S visto no Sicoob |
 | Mindsight | 1 | iCrop (G) |
-| CNH próprio (Workday/SuccessFactors, não confirmado o produto exato) | 1 | CNH (G) |
-| Sem ATS identificável (formulário próprio, e-mail, LinkedIn, ou não localizado) | 7 | Bridge Transportes (C), Cartório 2º Ofício de Notas (D), Conquista Intermediadora (E), NTW Contabilidade (E), UaiRango (E), Rede Inova Drogarias (E), Eletrozema (F) |
+| InHire | 1 | Framework (H) |
+| Compleo | 1 | Rumo Soluções (H) |
+| Sinergy RH | 1 | Algar Tech (D) — já coberta pelo handle de "Algar", não candidata a registro próprio |
+| jobs.lear.com / CNH próprio (portais de matriz, não plataforma de mercado) | 2 | Lear Corporation (F), CNH (G) |
+
+**Solides isolado na liderança — 6 ocorrências contra 1 do Greenhouse.** Se a Fase B for decidida
+por esta amostra, o próximo adapter que mais amplia cobertura não é Greenhouse — é **Solides**.
+Dado real, não intuição de mercado; decisão em si fica pra quando essa fase abrir.
+
+**Correção própria, achada fechando esta tabela**: as 6 empresas dos grupos A/B sem board (Alcoa,
+Centro Universitário Una, Centro Universitário Uni-BH, Martins, Grupo Zema, A3 Data) tinham
+ficado de fora da contagem de "sem ATS identificável" — o bucket só começou a ser preenchido a
+partir do Grupo C, quando a tabela de ranking foi criada. Reconciliado agora:
+
+| Sem ATS identificável (formulário próprio, e-mail, LinkedIn, portal SPA sem terceiro, ou não localizado) | 15 | Alcoa Alumínio (A), Centro Universitário Una (A), Centro Universitário Uni-BH (A), Martins (A), Grupo Zema (B), A3 Data (B), Bridge Transportes (C), Cartório 2º Ofício de Notas (D), Conquista Intermediadora (E), NTW Contabilidade (E), UaiRango (E), Rede Inova Drogarias (E), Eletrozema (F), TQI (H), iGreen Energy (H) |
+
+Reconciliação: 17 (Gupy) + 20 (ATS de terceiros identificado, somando a tabela acima) + 15 (sem
+ATS) = 52. Bate com o total tentado — nenhuma empresa ficou de fora da contagem final.
