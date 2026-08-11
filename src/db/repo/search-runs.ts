@@ -33,10 +33,19 @@ export interface SourceHealth {
 }
 
 /**
- * Janela varrida apenas para achar o último sucesso — responder "há quanto tempo
- * não funciona" exige olhar mais para trás do que a janela de falhas consecutivas.
+ * Quantas linhas de `search_runs` são lidas do banco, no total.
+ *
+ * NÃO é a janela do alerta: `lastN` conta corridas em que a fonte PARTICIPOU, e
+ * uma linha de `search_runs` é uma ENTRADA de `config.searches`, não um `/buscar`.
+ * Um `/buscar` com 13 entradas grava 13 linhas, e as últimas 3 linhas de um
+ * `/buscar` real são as entradas EN (remotive/remoteok/wwr) — gupy e linkedin nem
+ * aparecem nelas. Uma janela contada em linhas brutas nunca conseguiria alertar
+ * sobre o LinkedIn, que é a fonte que motivou este alerta existir.
+ *
+ * Este teto também é o que faz uma fonte tirada do config parar de ser alertada:
+ * passadas 50 linhas sem participar, ela some do histórico lido.
  */
-const OK_LOOKBACK_RUNS = 50;
+const HISTORY_LOOKBACK_RUNS = 50;
 
 /** A partir de quantas falhas seguidas a fonte é considerada morta. */
 export const DEAD_SOURCE_MIN_FAILURES = 2;
@@ -62,8 +71,13 @@ function failed(stats: PerSourceStats | undefined): boolean {
 }
 
 /**
- * Saúde de cada fonte vista nas últimas `lastN` corridas (read-only).
- * Ordenada por falhas consecutivas (desc) e depois pelo nome da fonte.
+ * Saúde de cada fonte, olhando as últimas `lastN` corridas **em que ela
+ * participou** (read-only). Ordenada por falhas consecutivas (desc) e depois
+ * pelo nome da fonte.
+ *
+ * A janela é por fonte de propósito — ver `HISTORY_LOOKBACK_RUNS` para o porquê.
+ * `lastOkAt` olha o histórico inteiro lido, não só a janela: responder "há quanto
+ * tempo não funciona" exige enxergar além das falhas contadas.
  */
 export function getSourceHealth(lastN = 3): SourceHealth[] {
   const rows = getDb()
@@ -73,7 +87,7 @@ export function getSourceHealth(lastN = 3): SourceHealth[] {
         ORDER BY started_at DESC
         LIMIT ?`
     )
-    .all(Math.max(lastN, OK_LOOKBACK_RUNS)) as unknown as {
+    .all(Math.max(lastN, HISTORY_LOOKBACK_RUNS)) as unknown as {
     started_at: string;
     per_source: string | null;
   }[];
@@ -84,42 +98,37 @@ export function getSourceHealth(lastN = 3): SourceHealth[] {
     if (perSource) runs.push({ startedAt: r.started_at, perSource });
   }
 
-  const window = runs.slice(0, lastN);
-  const sources = [...new Set(window.flatMap((r) => Object.keys(r.perSource)))];
+  const sources = [...new Set(runs.flatMap((r) => Object.keys(r.perSource)))];
 
   return sources
     .map((source) => {
+      // Só as corridas em que a fonte participou, da mais recente para a mais antiga.
+      const participated = runs
+        .map((r) => ({ startedAt: r.startedAt, stats: r.perSource[source] }))
+        .filter((r): r is { startedAt: string; stats: PerSourceStats } => !!r.stats);
+      const window = participated.slice(0, lastN);
+
       let consecutiveFailures = 0;
-      let runsParticipated = 0;
       let lastError: string | null = null;
-      let streakOpen = true;
       for (const run of window) {
-        const stats = run.perSource[source];
-        if (!stats) continue; // ausência da fonte na corrida ≠ falha
-        runsParticipated++;
-        if (!streakOpen) continue;
-        if (!failed(stats)) {
-          streakOpen = false; // sucesso mais recente encerra a sequência
-          continue;
-        }
+        if (!failed(run.stats)) break; // sucesso mais recente encerra a sequência
         consecutiveFailures++;
-        lastError ??= stats.errors.join("; ");
+        lastError ??= run.stats.errors.join("; ");
       }
-      const okRun = runs.find((r) => r.perSource[source] && !failed(r.perSource[source]));
       return {
         source,
         consecutiveFailures,
-        runsParticipated,
+        runsParticipated: window.length,
         lastError,
-        lastOkAt: okRun?.startedAt ?? null,
+        lastOkAt: participated.find((r) => !failed(r.stats))?.startedAt ?? null,
       } satisfies SourceHealth;
     })
     .sort((a, b) => b.consecutiveFailures - a.consecutiveFailures || a.source.localeCompare(b.source));
 }
 
 /**
- * Fontes mortas: falharam em `DEAD_SOURCE_MIN_FAILURES`+ das últimas `lastN`
- * corridas em que participaram, sem sucesso nenhum depois disso. Falha isolada
+ * Fontes mortas: falharam nas `DEAD_SOURCE_MIN_FAILURES` últimas corridas
+ * seguidas em que participaram, sem sucesso nenhum depois disso. Falha isolada
  * fica de fora de propósito — ela já aparece no aviso da última corrida.
  */
 export function listDeadSources(lastN = 3): SourceHealth[] {

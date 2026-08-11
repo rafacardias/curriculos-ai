@@ -114,6 +114,27 @@ describe("saúde por fonte (search_runs)", () => {
     assert.deepEqual(listDeadSources(1), [], "com janela 1 nunca há 2 falhas seguidas");
   });
 
+  it("alerta a fonte PT mesmo quando as corridas mais recentes são só as entradas EN", () => {
+    // Esta é a forma REAL do dado, e o motivo de a janela ser contada por fonte.
+    // Um `/buscar` grava uma linha de `search_runs` por ENTRADA de `config.searches`,
+    // não uma por corrida: em 2026-08-09 foram 13 linhas, e as últimas são as
+    // entradas EN. Uma janela contada em linhas brutas olharia só remotive/remoteok/
+    // wwr e nunca enxergaria o LinkedIn — justamente a fonte que motivou o alerta.
+    corrida({ gupy: ok(), linkedin: falha("timeout 30000ms") });
+    corrida({ gupy: ok(), linkedin: falha("timeout 30000ms") });
+    for (const q of ["n8n", "AI automation", "automation engineer", "AI agent"]) {
+      void q;
+      corrida({ remotive: ok(), remoteok: ok(), wwr: ok() });
+    }
+
+    const mortas = listDeadSources();
+    assert.equal(mortas.length, 1, "o linkedin continua morto, mesmo fora das últimas linhas");
+    assert.equal(mortas[0]!.source, "linkedin");
+    assert.equal(mortas[0]!.consecutiveFailures, 2);
+    assert.equal(mortas[0]!.lastOkAt, null);
+    assert.equal(saude("gupy")!.consecutiveFailures, 0, "a gupy participou das mesmas corridas e está sã");
+  });
+
   it("banco sem corrida nenhuma devolve lista vazia", () => {
     assert.deepEqual(getSourceHealth(), []);
     assert.deepEqual(listDeadSources(), []);
