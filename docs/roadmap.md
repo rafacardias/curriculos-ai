@@ -201,6 +201,17 @@ deliberadamente cirúrgica e **não** é este refactor.
 > medido 47, depois de descontar as 14 que eram artefato de paginação (`ACHADO-19`). O ganho da
 > Gupy foi **zero** e ela fica na variante mesmo assim, só pelo caso em que o termo satura
 > `limit=50` (1 dos 7 termos hoje).
+>
+> **Resultado da primeira corrida real (2026-08-11T21:45Z, 20 entradas): 236 vagas novas, 109
+> delas em BH/RMBH.** O acervo tinha 49 vagas com BH/MG no `location` antes; passou a 126 só com
+> "Belo Horizonte". Zero timeout, zero erro de adapter. Runtime 132,4s contra 53,0s da corrida de
+> 2026-08-09 com 13 entradas — 2,5×, dentro do aceitável, e a regra de corte ("cortar termo PT
+> antes de cortar variante") não precisou ser usada.
+>
+> **A previsão da medição bateu na produção**: a variante BH pela Gupy trouxe **6 vagas e 0 novas**
+> — exatamente o zero que a sondagem previu. O ganho inteiro veio do LinkedIn, e a maior parte dele
+> vem de paginar (`ACHADO-19`), não da geografia. Se um dia o custo de runtime apertar, a Gupy da
+> variante BH é a primeira coisa a cair, não o termo.
 
 
 Pedido do operador: dois recortes por termo de busca — **fora de Belo Horizonte só remoto; em BH
