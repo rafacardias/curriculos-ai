@@ -742,6 +742,68 @@ mudança real e grande no canal. O efeito real da retargetagem de query existe e
 (+2,3 a +4,9pp), só muito menor do que parecia — e a neutralização do `preference` (BUG-007) teve
 um efeito real, pequeno e NEGATIVO, não positivo como a suspeita inicial de "peso" sugeria.
 
+### ACHADO-17 · inbox-watch: taxa de match 4,3% (1/23) — abaixo do critério de ~60%, feature volta pro backlog
+
+**Medido em 2026-08-11** (`scripts/measure-inbox-match.ts`, read-only, `runMatchCascade` de
+`src/core/inbox-match.ts` — só os 2 estágios prontos do plano, thread_id e from_domain). Parada
+dura de `docs/roadmap.md` → Onda 3: **abaixo de ~60% a feature volta pro backlog em vez de ganhar
+o Estágio 3.** Este é o achado que fecha essa decisão.
+
+**Pré-requisito descoberto no meio do caminho**: `companies.domain` existe no schema desde
+`001_init.sql` mas nunca foi escrito por nenhum caminho de código — 0 de 518 empresas tinham
+domínio antes desta sessão. Sem isso o Estágio 2 mediria zero por falta de dado, não por teto
+real — mesma classe de contaminação do `ACHADO-16`. Backfilled via WebSearch só para as 23
+empresas com candidatura real (`scripts/backfill-company-domains.ts`, dry-run por padrão): 21/23
+resolvidas, 2 descartadas (`ADMINISTRADOR DE REDES`, `E` — nomes que são ruído de extração
+CLASSE-01, não empresa de verdade).
+
+**Corpus**: 23 candidaturas reais, 1434 e-mails ingeridos via Gmail (`gmail.readonly`, backfill
+desde a candidatura mais antiga, 2026-07-13). A query de backfill é só `after:<data>`, sem filtro
+de conteúdo — varre a caixa de entrada inteira do período (pessoal, newsletter, etc.), não só
+e-mail de candidatura; é assim que 201 (estimativa inicial da Gmail API) virou 1434 reais.
+
+**Resultado**:
+
+| Estágio | matches | taxa |
+|---|---:|---:|
+| 1 (thread_id) sozinho | 0/23 | 0% |
+| 2 (from_domain) | 1/23 | 4,3% |
+| 1+2 combinado | 1/23 | **4,3%** |
+
+O único match (`Coinbase`, `no-reply@coinbase.com`, "Thank you for applying to Coinbase") é
+inequívoco — zero falso positivo na amostra (que é a amostra inteira, só 1 mensagem casada).
+Estágio 1 não contribuiu nada além do que o Estágio 2 já achou: sem seed manual pré-existente,
+thread_id só herda de um match anterior no mesmo thread — é o "frio na primeira vez" que o
+`docs/roadmap.md` já previa, confirmado na prática.
+
+**Causa dominante, não é falha da cascata — é a idade das candidaturas**: 22 das 23 candidaturas
+foram criadas entre 2026-08-06 e 2026-08-10, **1 a 5 dias antes da medição**. Só 1 (`Stefanini
+Group`, 2026-07-13) teve ~1 mês de janela pra receber resposta, e mesmo essa não casou (nenhum
+e-mail de `stefanini.com` chegou na janela). Prazo de resposta de RH tipicamente passa de 1
+semana — a leitura mais honesta é "ainda não deu tempo de responder", não "a cascata não
+funciona". Verificado, não suposto: `SELECT date(created_at) FROM applications` mostra o
+agrupamento em 5 dias.
+
+**Segunda causa, estrutural**: dos e-mails que chegaram, só 120/1434 vêm de domínio de ATS
+conhecido (`gupy`/`greenhouse`/`lever`/`workday`/`solides`/`linkedin`), e destes **110 são
+notificações genéricas do LinkedIn** (recomendação de vaga, atividade de feed, "fulano reagiu à
+sua publicação") — não correspondência específica de uma candidatura. `gupy.com.br`/
+`inbound.gupy.com.br` somam só 5 mensagens no total, apesar de a Gupy ser a fonte de 409/635
+vagas do acervo (`gupy` + `gupy-watch`). Nenhuma delas bateu o domínio de nenhuma empresa — Gupy
+notifica pelo domínio do ATS, não da empresa, então mesmo que essas 5 fossem sobre uma
+candidatura real, o Estágio 2 (que só compara contra o domínio DA EMPRESA) não teria como casar.
+Não é o "risco principal" que o plano antecipava (ATS mandando por domínio genérico causando
+FALSO positivo) — é o oposto, ATS genérico causando FALSO NEGATIVO. Registrado, não perseguido:
+seria a base de um Estágio 3 por remetente de ATS conhecido, que a regra desta sessão proíbe
+construir.
+
+**Decisão, aplicada sem negociar (critério do `docs/roadmap.md`)**: `inbox-watch` volta pro
+backlog. Estágio 3 **não construído**. Se alguém reabrir isto, a pergunta certa não é "constrói o
+Estágio 3" — é "remedir daqui a 3-4 semanas, quando as 22 candidaturas de agosto tiverem tido
+tempo real de receber resposta" (`scripts/measure-inbox-match.ts` já existe pra isso, não precisa
+reescrever). O comando `inbox ingest` (Bloco B, read-only) e o schema seguem no `main`, testados
+— só o encadeamento de decisão que dependia da medição é que para aqui.
+
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
 Barreira de entrada por trilha, sobre as 375 vagas (2026-08-06):
