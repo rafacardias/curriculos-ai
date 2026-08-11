@@ -83,6 +83,13 @@ BUG-007: inferir um peso de pouquíssimo sinal. A decisão vem **depois** do BUG
 `nao_elegivel` e localização forem motivos distintos e contáveis. Aí o peso é medível, não
 chutado.
 
+**Nota, registro não autorização:** com a variante de busca por BH (item novo abaixo, dependente
+do item 4) entrando, vaga presencial local passa a chegar na fila — hoje isso praticamente não
+acontece, porque o acervo é majoritariamente remoto/fora de BH. Isso torna a pergunta acima
+**mensurável**: vai existir vaga de BH na fila pra comparar contra as rejeições por localização (2
+de 15 na amostra rotulada à mão). O peso continua intocado; a decisão continua vindo depois do
+BUG-007. Isto só registra que a pré-condição de medir ("ter vaga de BH na fila") deixa de faltar.
+
 ## 3. Configuração de busca para a trilha `ai-builder`
 
 **A dor medida que resta.** Na fila calibrada, 30 das 40 vagas são de `product` e **5 são de
@@ -111,6 +118,20 @@ em 5 noções de "remoto".
 
 Congelado em `tests/unit/adapters-remote-only.test.ts`, que assere que ligar e desligar
 `remoteOnly` produz a mesma URL e o mesmo conjunto de vagas.
+
+**Matriz medida ao vivo em 2026-08-11** (`KNOWN-BUGS.md` → ACHADO-18), a mesma investigação que o
+ACHADO-08 original chamava de "escopo maior que o pedido" — deixou de ser escopo desconhecido:
+
+| fonte | resolve `location` no servidor | resolve `remote_only` no servidor |
+|---|---|---|
+| gupy | sim — `&city=<nome da cidade>` | sim — `&workplaceType=remote` |
+| linkedin-guest | sim — `location=` (já usado hoje) | não — `f_WT` é ignorado pela fonte |
+| remotive / remoteok / wwr | não | não se aplica — board 100% remoto por construção |
+
+Consequência direta pra `AdapterCapabilities`: Gupy declara os dois filtros como server-side;
+LinkedIn declara só `location`; os três boards remotos não declaram nenhum (não precisam —
+`applyClientSideFilters` não tem o que filtrar num board já 100% remoto). O trabalho de
+implementação passa de "investigar 5 APIs" para "codificar 3 respostas já conhecidas".
 
 ## 5. Item 1.4 — alerta de fonte morta
 
@@ -145,6 +166,27 @@ real e sessão logada.
 
 537 linhas com 5 `as any` na fronteira DB→UI. A extração mínima de `ws-auth.ts` (Onda 0.8) foi
 deliberadamente cirúrgica e **não** é este refactor.
+
+## 11. Variantes de busca por geografia/modalidade
+
+Pedido do operador: dois recortes por termo de busca — **fora de Belo Horizonte só remoto; em BH
+presencial, híbrido e remoto**. Hoje `config.yaml → searches[]` só tem uma entrada por termo, sem
+esse split.
+
+**DEPENDENTE do item 4 (`AdapterCapabilities`).** `remote_only` é lido por 0 de 5 adapters e
+`location` só pelo `linkedin-guest` (ACHADO-08) — então, hoje, duas entradas de config com
+recortes diferentes (uma "fora de BH, remoto"; outra "BH, qualquer modalidade") devolveriam
+exatamente o mesmo conjunto bruto de cada fonte, e a dedup por `jobFingerprint` absorveria a
+duplicata em silêncio, sem erro visível. Construir a variante antes do item 4 é construir uma UI
+que não filtra nada — o mesmo buraco que o ACHADO-08 já documentou, só que com uma segunda config
+apontando pra ele.
+
+**O que esta feature não é**: o filtro "BH aceita qualquer modalidade, fora de BH não" **já
+existe** na camada pós-coleta — `blocksGeneration` em `src/core/modality.ts:107-128` e
+`exclude_onsite_outside_home_uf` em `src/core/scoring.ts:244`, com `config/locality.yaml → base` =
+Belo Horizonte/MG. Essa camada já decide, para uma vaga que chegou ao acervo, se ela pode virar
+kit. O que as variantes de busca compram é **recall** — fazer a vaga presencial de BH *chegar* ao
+acervo antes de qualquer filtro pós-coleta rodar —, não um filtro novo.
 
 ---
 
@@ -187,47 +229,97 @@ tem um efeito colateral que é o argumento mais forte a favor: e-mail de respost
 sinal negativo natural, e rejeição é exatamente o lado que falta na amostra 11:1 do BUG-007.
 `inbox-watch` não fecha o BUG-007, mas pode alimentá-lo.
 
+**Status, 2026-08-11: Fase A construída e medida — feature parada e devolvida ao backlog por
+critério, não por hipótese.** A taxa de match dos dois estágios prontos ficou em 4,3% (1/23),
+abaixo do critério de ~60% definido abaixo. Estágio 3 **não construído** — exatamente como a
+"parada dura" desta seção previa que aconteceria se o número não desse. Detalhe da medição:
+`KNOWN-BUGS.md` → ACHADO-17. O resto desta seção documenta o que foi construído, o que a medição
+achou, e o que continua sendo plano (Fases B/C, nunca alcançadas).
+
 **Achado de arquitetura, registrado antes de codar**: Gmail é canal de SINAL sobre `applications`
 já existentes, não fonte de vaga nova. Não herda `AdapterCapabilities` (item 4 desta lista) — a
 regra "nenhum adapter novo" das sessões de medição não se aplica aqui, é categoria diferente.
 
-**Fases**: A detectar+notificar · B casar e-mail↔card · C rascunho de resposta.
+**Fases**: A detectar+notificar (**construída e medida**) · B casar e-mail↔card (não construída) ·
+C rascunho de resposta (não construída).
 
-**Migration aditiva, `008_inbox.sql`** (escrever quando a Fase A começar, não antes): tabela
+**Migration aditiva, `009_inbox.sql`** — não `008` como esta seção previa originalmente: o `008`
+acabou sendo `008_answer_bank_dedup.sql`, de outro trabalho que entrou primeiro. Tabelas
 `inbox_messages` (`gmail_message_id` único, `gmail_thread_id`, remetente/domínio, classificação,
-`application_id` nullable — `NULL` = não casado) + `inbox_state` (chave/valor, guarda o
-`historyId` do Gmail pra poll incremental idempotente). **Zero coluna nova em `applications`** —
-transição de card escrita pelo mesmo caminho que a UI já usa (`doStatus`/`doFeedback` em
-`server/index.ts`), não um caminho paralelo.
+`application_id` nullable — `NULL` = não casado) e `inbox_state` (chave/valor, guarda o
+`historyId` do Gmail pra poll incremental idempotente) criadas exatamente como planejado. **Zero
+coluna nova em `applications`** — transição de card, quando a Fase B existir, escreve pelo mesmo
+caminho que a UI já usa (`doStatus`/`doFeedback` em `server/index.ts`), não um caminho paralelo;
+isso ainda não foi exercido porque a transição automática (Fase B) não foi construída.
 
-**Transporte**: `gmail-watch.ts` + launchd, `history.list` com poll (mesmo padrão de `/agendar`).
-Pub/Sub descartado — exige endpoint público, não faz sentido numa ferramenta local. `historyId`
-expirado (>7 dias parado) força resync completo.
+**Adapter Gmail construído**: `src/adapters/gmail.ts`, REST puro, escopo OAuth
+`gmail.readonly`. Comandos do operador em `src/cli/inbox.ts` — `inbox auth` (autorização OAuth,
+uma vez, salva refresh token) e `inbox ingest [--commit]` (busca e-mails; sem `--commit` é
+dry-run, não grava). O poll incremental por `historyId` vive em `src/core/inbox-ingest.ts`, não
+num arquivo `gmail-watch.ts` separado como o plano original nomeava — mesma lógica, outro nome de
+arquivo. **Não wireado a `launchd`** ainda: hoje `inbox ingest` roda por invocação manual do
+operador, não em background como `/agendar`. Pub/Sub segue descartado — exige endpoint público,
+não faz sentido numa ferramenta local. `historyId` expirado (>7 dias parado) força resync
+completo — comportamento implementado, não só planejado.
 
-**Casamento e-mail↔card, cascata — só 2 dos 3 estágios existem hoje**:
+**Casamento e-mail↔card, cascata pura em `src/core/inbox-match.ts` — só 2 dos 3 estágios existem
+hoje**:
 
-1. `gmail_thread_id` já visto → herda `application_id` (determinístico). **Pronto** — nenhuma
-   construção nova, só leitura de thread já casada antes.
-2. `from_domain` contra o domínio da empresa da `application`. **Pronto** — dado já existe em
-   `applications`/`companies`, é comparação direta.
+1. `gmail_thread_id` já visto → herda `application_id` (determinístico). **Construído e medido** —
+   nenhuma construção nova, só leitura de thread já casada antes. Na medição, contribuiu 0 além do
+   que o Estágio 2 já achou — sem seed manual pré-existente, thread só herda de um match anterior
+   no mesmo thread, exatamente o "frio na primeira vez" que esta seção já previa.
+2. `from_domain` contra o domínio da empresa da `application`. **Construído e medido** — dado já
+   existe em `applications`/`companies`, é comparação direta.
 3. Remetente de ATS conhecido (gupy.io/greenhouse.io/myworkday.com/lever.co) sem match nos dois
    primeiros → extrair empresa/título do corpo e casar por similaridade. **NÃO existe** — dependia
    do estágio trigram/Jaccard do item 6 desta lista, que também não foi construído. É
    pré-requisito real a construir, não reuso de algo pronto.
 
 Sem match em nenhum estágio: `application_id` fica `NULL`, aba "Inbox não casado", operador liga
-em um clique (`match_method='manual'`, vira dado de avaliação da própria heurística).
+em um clique (`match_method='manual'`, vira dado de avaliação da própria heurística). Essa aba
+ainda não foi construída — é Fase B/UI, não alcançada.
 
-**Parada dura da Fase A, medida só com os estágios 1+2**: taxa de match e-mail↔candidatura nas
-aplicações reais, usando thread+domínio, ANTES de decidir se o estágio 3 (similaridade) precisa
-ser construído. Se thread+domínio já derem taxa aceitável sozinhos, o estágio 3 pode nunca ser
-necessário — **esse é o melhor resultado possível, não um atalho**: significa menos código pra
-manter, não medição incompleta.
+**Parada dura da Fase A, medida só com os estágios 1+2 — executada em 2026-08-11**: taxa de match
+e-mail↔candidatura nas aplicações reais, usando thread+domínio, ANTES de decidir se o estágio 3
+(similaridade) precisa ser construído. Corpus: 23 candidaturas reais e 1434 e-mails ingeridos
+(desde 2026-07-13). **Pré-requisito descoberto no meio do caminho**: `companies.domain` nunca
+tinha sido escrito por nenhum caminho de código — 0 de 518 empresas tinham domínio antes desta
+sessão. Sem backfill, o Estágio 2 mediria zero por falta de dado, não por teto real da heurística
+— mesma classe de contaminação do ACHADO-16. Backfill manual via WebSearch, só das 23 empresas com
+candidatura real (`scripts/backfill-company-domains.ts`).
+
+**Resultado: 1/23 = 4,3%, contra o critério de ~60%.** Estágio 1 sozinho: 0/23. Estágio 2: 1/23
+(`Coinbase`, `no-reply@coinbase.com` — inequívoco, zero falso positivo na amostra). Combinado:
+4,3%. **O que a medição significa não é "thread+domínio deu certo sozinho"** — o resultado é pior
+que isso, não melhor: nem thread nem domínio bastaram, e a causa dominante não é falha da cascata.
+
+**Achado estrutural, o mais importante para quem reabrir isto**: o ATS (Gupy, LinkedIn) notifica
+**pelo domínio do próprio ATS, não pelo domínio da empresa**. O Estágio 2 compara `from_domain`
+contra o domínio da empresa e é cego a isso. Isto é **o oposto do risco que esta seção temia
+originalmente** — o texto abaixo ("riscos registrados") antecipava falso positivo por domínio
+compartilhado; o que a medição achou foi falso negativo por domínio nunca usado pelo Estágio 2 (e
+por isso nunca chegando a comparar nada).
+
+**Ressalva honesta**: 22 das 23 candidaturas tinham entre 1 e 5 dias de existência no momento da
+medição — o prazo de resposta de RH em boa parte nem tinha passado ainda. Isso não invalida o
+número (o critério é objetivo e foi aplicado como estava escrito), mas é a razão concreta para
+remedir, não para desconfiar do método.
+
+**Remedição**: em 3–4 semanas, quando as candidaturas de agosto tiverem tido tempo real de
+receber resposta, rodar `scripts/measure-inbox-match.ts` — já existe, não precisa ser reescrito.
 
 **Critério de abandono, não só de prosseguir**: se a taxa de match com os dois estágios prontos
 ficar abaixo de ~60% nas aplicações reais, `inbox-watch` **volta pro backlog** em vez de ganhar o
 estágio 3. Construir similaridade de título pra salvar um casamento ruim custa mais do que casar
 manualmente um punhado de cards à mão — a feature não se justifica só porque foi começada.
+**Aplicado sem negociar em 2026-08-11**: 4,3% < 60%, decisão tomada, Estágio 3 não construído —
+por critério medido, não por hipótese. O plano original previa que, **se** thread+domínio dessem
+taxa aceitável sozinhos, o estágio 3 talvez nunca fosse necessário — o melhor resultado possível,
+menos código pra manter. **O que aconteceu foi diferente e pior**: thread+domínio não deram taxa
+aceitável, e mesmo assim o estágio 3 não nasce — porque o critério de abandono, escrito antes de
+qualquer medição, manda a feature inteira pro backlog nesse cenário. A decisão veio do número, não
+de uma leitura otimista dele.
 
 **Cuidado de medição, direto do ACHADO-16**: `rescore --commit` contaminou `jobs.status` porque a
 medição comparou contra um estado que já tinha sido reescrito depois do fato. A viabilidade de
@@ -262,13 +354,19 @@ estrutural (permissão da API), não só de código — mesmo espírito de `link
 **Notificação**: `osascript "display notification"`, mesmo padrão de `search.ts --auto`, + badge
 em `/status`.
 
-**Sequência combinada com a parada dura**: (1) medir viabilidade de match nas aplicações reais,
-read-only — decide se os passos seguintes acontecem; (2) OAuth + `gmail-watch` só populando
-`inbox_messages`, `applied_transition=0` sempre; (3) classificador léxico + testes de tabela; (4)
-UI — aba não casados + notificação; (5) transição automática atrás de flag; (6) rascunho de
-resposta, por último, `gmail.compose`.
+**Sequência combinada com a parada dura — status real, 2026-08-11**: (1) OAuth + ingest populando
+`inbox_messages` read-only, `applied_transition=0` sempre — **feito**; medir viabilidade de match
+nas aplicações reais — **feito, resultado 4,3%** (ACHADO-17); passos seguintes decidem se
+acontecem a partir desse número — **decidido: não acontecem agora.** (2) classificador léxico +
+testes de tabela — não iniciado; (3) UI — aba não casados + notificação — não iniciado; (4)
+transição automática atrás de flag — não iniciado; (5) rascunho de resposta, `gmail.compose` — não
+iniciado. `inbox-watch` volta pro backlog com só o passo (1) construído; os passos (2)–(5) ficam
+exatamente onde esta seção já os planejava, esperando remedição.
 
 **Riscos registrados**: token OAuth em disco (mesma classe de segredo que `answer_bank` — nunca
-commitar); rate limit do Gmail; `historyId` expirado força resync; e-mail de candidato/thread só
-resolve match depois do primeiro casamento manual (frio na primeira vez); falso positivo de
-`rejected` apagaria card ativo se a regressão não estivesse bloqueada por padrão.
+commitar) — **materializado**: a Fase A construída de fato guarda o refresh token em
+`.env.local`, gitignored, mesmo tratamento; rate limit do Gmail; `historyId` expirado força
+resync — implementado, não só previsto; e-mail de candidato/thread só resolve match depois do
+primeiro casamento manual (frio na primeira vez) — confirmado na medição, Estágio 1 contribuiu
+zero; falso positivo de `rejected` apagaria card ativo se a regressão não estivesse bloqueada por
+padrão — ainda hipotético, classificador não foi construído.
