@@ -62,8 +62,10 @@ async function runAuth(): Promise<void> {
 2. Ative a Gmail API: https://console.cloud.google.com/apis/library/gmail.googleapis.com
 3. Tela de consentimento OAuth: tipo "Externo" está OK pra uso pessoal (seu e-mail como test user).
 4. Credenciais → Criar credenciais → ID do cliente OAuth → tipo "App para Desktop".
-5. Nas URIs de redirecionamento autorizadas, adicione: ${REDIRECT_URI}
-6. Copie o Client ID e o Client Secret para .env.local na raiz do repo:
+   Esse tipo NÃO tem campo de redirect URI pra preencher — só "Aplicativo da Web" tem. O Google
+   libera automaticamente qualquer redirect http://127.0.0.1:<porta> pra apps Desktop (fluxo
+   loopback). Este comando escuta em ${REDIRECT_URI} sem precisar cadastrar nada.
+5. Copie o Client ID e o Client Secret para .env.local na raiz do repo:
 
    GOOGLE_CLIENT_ID=...
    GOOGLE_CLIENT_SECRET=...
