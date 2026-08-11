@@ -40,6 +40,15 @@ export interface JobSourceAdapter {
 export interface AdapterResult {
   jobs: RawJob[];
   errors: string[];
+  /**
+   * Critério que a fonte recebeu e NÃO aplicou, dito em voz alta.
+   *
+   * Separado de `errors` de propósito: pedir um recorte que a fonte não sabe
+   * fazer não é falha da fonte, e cair em `errors` marcaria o adapter como
+   * quebrado no alerta de fonte morta. O pipeline junta isto ao `ignored` do
+   * filtro cliente em `search_runs.per_source`.
+   */
+  ignored?: string[];
 }
 
 export async function fetchJson(url: string, init?: RequestInit, timeoutMs = 15000): Promise<unknown> {

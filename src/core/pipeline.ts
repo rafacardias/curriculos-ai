@@ -67,12 +67,21 @@ export async function runSearch(
     })
   );
 
-  for (const { adapterId, caps, jobs, errors } of results) {
+  for (const { adapterId, caps, jobs, errors, ignored: fromAdapter } of results) {
     // "pass": descartar vaga sem modalidade declarada seria o filtro inventando
     // um fato ("é presencial") a partir de ausência de dado — a mesma classe de
     // erro do BUG-007.
     const { kept, ignored } = applyClientSideFilters(jobs, params, caps, { unknownRemoteType: "pass" });
-    const stats: SourceStats = { found: jobs.length, new: 0, errors, ignored };
+    const stats: SourceStats = {
+      found: jobs.length,
+      new: 0,
+      errors,
+      // Duas origens, um campo: o que a FONTE recebeu e não aplicou (ex.: a Gupy
+      // só recorta por cidade e veio um país) e o que o filtro cliente não
+      // aplicou. Para quem lê `per_source`, os dois são a mesma pergunta —
+      // "o que eu pedi e não aconteceu?".
+      ignored: [...(fromAdapter ?? []), ...ignored],
+    };
     for (const raw of kept) {
       try {
         const inserted = insertJob(raw);
