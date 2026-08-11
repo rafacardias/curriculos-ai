@@ -1095,15 +1095,16 @@ registrada, mas sem sangramento ativo hoje.
    inserida primeiro — mesma classe de prova do BUG-010: cenário construído pra expor a
    dependência de ordem, não hipotético) e passa com ele, nas duas ordens de inserção.
 
-   **`UNIQUE` NÃO adicionado — parado e registrado, não executado**: exige migration (mudança de
-   schema, fora do "sem migration se der pra evitar"), e tem uma decisão de verdade embutida:
-   SQLite **não** trata duas linhas com `track_id IS NULL AND company_id IS NULL` como colisão
-   num índice único simples — `NULL` nunca é igual a `NULL` para fins de `UNIQUE`. A constraint
-   certa provavelmente precisa de índices únicos parciais separados por combinação de
-   NULL/não-NULL (o mesmo padrão que a migration 007 já usou para `source_job_id`), não um
-   `UNIQUE (question_fingerprint, language, track_id, company_id)` ingênuo — que pareceria
-   corrigir o problema e não corrigiria as respostas mais comuns (sem trilha, sem empresa).
-   Decisão de schema explícita, para quando alguém quiser resolver de propósito.
+   **`UNIQUE` adicionado (2026-08-11)**: `008_answer_bank_dedup.sql` — 4 índices únicos parciais,
+   um por combinação de NULL/não-NULL de `track_id`/`company_id` (mesmo padrão que a migration 007
+   usou para `source_job_id`), porque SQLite não trata `NULL IS NULL` como colisão num índice
+   único simples e um `UNIQUE (question_fingerprint, language, track_id, company_id)` ingênuo não
+   pegaria as respostas mais comuns (sem trilha, sem empresa). Banco de produção verificado antes
+   da migration: `answer_bank` tinha 0 linhas — nenhuma duplicata pré-existente para lidar.
+   `tests/unit/answer-bank-dedup.test.ts` prova as 4 combinações rejeitando `INSERT` duplicado
+   direto no banco (não só via `answers add`) e prova que linhas distintas sobrevivem à migration.
+   `tests/e2e/answers-dedup-order.test.ts` reescrito: o cenário de duas linhas duplicadas
+   pré-existentes que ele simulava passou a ser irrealizável a nível de schema.
 2. **`src/db/repo/feedback.ts:39`** (`preferenceKeysFor`) — `SELECT keywords FROM profile_tracks`
    (sem `ORDER BY`, e nem filtra `enabled`) alimenta `termsPresent(...).slice(0, 8)`: QUAIS
    keywords viram chave `kw:*` em `preference_weights` depende da ordem das trilhas na consulta.
