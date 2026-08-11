@@ -77,6 +77,7 @@ for (const spec of specs) {
   for (const [source, stats] of Object.entries(result.perSource)) {
     const err = stats.errors.length ? `  ⚠ ${stats.errors.join("; ")}` : "";
     console.log(`  ${source}: ${stats.found} encontradas, ${stats.new} novas${err}`);
+    for (const ig of stats.ignored) console.log(`    ↳ ${ig}`);
   }
   const scored = scoreNewJobs(config, result.newJobIds);
   const queued = scored.filter((s) => s.status === "queued");
