@@ -5,7 +5,15 @@
  *
  * READ-ONLY, GARANTIDO. Nenhum INSERT/UPDATE/DELETE neste arquivo, nenhuma chamada
  * com `commit: true`. `rescoreAll(config, { commit: false })` (`src/core/scoring.ts:301`)
- * planeja e não escreve; `scoreJob` (`src/core/scoring.ts:69`) é puro.
+ * planeja e não escreve.
+ *
+ * Precisão sobre `scoreJob` (`src/core/scoring.ts:71`): ela **não é pura no sentido
+ * estrito** — lê `profile_tracks` e `preference_weights` por dentro, via `getDb()`
+ * (`scoring.ts:90` e `:168`). "Pura" no vocabulário deste repo quer dizer "não
+ * contamina o estado ao rodar", e é só isso que se garante aqui. Consequência
+ * prática para quem lê este relatório: o número depende do léxico de trilha e dos
+ * pesos de preferência **como estão no banco no momento da execução** — dois
+ * relatórios de datas diferentes não são comparáveis se o léxico mudou no meio.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * A REGRA QUE É O PONTO INTEIRO DESTE SCRIPT
