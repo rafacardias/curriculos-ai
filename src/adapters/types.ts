@@ -8,12 +8,32 @@ export interface SearchParams {
 }
 
 /**
+ * O que a fonte resolve SOZINHA, no servidor dela.
+ *
+ * A declaração é o contrato: o que estiver `false` aqui é o que o filtro cliente
+ * (`src/core/search-filters.ts`) precisa tratar — ou assumir explicitamente que
+ * não trata. Não existe "adapter que ignora em silêncio": ou a capability é
+ * verdadeira e a URL muda, ou é falsa e alguém acima decide o que fazer.
+ */
+export interface AdapterCapabilities {
+  /** A fonte resolve `location` no servidor. */
+  location: boolean;
+  /** A fonte resolve `remoteOnly` no servidor. */
+  remoteOnly: boolean;
+  /** Todo resultado é remoto por construção — `remoteOnly` é no-op, não lacuna. */
+  allRemote: boolean;
+}
+
+/**
  * Contrato de toda fonte de vagas. Implementações devem:
  * - nunca lançar exceção para fora (retornar erros no resultado);
- * - respeitar timeout próprio (o pipeline também impõe um global).
+ * - respeitar timeout próprio (o pipeline também impõe um global);
+ * - declarar `capabilities` honestamente — é o que o pipeline usa para decidir
+ *   o que ainda precisa ser filtrado no cliente.
  */
 export interface JobSourceAdapter {
   readonly id: string;
+  readonly capabilities: AdapterCapabilities;
   search(params: SearchParams): Promise<AdapterResult>;
 }
 

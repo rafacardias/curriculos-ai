@@ -27,6 +27,9 @@ function parseRssItems(xml: string): Array<Record<string, string>> {
 
 export const wwr: JobSourceAdapter = {
   id: "wwr",
+  // Board 100% remoto (`remoteType: "remote"` fixo). A fonte é um RSS estático:
+  // nada é resolvido no servidor — nem termo, nem localização.
+  capabilities: { location: false, remoteOnly: false, allRemote: true },
   async search({ query, limit = 50 }: SearchParams): Promise<AdapterResult> {
     try {
       const xml = await fetchText("https://weworkremotely.com/remote-jobs.rss");

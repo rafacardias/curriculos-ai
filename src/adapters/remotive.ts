@@ -19,6 +19,10 @@ const Schema = z.object({
 
 export const remotive: JobSourceAdapter = {
   id: "remotive",
+  // Board 100% remoto: `remoteType: "remote"` é fixo no map abaixo, então
+  // `remoteOnly` é no-op — não lacuna. `location` a API não filtra
+  // (`candidate_required_location` é do anúncio, não critério de busca).
+  capabilities: { location: false, remoteOnly: false, allRemote: true },
   async search({ query, limit = 50 }: SearchParams): Promise<AdapterResult> {
     try {
       const data = Schema.parse(

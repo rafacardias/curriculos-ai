@@ -8,6 +8,7 @@ import type { RawJob } from "../../src/core/types.js";
 
 const fake = (id: string, jobs: RawJob[] = [], fail = false): JobSourceAdapter => ({
   id,
+  capabilities: { location: false, remoteOnly: false, allRemote: false },
   async search() {
     if (fail) throw new Error("adapter explodiu");
     return { jobs, errors: [] };

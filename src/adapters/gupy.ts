@@ -36,12 +36,18 @@ export const REMOTE_MAP: Record<string, "remote" | "hybrid" | "onsite"> = {
 
 export const gupy: JobSourceAdapter = {
   id: "gupy",
-  async search({ query, limit = 50 }: SearchParams): Promise<AdapterResult> {
+  // A Gupy resolve os dois no servidor: `city=` e `workplaceType=remote`.
+  // `city` recebe o valor LITERAL da config — a fonte exige nome de cidade
+  // (`state=MG` devolve 0, sigla também), e traduzir isso aqui seria inventar
+  // geografia que o operador não escreveu.
+  capabilities: { location: true, remoteOnly: true, allRemote: false },
+  async search({ query, location, remoteOnly, limit = 50 }: SearchParams): Promise<AdapterResult> {
     try {
+      const params = [`jobName=${encodeURIComponent(query)}`, `limit=${limit}`, "offset=0"];
+      if (location) params.push(`city=${encodeURIComponent(location)}`);
+      if (remoteOnly) params.push("workplaceType=remote");
       const data = Schema.parse(
-        await fetchJson(
-          `https://employability-portal.gupy.io/api/v1/jobs?jobName=${encodeURIComponent(query)}&limit=${limit}&offset=0`
-        )
+        await fetchJson(`https://employability-portal.gupy.io/api/v1/jobs?${params.join("&")}`)
       );
       return {
         jobs: data.data
