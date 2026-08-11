@@ -12,73 +12,62 @@
 > **Teto de ~100 linhas, regra dura.** Se crescer, corte primeiro "O que mudou" pras 2-3 sessões
 > mais recentes antes de encurtar qualquer outra seção. Pointer, nunca conteúdo copiado.
 
-## Resumo da sessão de 2026-08-10
+## Resumo da sessão de 2026-08-11
 
-Duas rodadas no mesmo dia, parada dura em cada item, `main` verde e pushado a cada um.
+Três itens, parada dura em cada, `main` verde e pushado a cada um.
 
-**Rodada 1** — arquitetura da vigilância vs. busca:
-1. **Teto de "inserir tudo" medido**: das 1602 vagas que o filtro léxico da vigilância descarta,
-   **zero** cruzariam `queue_threshold=40` (melhor 27,5). **Não implementar.**
-2. **Mercado vs. calibragem, resolvido por contraste de `score_detail`**: mesmo `scoreJob`, mesmo
-   threshold — vaga da busca geral com overlap real pontua 80–93; vigilância GPTW/BH nunca passa
-   de 31,8. Veredito: **mercado**. Busca geral = canal primário; vigilância = secundária/saturada;
-   **Fase B (Solides/Greenhouse) fechada até nova ordem**. `KNOWN-BUGS.md` → `ACHADO-11`.
-3. **`feedback.ts:39` corrigido** — mesma classe `ORDER BY` do BUG-010/`answers.ts` + filtro
-   `enabled` ausente. Fecha a classe inteira.
-4. **Busca geral instrumentada** (65 rodadas históricas): 789 pontuadas, 7,1% cruzam o corte.
+1. **`KNOWN-BUGS.md` BUG-007 corrigido**: a tabela dizia `source:*` "não feito"; o código já
+   exclui (escrita `preferenceKeysFor` e leitura `isLearnedKey`) desde 2026-08-07. 3 dos 4 itens
+   do escopo original estão feitos.
+2. **`UNIQUE` no `answer_bank`**: migration `008_answer_bank_dedup.sql`, 4 índices únicos parciais
+   (NULL não colide em índice único simples do SQLite — mesmo padrão da migration 007). Banco real
+   tinha 0 linhas em `answer_bank`, sem duplicata a reconciliar.
+3. **`inbox-watch` (Blocos B+C, `docs/roadmap.md` → Onda 3)**: schema `009_inbox.sql`, adapter
+   Gmail REST puro (`gmail.readonly`), comandos `inbox auth`/`inbox ingest [--commit]`. Achado no
+   meio do caminho: `companies.domain` nunca tinha sido escrito (0/518) — backfill manual via
+   WebSearch só das 23 empresas com candidatura real, antes de medir (senão o Estágio 2 mediria
+   zero por falta de dado). **Medição real: 1434 e-mails, 1/23 candidaturas casadas (4,3%) —
+   abaixo do critério de ~60%.** `KNOWN-BUGS.md` → `ACHADO-17`. Causa provável: 22/23 candidaturas
+   têm 1–5 dias, prazo de resposta de RH ainda não passou pra maioria — não é falha comprovada da
+   cascata, mas o critério é objetivo. **Feature volta pro backlog, Estágio 3 não construído.**
 
-**Rodada 2** — explicar/corrigir, sem tocar peso/threshold/léxico:
-5. **`ACHADO-16` corrige o `ACHADO-15`**: o "2,8%→21,5%, instável" da rodada 1 era artefato —
-   coluna `status` contaminada por `rescore --commit` (rodou em 3 datas) + corte de rodada caindo
-   em cima de uma troca de config no mesmo dia. Recalculado via `scoreJob()` puro (ignora `status`
-   armazenado): taxa real ≈ 11%→12%, praticamente plana.
-6. **`docs/roadmap.md` #1 (BUG-007) atualizado — e autocorrigido no mesmo dia.** Primeiro achei
-   (errado) que a UI trata `reason_class` como opcional; era legado pré-fix (commit `f9378e6`,
-   2026-08-07). Desde o fix, captura é 100%. Bloqueador real: volume/tempo de decisão (16 de
-   `ai-builder` pós-fix, desbalanceado 11 positivas : 1 negativa), não captura.
-7. **Custo de fechar BUG-007, medido (plano, não execução)**: 3 dos 4 itens do escopo original já
-   estão implementados — a tabela de status do BUG-007 em `KNOWN-BUGS.md` (linha ~124) está
-   desatualizada nesse ponto, não corrigida ainda. Falta é tempo, não código.
+Suíte 444/444.
 
-Suíte 411/411. Regras respeitadas: nenhum adapter novo, léxico/`ACHADO-13-14` intocados, nenhum
-kit gerado, nenhuma migration, nenhum peso/threshold/query mudado.
+## Estado agora (atualizado em 2026-08-11)
 
-## Estado agora (atualizado em 2026-08-10)
-
-- **`main`**: tudo acima mesclado e pushado. Suíte 411/411, typecheck limpo.
-- **`config/companies.yaml`**: 17 empresas (fechado — ver item 2 acima, Fase B parada).
-- **Perfil real**: ingerido (`profile/master-profile.yaml` existe, `/perfil` já rodou).
+- **`main`**: tudo acima mesclado e pushado. Suíte 444/444, typecheck limpo.
+- **`inbox-watch`**: schema + ingestão read-only ficam prontos e testados no `main`
+  (`npx tsx src/cli/inbox.ts ingest --commit`) — só a decisão de ir pro Estágio 3 está fechada.
+- **`.env.local`** (gitignored) tem credenciais reais do operador: `GOOGLE_CLIENT_ID`,
+  `GOOGLE_CLIENT_SECRET` (OAuth client "Automacao Curriculos", projeto
+  `automacao-curriculos-505219`, tipo Desktop) e `GMAIL_REFRESH_TOKEN`, escopo `gmail.readonly`.
 
 ## O que mudou (mais recente primeiro — sessões anteriores a esta no `git log`)
 
-1. Sessão de hoje (acima, 2 rodadas): teto de "inserir tudo", veredito mercado-vs-calibragem, fix
-   de `feedback.ts`, instrumentação e correção da busca geral (`ACHADO-15`/`16`), diagnóstico e
-   custo de fechar BUG-007.
-2. Madrugada autônoma (2026-08-09→10): cadastro de 17 empresas GPTW/BH, `company-watch-
-   registry.ts` (checker doc↔YAML), `answers.ts` `ORDER BY`, `watch run --commit` real.
-3. **BUG-010 completo** — `scoreJob` desempatava trilha por ordem não-garantida do SQLite. Fix:
-   `ORDER BY id ASC` + desempate por especificidade. `ACHADO-13`/`ACHADO-14`: sobre-captura e
-   falso-positivo de termo longo genérico, medidos, stakes baixos, não perseguidos.
-4. Vigilância por empresa (Fase A) — scrape `__NEXT_DATA__` da Gupy; queue-improvements; harness
+1. Sessão de hoje (acima): correção da tabela BUG-007, `UNIQUE` no `answer_bank`, `inbox-watch`
+   Bloco B (ingestão) + Bloco C (medição, `ACHADO-17`, feature volta pro backlog).
+2. Sessão de 2026-08-10 (2 rodadas): teto de "inserir tudo" (vigilância vs. busca geral,
+   `ACHADO-11`), veredito mercado-vs-calibragem, fix de `feedback.ts` `ORDER BY`, diagnóstico e
+   autocorreção do BUG-007 no mesmo dia, `ACHADO-15`/`16` (taxa da busca geral).
+3. Madrugada autônoma (2026-08-09→10): cadastro de 17 empresas GPTW/BH, `company-watch-
+   registry.ts`, `answers.ts` `ORDER BY`, `watch run --commit` real.
+4. **BUG-010 completo** — `scoreJob` desempatava trilha por ordem não-garantida do SQLite.
+5. Vigilância por empresa (Fase A) — scrape `__NEXT_DATA__` da Gupy; queue-improvements; harness
    HTTP in-process.
 
 ## Próximos passos
 
-1. **BUG-007** (`docs/roadmap.md` #1, bloqueador): captura de motivo na UI já funciona (100% desde
+1. `inbox-watch`: remedir daqui a 3–4 semanas, quando as candidaturas de agosto tiverem tido tempo
+   real de resposta (`scripts/measure-inbox-match.ts` já existe, não precisa reescrever). Achado
+   estrutural do `ACHADO-17` pra quem reabrir: ATS (Gupy/LinkedIn) notifica pelo domínio do ATS,
+   não da empresa — Estágio 2 é cego a isso, oposto do falso-positivo que o plano original temia.
+2. **BUG-007** (`docs/roadmap.md` #1, bloqueador): captura de motivo na UI já funciona (100% desde
    08-07); falta é volume de decisão real de `ai-builder` com `reason_class`, hoje 16 (desbalanço
    11:1 positivo/negativo, alvo é ~25 mais balanceado). Reativar `preference` é decisão do
    operador — inclui escolher o peso e de onde tirá-lo (`keyword_overlap` está em 0,65 hoje).
-2. `KNOWN-BUGS.md` BUG-007, tabela de status (linha ~124): diz `source:*` "não feito", mas o
-   código já exclui (escrita e leitura) — desatualizada, não corrigida (achado do item 3, plano).
-3. `UNIQUE` na tupla de dedup do `answer_bank` — decisão de schema registrada em `KNOWN-BUGS.md` →
-   `answers.ts:45`, não executada (precisa de índices parciais, padrão da migration 007).
-4. Fase B (Solides/Greenhouse) fechada até nova ordem — reabrir exige critério de busca novo, não
+3. Fase B (Solides/Greenhouse) fechada até nova ordem — reabrir exige critério de busca novo, não
    adapter novo do mesmo tipo de empresa.
-5. Backlog mais antigo, não reordenado por isto: `docs/roadmap.md` itens 2–10.
-6. `inbox-watch` (Gmail → sinal sobre `applications`): brainstorm feito, plano em
-   `docs/roadmap.md` → Onda 3. Parada dura: taxa de match email↔candidatura nas aplicações reais
-   antes de qualquer código de transição. Cuidado ACHADO-16: não medir contra `status`
-   armazenado. Não é adapter — Fase B (Solides/Greenhouse) segue fechada, item separado.
+4. Backlog mais antigo, não reordenado por isto: `docs/roadmap.md` itens 2–10.
 
 ## Onde olhar para mais detalhe
 
