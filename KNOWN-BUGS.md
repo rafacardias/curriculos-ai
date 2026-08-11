@@ -12,7 +12,7 @@ A única exceção é o BUG-003, corrigido já na Onda 0 porque impedia a própr
 | # | Gravidade | Estado | Onde |
 |---|---|---|---|
 | [CLASSE-01](#classe-01--critério-sem-contexto) | — | **Classe de defeito**, não instância. Leia antes de escrever filtro novo | — |
-| [BUG-007](#bug-007) | **Crítica** | **Parcialmente corrigido** (`f9378e6`): taxonomia ativa, componente segue desarmado, `source:*` ainda aprende | `src/core/feedback.ts` + `src/db/repo/feedback.ts` |
+| [BUG-007](#bug-007) | **Crítica** | **Parcialmente corrigido** (`f9378e6`): taxonomia ativa, `source:*` já excluído da escrita/leitura, componente segue desarmado | `src/core/feedback.ts` + `src/db/repo/feedback.ts` |
 | [BUG-005](#bug-005) | **Alta** | **Corrigido** | `src/core/truthcheck.ts:31-50` |
 | [BUG-006](#bug-006) | **Alta** | Medido, sem teste ainda | `src/core/scoring.ts:63` |
 | [BUG-002](#bug-002) | Média | **Mitigado por efeito colateral** (41.5 → 39.5) | `src/core/scoring.ts:50` |
@@ -121,7 +121,7 @@ de ser envenenada.
 |---|---|
 | 1. vocabulário fechado de motivo | ✅ `elegibilidade` · `tema` · `outro` (três, não cinco — as cinco propostas colapsam nessas) |
 | 2. só motivo temático alimenta `preference_weights` | ✅ `src/core/feedback.ts`; classe **ausente não aprende** |
-| 3. `source:*` deixar de ser chave aprendida | ❌ **não feito** — `source:linkedin` ainda é escrito |
+| 3. `source:*` deixar de ser chave aprendida | ✅ feito — `PREFERENCE_KINDS` (`src/core/feedback.ts:38`) exclui `source` tanto da escrita (`preferenceKeysFor`, `src/db/repo/feedback.ts:27`) quanto da leitura (`isLearnedKey` em `scoring.ts:178`); as chaves `source:*` legadas seguem na tabela como registro de época, sem pontuar |
 | 4. migration para a coluna de motivo | ~ a classe vive no payload do evento (`reason_class` + `learned`), auditável, mas não é coluna |
 
 **Extra que a recaída exigiu:** aprovação passou a ser idempotente por `job_id`. Um retry de vaga
