@@ -271,6 +271,12 @@ ver Fase 1 desta sessão). Corrigir `remote_only` para filtrar de verdade exigir
 API de cada fonte individualmente (nem toda API de vaga aceita filtro de modalidade na busca) —
 escopo maior que o que foi pedido. Nada foi alterado.
 
+**Atualização — 2026-08-11**: a suposição acima, de que corrigir exigiria investigação inviável
+("escopo maior que o pedido"), foi testada ao vivo. Não é mais escopo desconhecido: a Gupy
+resolve os dois filtros (`location` e `remote_only`) no servidor; o LinkedIn guest resolve
+`location` mas ignora `f_WT` (o parâmetro de modalidade remota). Ver `ACHADO-18` para a matriz
+completa e o método de medição.
+
 ### ACHADO-09 · `ERR_HTTP_HEADERS_SENT` pré-existente em `main`; nenhum teste sobe o servidor HTTP real
 
 **Medido, não corrigido** — achado do smoke test manual da Fase 1-3 (2026-08-09). Subir
@@ -803,6 +809,49 @@ Estágio 3" — é "remedir daqui a 3-4 semanas, quando as 22 candidaturas de ag
 tempo real de receber resposta" (`scripts/measure-inbox-match.ts` já existe pra isso, não precisa
 reescrever). O comando `inbox ingest` (Bloco B, read-only) e o schema seguem no `main`, testados
 — só o encadeamento de decisão que dependia da medição é que para aqui.
+
+### ACHADO-18 · capabilities de filtro das 5 fontes de busca, medidas contra a API real
+
+**Medido em 2026-08-11**, requisições diretas às APIs de busca — não amostra de acervo, não
+inferência a partir de comportamento observado indiretamente. Query `Analista de Automação` na
+Gupy, `automação` no LinkedIn guest.
+
+**Gupy** (`employability-portal.gupy.io/api/v1/jobs`):
+
+| filtro | resultado |
+|---|---|
+| baseline, sem filtro | 20 vagas espalhadas pelo Brasil |
+| `city=Belo Horizonte` | 3 vagas, todas em BH |
+| `state=Minas Gerais` | 3 vagas |
+| `state=MG` (sigla) | **0 vagas** |
+| `workplaceType=remote` | 5 vagas, todas sem cidade |
+| `isRemoteWork=true` | 6 vagas |
+
+**A sigla de UF não funciona na Gupy — só o nome completo do estado.** Registrado como limitação
+de fonte, não como bug a corrigir: a decisão desta sessão é **não** construir normalização/
+expansão de sigla→nome por causa disso. O recorte que a Gupy precisa é por **cidade**
+(`city=Belo Horizonte`), e é isso que `config/config.yaml → searches[].location` emite — o
+caminho que exigiria a expansão de sigla (filtrar por estado) não é o caminho escolhido.
+
+Não confundir com `config/locality.yaml → base.uf`, que é `MG` e serve a outra coisa: resolver a
+localidade da vaga **depois** da coleta (`resolveLocality`/`isOnsiteOutsideHome`). Essa sigla nunca
+vai para a URL de busca.
+
+**LinkedIn guest** (`jobs-guest/jobs/api/seeMoreJobPostings/search`): `location=Brazil` e
+`location=Brazil&f_WT=2` devolveram 28469 e 28457 bytes e **o mesmo conjunto de cards** —
+`f_WT` (o parâmetro de modalidade remota) é ignorado pelo endpoint guest. Já
+`location=Belo Horizonte, Minas Gerais, Brazil` funciona e traz a região metropolitana de graça:
+BH 5, Itabirito 2, Nova Lima 1, Betim 1, "Greater Belo Horizonte" 1.
+
+**Consequência de projeto**: o LinkedIn declara `remoteOnly: false` em `AdapterCapabilities` —
+essa declaração É a documentação executável da limitação, não vira comentário `TODO` no código
+(regra dura desta sessão: limitação de fonte medida vira achado documentado, nunca `TODO`).
+
+**remotive / remoteok / wwr**: não resolvem `location` no servidor; `remote_only` não se aplica —
+são boards 100% remotos por construção, não há modalidade pra filtrar.
+
+Ponteiro: `docs/roadmap.md` → item 4 (`AdapterCapabilities`) traz a mesma matriz e a mudança de
+estimativa de escopo que ela permite.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
