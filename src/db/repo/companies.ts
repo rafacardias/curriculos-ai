@@ -46,6 +46,11 @@ export function getCompanyByName(name: string): CompanyRow | undefined {
     .get(normalize(name)) as CompanyRow | undefined;
 }
 
+/** Grava o domínio de e-mail corporativo da empresa (backfill manual — companies.domain nunca é preenchido automaticamente). */
+export function setCompanyDomain(companyId: string, domain: string): void {
+  getDb().prepare("UPDATE companies SET domain = ?, updated_at = ? WHERE id = ?").run(domain, nowIso(), companyId);
+}
+
 export function bumpCompanyStat(
   companyId: string,
   stat: "applications_count" | "responses_count" | "interviews_count"
