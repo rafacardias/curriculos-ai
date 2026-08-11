@@ -20,36 +20,89 @@ auto_search_hour: 9 # hora local do dia para a busca automática
 # Roteamento: query em PT → Gupy/LinkedIn BR. Query em EN → boards remotos
 # internacionais. Senioridade NÃO entra na query — quem faz esse corte é
 # `filters.exclude_seniority`, que é mais confiável que a redação do anúncio.
+#
+# DUAS VARIANTES POR TERMO PT (2026-08-11). A regra do operador é "em BH qualquer
+# modalidade; fora de BH, só remoto", e antes desta data ela não era executável:
+# `remote_only` era lido por 0 de 5 adapters e `location` só pelo LinkedIn
+# (KNOWN-BUGS.md ACHADO-08). Com `AdapterCapabilities` no lugar, cada variante
+# significa algo de verdade:
+#
+#   variante BH      → gupy `city=Belo Horizonte` · linkedin `location=` (traz a
+#                      RMBH de graça: Nova Lima, Betim, Itabirito, Contagem)
+#   variante Brasil  → gupy `workplaceType=remote` no servidor; no LinkedIn o
+#                      filtro de remoto NÃO existe (`f_WT` é ignorado pelo
+#                      endpoint guest) e a vaga sem modalidade declarada PASSA —
+#                      descartá-la seria inventar "é presencial" a partir de
+#                      ausência de dado. Quem cobra a modalidade é
+#                      `blocksGeneration`, antes de gastar $3 num kit.
+#
+# NÃO troque `Belo Horizonte` por `MG` nem por `Minas Gerais`: o `city=` da Gupy
+# é match EXATO e case-sensitive — `belo horizonte` minúsculo devolve 0, e `MG`
+# devolve 0. Erro de valor aqui não dá erro, dá silêncio (ACHADO-18).
+#
+# `limit` é opcional por entrada e agora é repassado de verdade. Sem ele valem os
+# defaults do adapter (gupy 50, linkedin 25 ≈ 3 páginas). Subir para 50 no
+# LinkedIn dobra a colheita e o tempo — mexa com o custo medido em mãos.
 searches:
-  # ─── PT · Brasil ────────────────────────────────────────────────────────────
+  # ─── PT · Belo Horizonte · presencial + híbrido + remoto ────────────────────
   - query: Analista de Automação
     sources: [gupy, linkedin]
-    location: Brazil
+    location: Belo Horizonte
     remote_only: false
   - query: Automação de Marketing
     sources: [gupy, linkedin]
-    location: Brazil
+    location: Belo Horizonte
     remote_only: false
   - query: Analista de CRM
     sources: [gupy, linkedin]
-    location: Brazil
+    location: Belo Horizonte
     remote_only: false
   - query: Analista de Growth
     sources: [gupy, linkedin]
-    location: Brazil
+    location: Belo Horizonte
     remote_only: false
   - query: Engenheiro de IA
     sources: [gupy, linkedin]
-    location: Brazil
+    location: Belo Horizonte
     remote_only: false
   - query: Chatbot
     sources: [gupy, linkedin]
-    location: Brazil
+    location: Belo Horizonte
     remote_only: false
   - query: No-Code
     sources: [gupy, linkedin]
-    location: Brazil
+    location: Belo Horizonte
     remote_only: false
+
+  # ─── PT · Brasil · só remoto ────────────────────────────────────────────────
+  - query: Analista de Automação
+    sources: [gupy, linkedin]
+    location: Brazil
+    remote_only: true
+  - query: Automação de Marketing
+    sources: [gupy, linkedin]
+    location: Brazil
+    remote_only: true
+  - query: Analista de CRM
+    sources: [gupy, linkedin]
+    location: Brazil
+    remote_only: true
+  - query: Analista de Growth
+    sources: [gupy, linkedin]
+    location: Brazil
+    remote_only: true
+  - query: Engenheiro de IA
+    sources: [gupy, linkedin]
+    location: Brazil
+    remote_only: true
+  - query: Chatbot
+    sources: [gupy, linkedin]
+    location: Brazil
+    remote_only: true
+  - query: No-Code
+    sources: [gupy, linkedin]
+    location: Brazil
+    remote_only: true
 
   # ─── EN · remoto internacional ──────────────────────────────────────────────
   - query: n8n
