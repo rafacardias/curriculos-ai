@@ -55,7 +55,7 @@ if (values.url) {
 }
 
 const specs = values.query
-  ? [{ query: values.query, sources: ["remotive", "remoteok", "wwr", "gupy", "linkedin"], location: undefined, remote_only: false }]
+  ? [{ query: values.query, sources: ["remotive", "remoteok", "wwr", "gupy", "linkedin"], location: undefined, remote_only: false, limit: undefined }]
   : config.searches.filter((s) => s.query.trim().length > 0);
 
 if (!specs.length) {
@@ -70,7 +70,7 @@ for (const spec of specs) {
   const adapters = resolveAdapters(spec.sources);
   const result = await runSearch(
     adapters,
-    { query: spec.query, location: spec.location, remoteOnly: spec.remote_only },
+    { query: spec.query, location: spec.location, remoteOnly: spec.remote_only, limit: spec.limit },
     values.auto ? "auto" : "manual"
   );
   console.log(`\nbusca: "${spec.query}" (run ${result.runId})`);

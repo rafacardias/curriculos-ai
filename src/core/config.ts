@@ -9,6 +9,9 @@ export const SearchSpec = z.object({
   sources: z.array(z.string()).default(["remotive", "remoteok", "wwr", "gupy"]),
   location: z.string().optional(),
   remote_only: z.boolean().default(false),
+  // `SearchParams.limit` existia nos adapters e NADA jamais o setava — cada
+  // fonte caía no default dela. Omitido aqui, o comportamento é o de sempre.
+  limit: z.number().int().positive().optional(),
 });
 
 export const ConfigSchema = z.object({
