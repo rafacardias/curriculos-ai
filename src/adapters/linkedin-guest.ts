@@ -24,6 +24,12 @@ const PAGE_PAUSE_MS = 250;
  * temos — parcial vale mais que zero, que é o que o timeout do pipeline daria.
  */
 const PAGINATION_BUDGET_MS = 12000;
+/**
+ * Orçamento do fetch de descrição, o outro consumidor dos 30s. 12 + 12 = 24s
+ * deixa folga para o overhead do pipeline. Antes da paginação este loop já podia
+ * gastar 150s no pior caso; com mais vagas em mão, estourar custa mais caro.
+ */
+const DETAIL_BUDGET_MS = 12000;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -98,9 +104,16 @@ export const linkedinGuest: JobSourceAdapter = {
         if (jobs.length === before) break;
       }
 
-      // Busca a descrição das primeiras N (página guest de cada vaga)
+      // Busca a descrição das primeiras N (página guest de cada vaga).
+      //
+      // Este loop é sequencial e cada fetch tem 15s próprios: 10 vagas no pior
+      // caso são 150s, muito além dos 30s do pipeline — e estourar o timeout
+      // descarta TUDO, inclusive as vagas já paginadas. O orçamento é a mesma
+      // regra da paginação: vaga sem descrição entra; vaga nenhuma, não.
+      const detailDeadline = Date.now() + DETAIL_BUDGET_MS;
       const detailLimit = Math.min(jobs.length, 10);
       for (let i = 0; i < detailLimit; i++) {
+        if (Date.now() >= detailDeadline) break;
         try {
           const pageHtml = await fetchText(jobs[i]!.url, 15000);
           const desc = pageHtml.match(
