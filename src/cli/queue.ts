@@ -7,6 +7,7 @@
 import { parseArgs } from "node:util";
 import { getDb } from "../db/client.js";
 import { listQueuedJobs } from "../db/repo/jobs.js";
+import { listDeadSources } from "../db/repo/search-runs.js";
 import { resolveModality, modalityLabel } from "../core/modality.js";
 
 const { values } = parseArgs({
@@ -49,6 +50,17 @@ if (values.digest) {
     }
   } else {
     console.log("última busca: nunca rodou");
+  }
+
+  // Falha isolada já sai no ⚠ acima. Aqui só entra a fonte que falhou em 2+ das
+  // 3 últimas buscas em que participou — o caso do LinkedIn em timeout há 3 buscas.
+  for (const d of listDeadSources()) {
+    const desde = d.lastOkAt
+      ? `sem sucesso há ${Math.round((Date.now() - new Date(d.lastOkAt).getTime()) / 3600_000)}h`
+      : "nenhum sucesso registrado";
+    console.log(
+      `  ⛔ fonte morta — ${d.source}: falhou nas ${d.consecutiveFailures} últimas buscas em que entrou · ${desde} · último erro: ${d.lastError}`
+    );
   }
   process.exit(0);
 }

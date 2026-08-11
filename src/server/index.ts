@@ -26,6 +26,7 @@ import { addJobByUrl } from "../core/manual-job.js";
 import { blocksGeneration, resolveModality, parseModalityState } from "../core/modality.js";
 import { blocksGenerationByScore } from "../core/policy.js";
 import { resolveLocality } from "../core/locality.js";
+import { listDeadSources } from "../db/repo/search-runs.js";
 import { confirmModality, confirmScore } from "../db/repo/jobs.js";
 import { buildDashboard, DASHBOARD_PATH } from "../dashboard/build.js";
 import { setJobStatus, getJob } from "../db/repo/jobs.js";
@@ -81,6 +82,9 @@ function apiSummary() {
     lastRun: lastRun
       ? { at: lastRun.started_at, mode: lastRun.mode, perSource: lastRun.per_source ? JSON.parse(lastRun.per_source) : null }
       : null,
+    // Histórico, não última corrida: fonte que falhou em 2+ das 3 últimas buscas
+    // em que participou. É o que separa falha isolada de fonte morta.
+    deadSources: listDeadSources(),
     searchRunning: searchState.running,
   };
 }
