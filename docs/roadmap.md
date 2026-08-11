@@ -135,9 +135,20 @@ implementação passa de "investigar 5 APIs" para "codificar 3 respostas já con
 
 ## 5. Item 1.4 — alerta de fonte morta
 
-Erro de adapter é gravado em `search_runs.per_source` e **nunca alertado**. O LinkedIn está com
-timeout há 3 buscas e isso nunca chegou ao operador. Escopo: leitura de `search_runs` no
-`/status` e na UI.
+Erro de adapter é gravado em `search_runs.per_source` e **nunca alertado**. Escopo: leitura de
+`search_runs` no `/status` e na UI.
+
+**Correção de evidência, 2026-08-11** — a versão anterior desta nota dizia "o LinkedIn **está** com
+timeout há 3 buscas". Conferido contra `search_runs`: os timeouts do LinkedIn são todos de
+**2026-07-13** (4 corridas seguidas, `errors: ["timeout 30000ms"]`, uma delas com `0 vagas —
+provável bloqueio anti-bot`). Na corrida mais recente com a config cheia (2026-08-09T01:24, 13
+entradas) o LinkedIn respondeu nas 7 entradas PT, 8 a 10 vagas cada, sem erro. **A fonte se
+recuperou sozinha e ninguém soube de nenhum dos dois lados do episódio** — nem da queda, nem da
+volta.
+
+Isso não enfraquece o item, reforça: o episódio de julho é a evidência de que o alerta faltava, e o
+fato de ter passado de desatualizado a corrigido só por alguém abrir o banco à mão é a evidência de
+que continua faltando. O que muda é o tempo verbal — evidência histórica, não estado atual.
 
 ## 6. Dedup por similaridade de título
 

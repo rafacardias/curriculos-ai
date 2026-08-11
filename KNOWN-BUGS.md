@@ -829,8 +829,13 @@ Gupy, `automação` no LinkedIn guest.
 
 **A sigla de UF não funciona na Gupy — só o nome completo do estado.** Registrado como limitação
 de fonte, não como bug a corrigir: a decisão desta sessão é **não** construir normalização/
-expansão de sigla→nome por causa disso. `config/locality.yaml` já usa nome de cidade, não sigla de
-estado, para os recortes que a Gupy precisa — o formato que já funciona é o que a config já emite.
+expansão de sigla→nome por causa disso. O recorte que a Gupy precisa é por **cidade**
+(`city=Belo Horizonte`), e é isso que `config/config.yaml → searches[].location` emite — o
+caminho que exigiria a expansão de sigla (filtrar por estado) não é o caminho escolhido.
+
+Não confundir com `config/locality.yaml → base.uf`, que é `MG` e serve a outra coisa: resolver a
+localidade da vaga **depois** da coleta (`resolveLocality`/`isOnsiteOutsideHome`). Essa sigla nunca
+vai para a URL de busca.
 
 **LinkedIn guest** (`jobs-guest/jobs/api/seeMoreJobPostings/search`): `location=Brazil` e
 `location=Brazil&f_WT=2` devolveram 28469 e 28457 bytes e **o mesmo conjunto de cards** —
