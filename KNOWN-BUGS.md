@@ -850,8 +850,86 @@ essa declaração É a documentação executável da limitação, não vira come
 **remotive / remoteok / wwr**: não resolvem `location` no servidor; `remote_only` não se aplica —
 são boards 100% remotos por construção, não há modalidade pra filtrar.
 
+**Complemento medido na implementação (mesmo dia) — o `city=` da Gupy falha em SILÊNCIO.** O
+filtro é match exato e **case-sensitive** contra o nome que a Gupy guarda:
+
+| valor | resultado |
+|---|---|
+| `city=Belo Horizonte` | 10 vagas |
+| `city=belo horizonte` | **0** |
+| `city=BELO HORIZONTE` | **0** |
+| `city=São Paulo` | 10 vagas |
+| `city=Sao Paulo` | 10 vagas, mas conjunto DIFERENTE (a fonte guarda as duas grafias) |
+| `city=sao paulo` | **0** |
+| `city=Brazil` | **0** |
+
+Valor errado não devolve erro, devolve lista vazia. Isso quase virou regressão: as 7 buscas PT
+mandavam `location: Brazil`, e ligar a capability de `location` sem guarda teria **zerado a Gupy
+nas sete** sem nenhum sinal. Duas defesas no código, em `src/adapters/gupy.ts`:
+
+1. `location` passa por `resolveLocality` antes de virar `city=` — só o que resolve como `city` vai
+   pra URL; país/UF viram entrada em `ignored`, não `city=` inventado. O valor enviado é o
+   **literal do config**, nunca o normalizado do léxico (que é minúsculo e devolveria 0).
+2. Zero resultado **com** `city=` aplicado é reportado em `ignored` — "ou não há vaga, ou o nome não
+   casa byte a byte". Ambiguidade dita em voz alta vale mais que zero silencioso.
+
+### ACHADO-19 · o adapter do LinkedIn nunca paginou — a fonte rendia 1/5 do que podia
+
+**Medido em 2026-08-11**, e é achado de recall, não de erro: nada nunca falhou.
+
+`src/adapters/linkedin-guest.ts` montava a URL com **`start=0` fixo** e sem laço de paginação. O
+endpoint guest devolve ~10 cards por página, então toda busca do LinkedIn, desde sempre, trouxe
+~10 vagas por termo e parou aí. O parâmetro `limit = 25` era desestruturado da assinatura e
+**nunca usado** — o corte real vinha do tamanho da página, não do `limit`.
+
+A evidência estava à vista no banco o tempo todo e ninguém leu como sintoma: em `search_runs`, a
+corrida de 2026-08-09 mostra `linkedin: {found: 8}`, `{found: 10}`, `{found: 10}`… nas 7 entradas
+PT. Um teto de 10 repetido em toda entrada é a assinatura de uma página, não de um mercado.
+
+Medido depois do fix (paginando `start=0,10,20,30,40`): **49 vagas para `Analista de Automação` em
+Brazil, contra 9 antes** — ~5×, em 12,6s. Isso reordena a importância das duas coisas medidas
+nesta sessão: o ganho de paginar o LinkedIn é maior que o ganho da variante de BH.
+
+**Confundidor que este achado explica**: a sondagem inicial da variante BH mediu 61 vagas
+"exclusivas de BH", número que parecia excelente. Paginando a busca Brasil até 50 resultados,
+**14 delas (23%) reaparecem** — eram artefato de comparar duas amostras de 10 itens de um mesmo
+pool grande, não ganho geográfico. O ganho real são as 47 restantes. Sem paginar, a variante BH
+teria sido creditada por um ganho que era, em parte, só amostragem.
+
+Guardas que o fix trouxe, todas por causa do `ADAPTER_TIMEOUT_MS = 30000` do pipeline — que
+**descarta tudo** que o adapter coletou quando estoura: teto de 5 páginas, orçamento de 12s para a
+paginação e outros 12s para o laço de descrição (sequencial, 15s por vaga, até 10 vagas — 150s no
+pior caso, risco pré-existente que a paginação agravou), parada quando a página não traz nada novo
+(o guest repete card) e erro da página 1 subindo como falha da busca enquanto erro da página 2 em
+diante preserva o já coletado.
+
 Ponteiro: `docs/roadmap.md` → item 4 (`AdapterCapabilities`) traz a mesma matriz e a mudança de
 estimativa de escopo que ela permite.
+
+### ACHADO-20 · "última busca" é a última ENTRADA de config, não a última corrida
+
+**Medido em 2026-08-11**, ao construir o alerta de fonte morta. Não corrigido — exige decisão de
+schema que esta sessão não tomou.
+
+`/buscar` grava **uma linha em `search_runs` por entrada de `config.searches`**, não uma por
+invocação: com 20 entradas, uma corrida vira 20 linhas com `started_at` a segundos de distância.
+Quem lê `ORDER BY started_at DESC LIMIT 1` — `apiSummary` (`src/server/index.ts`) e o `⚠` do
+`queue.ts --digest` — não está lendo "a última busca", está lendo **a última entrada**, que hoje é
+sempre uma das entradas EN (`remotive`/`remoteok`/`wwr`, as últimas do arquivo).
+
+Consequência: o `⚠` da última corrida **nunca mostra erro de `gupy` nem de `linkedin`**. As duas
+fontes brasileiras são invisíveis nesse aviso por construção, não por acaso.
+
+O mesmo raciocínio quase matou o alerta de fonte morta na primeira implementação, que contava a
+janela em linhas brutas de `search_runs` — `listDeadSources(3)` olharia só as 3 últimas entradas
+(todas EN) e jamais conseguiria alertar sobre o LinkedIn, que é a fonte que motivou o alerta
+existir. Corrigido antes do merge: a janela é **por fonte** (últimas N corridas em que a fonte
+participou), com teste de regressão que usa a forma real do dado
+(`tests/unit/source-health.test.ts`).
+
+Corrigir o `⚠` exigiria um conceito de "invocação" que o schema não tem — uma coluna `run_group_id`
+(ou equivalente) ligando as N linhas de um mesmo `/buscar`. Migration aditiva, escopo pequeno, mas
+é decisão de modelagem, não conserto de leitura. Fica registrado, não emendado.
 
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 

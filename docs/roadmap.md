@@ -106,7 +106,16 @@ Nenhum ajuste de score corrige uma fila que nunca recebeu as vagas certas.
 Dado que ajuda: `ai-builder` é a trilha **mais acessível** do acervo (62% sem barreira de
 entrada, contra 35% de `product`) — ver `KNOWN-BUGS.md` ACHADO-01.
 
-## 4. Item 1.5 — `AdapterCapabilities` e filtro cliente único
+## 4. Item 1.5 — `AdapterCapabilities` e filtro cliente único · **FEITO (2026-08-11)**
+
+> **Implementado.** `AdapterCapabilities` declarado pelas 5 fontes, `applyClientSideFilters`
+> (`src/core/search-filters.ts`) aplicado uma única vez em `runSearch`, `limit` acrescentado ao
+> `SearchSpec` e repassado, e a divergência CLI×UI do `doSearch` fechada. O que nenhuma camada
+> resolveu vai para `search_runs.per_source.ignored` em vez de sumir — é isso que torna "nenhum
+> adapter ignora em silêncio" verificável. O teste que congelava o bug foi invertido; a política
+> para modalidade ausente (`unknownRemoteType`) é parâmetro obrigatório e nomeado, com teste dos
+> dois lados. Ver `KNOWN-BUGS.md` → `ACHADO-18` e `ACHADO-19`.
+
 
 `remote_only` é configuração morta: existe no YAML, no `SearchSpec`, no `SearchParams`, é
 editável na UI, e **0 de 5 adapters a desestrutura**. `location` só é lido pelo `linkedin-guest`;
@@ -133,7 +142,13 @@ LinkedIn declara só `location`; os três boards remotos não declaram nenhum (n
 `applyClientSideFilters` não tem o que filtrar num board já 100% remoto). O trabalho de
 implementação passa de "investigar 5 APIs" para "codificar 3 respostas já conhecidas".
 
-## 5. Item 1.4 — alerta de fonte morta
+## 5. Item 1.4 — alerta de fonte morta · **FEITO (2026-08-11)**
+
+> **Implementado.** `src/db/repo/search-runs.ts` lê o histórico; `/status` (`queue.ts --digest`) e
+> a UI mostram `⛔ fonte morta` para quem falhou nas 2 últimas corridas seguidas **em que
+> participou**. A janela é por fonte, não por linha de `search_runs` — o porquê está no
+> `ACHADO-20`, e contar em linhas brutas teria feito o alerta nunca disparar para gupy/linkedin.
+
 
 Erro de adapter é gravado em `search_runs.per_source` e **nunca alertado**. Escopo: leitura de
 `search_runs` no `/status` e na UI.
@@ -178,7 +193,15 @@ real e sessão logada.
 537 linhas com 5 `as any` na fronteira DB→UI. A extração mínima de `ws-auth.ts` (Onda 0.8) foi
 deliberadamente cirúrgica e **não** é este refactor.
 
-## 11. Variantes de busca por geografia/modalidade
+## 11. Variantes de busca por geografia/modalidade · **FEITO (2026-08-11)**
+
+> **Implementado e medido.** `config/config.yaml` passou de 13 para 20 entradas: por termo PT, uma
+> variante `Belo Horizonte` (qualquer modalidade) e uma `Brazil` (`remote_only: true`); os 6 termos
+> EN seguem intactos. Critério aplicado antes de commitar o config: ≥10 vagas de BH inéditas —
+> medido 47, depois de descontar as 14 que eram artefato de paginação (`ACHADO-19`). O ganho da
+> Gupy foi **zero** e ela fica na variante mesmo assim, só pelo caso em que o termo satura
+> `limit=50` (1 dos 7 termos hoje).
+
 
 Pedido do operador: dois recortes por termo de busca — **fora de Belo Horizonte só remoto; em BH
 presencial, híbrido e remoto**. Hoje `config.yaml → searches[]` só tem uma entrada por termo, sem
