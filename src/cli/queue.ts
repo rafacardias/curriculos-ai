@@ -53,7 +53,7 @@ if (values.digest) {
   }
 
   // Falha isolada já sai no ⚠ acima. Aqui só entra a fonte que falhou em 2+ das
-  // 3 últimas buscas em que participou — o caso do LinkedIn em timeout há 3 buscas.
+  // 3 últimas buscas em que participou — o episódio do LinkedIn em julho/2026.
   for (const d of listDeadSources()) {
     const desde = d.lastOkAt
       ? `sem sucesso há ${Math.round((Date.now() - new Date(d.lastOkAt).getTime()) / 3600_000)}h`
