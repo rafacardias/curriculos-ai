@@ -99,11 +99,16 @@ describe("linkedin-guest", () => {
     assert.match(estagio.description!, /quality assurance/i, "a descrição vem do fetch de detalhe");
   });
 
-  it("faz N+1 requests: 1 de busca + 1 por vaga (até 10)", async () => {
+  it("faz N+1 requests: buscas paginadas + 1 detalhe por vaga (até 10)", async () => {
+    // Era "1 busca + 2 detalhes" enquanto `start=0` era fixo e `limit` era
+    // ignorado. Com a paginação real são 2 buscas: a fixture devolve os MESMOS
+    // 2 cards em qualquer `start`, então a 2ª página não traz nada novo e a
+    // paginação encerra ali — é a sonda que prova que ela não é mais de 1 página.
     stub = installFetchStub(allRoutes());
     await linkedinGuest.search(Q);
-    assert.equal(stub.calls.length, 3, "1 busca + 2 detalhes");
-    assert.match(stub.calls[0]!, /seeMoreJobPostings/);
+    assert.equal(stub.calls.length, 4, "2 buscas (a 2ª só com repetidas) + 2 detalhes");
+    assert.match(stub.calls[0]!, /seeMoreJobPostings.*start=0/);
+    assert.match(stub.calls[1]!, /seeMoreJobPostings.*start=10/);
   });
 
   it("HTML sem cards reconhecíveis reporta bloqueio anti-bot em vez de silêncio", async () => {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { JobSourceAdapter, SearchParams, AdapterResult } from "./types.js";
 import { fetchJson, stripHtml, detectLanguage } from "./types.js";
+import { resolveLocality } from "../core/locality.js";
 
 // Endpoint público do job board da Gupy — não documentado/versionado.
 // Validamos o shape com zod e falhamos alto em vez de inserir lixo.
@@ -36,14 +37,51 @@ export const REMOTE_MAP: Record<string, "remote" | "hybrid" | "onsite"> = {
 
 export const gupy: JobSourceAdapter = {
   id: "gupy",
-  async search({ query, limit = 50 }: SearchParams): Promise<AdapterResult> {
+  // A Gupy resolve os dois no servidor: `city=` e `workplaceType=remote`.
+  //
+  // `city=` é o único recorte geográfico que a fonte tem, e ele é MATCH EXATO e
+  // CASE-SENSITIVE contra o nome da cidade (medido 2026-08-11: `Belo Horizonte`
+  // → 10 vagas; `belo horizonte` → 0; `BELO HORIZONTE` → 0; `state=MG` → 0;
+  // `city=Brazil` → 0). Ou seja: valor errado não dá erro, dá silêncio — e as 7
+  // buscas PT do config hoje mandam `location: Brazil`, que zeraria a fonte.
+  //
+  // Por isso `location` passa por `resolveLocality` ANTES de virar `city=`: só
+  // vai pra URL o que resolve como cidade. País/UF/desconhecido não viram
+  // `city=` inventado — viram `ignored`, dito em voz alta. O valor enviado é o
+  // LITERAL do config, nunca o normalizado do léxico (minúscula devolve 0).
+  capabilities: { location: true, remoteOnly: true, allRemote: false },
+  async search({ query, location, remoteOnly, limit = 50 }: SearchParams): Promise<AdapterResult> {
+    const ignored: string[] = [];
     try {
+      const params = [`jobName=${encodeURIComponent(query)}`, `limit=${limit}`, "offset=0"];
+      let cityApplied = false;
+      if (location) {
+        const loc = resolveLocality(location);
+        if (loc.level === "city") {
+          params.push(`city=${encodeURIComponent(location)}`);
+          cityApplied = true;
+        } else {
+          ignored.push(
+            `location "${location}" resolveu como ${loc.level}, não cidade — a Gupy só recorta ` +
+              `por cidade (city=), então a busca foi feita SEM recorte geográfico`
+          );
+        }
+      }
+      if (remoteOnly) params.push("workplaceType=remote");
       const data = Schema.parse(
-        await fetchJson(
-          `https://employability-portal.gupy.io/api/v1/jobs?jobName=${encodeURIComponent(query)}&limit=${limit}&offset=0`
-        )
+        await fetchJson(`https://employability-portal.gupy.io/api/v1/jobs?${params.join("&")}`)
       );
+      // Zero resultado com `city=` aplicado é ambíguo: ou não há vaga, ou o nome
+      // não bate byte a byte com o que a Gupy guarda. Dizer isso é o que impede o
+      // match exato de falhar em silêncio.
+      if (cityApplied && data.data.length === 0) {
+        ignored.push(
+          `city="${location}" devolveu 0 vagas — pode ser ausência de vaga OU nome que não ` +
+            `casa exatamente com o da Gupy (o filtro é case-sensitive, sem acento não casa)`
+        );
+      }
       return {
+        ignored,
         jobs: data.data
           .filter((j) => j.jobUrl)
           .map((j) => {
@@ -70,7 +108,7 @@ export const gupy: JobSourceAdapter = {
         errors: [],
       };
     } catch (err) {
-      return { jobs: [], errors: [String(err)] };
+      return { jobs: [], errors: [String(err)], ignored };
     }
   },
 };

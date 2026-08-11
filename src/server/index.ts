@@ -484,11 +484,17 @@ async function doSearch(query?: string) {
       const config = loadConfig();
       decayPreferenceWeights(config);
       const specs = query
-        ? [{ query, sources: ["remotive", "remoteok", "wwr", "gupy", "linkedin"], location: undefined as string | undefined, remote_only: false }]
+        ? [{ query, sources: ["remotive", "remoteok", "wwr", "gupy", "linkedin"], location: undefined as string | undefined, remote_only: false, limit: undefined as number | undefined }]
         : config.searches.filter((s) => s.query.trim().length > 0);
       let summary: string[] = [];
       for (const spec of specs) {
-        const result = await runSearch(resolveAdapters(spec.sources), { query: spec.query, location: spec.location }, "manual");
+        // `remote_only` faltava aqui: a MESMA busca salva se comportava diferente
+        // conforme quem disparou (UI x CLI). Os dois caminhos passam o mesmo spec.
+        const result = await runSearch(
+          resolveAdapters(spec.sources),
+          { query: spec.query, location: spec.location, remoteOnly: spec.remote_only, limit: spec.limit },
+          "manual"
+        );
         const scored = scoreNewJobs(config, result.newJobIds);
         summary.push(`"${spec.query}": ${result.newJobIds.length} novas, ${scored.filter((s) => s.status === "queued").length} na fila`);
       }

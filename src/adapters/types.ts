@@ -8,18 +8,47 @@ export interface SearchParams {
 }
 
 /**
+ * O que a fonte resolve SOZINHA, no servidor dela.
+ *
+ * A declaração é o contrato: o que estiver `false` aqui é o que o filtro cliente
+ * (`src/core/search-filters.ts`) precisa tratar — ou assumir explicitamente que
+ * não trata. Não existe "adapter que ignora em silêncio": ou a capability é
+ * verdadeira e a URL muda, ou é falsa e alguém acima decide o que fazer.
+ */
+export interface AdapterCapabilities {
+  /** A fonte resolve `location` no servidor. */
+  location: boolean;
+  /** A fonte resolve `remoteOnly` no servidor. */
+  remoteOnly: boolean;
+  /** Todo resultado é remoto por construção — `remoteOnly` é no-op, não lacuna. */
+  allRemote: boolean;
+}
+
+/**
  * Contrato de toda fonte de vagas. Implementações devem:
  * - nunca lançar exceção para fora (retornar erros no resultado);
- * - respeitar timeout próprio (o pipeline também impõe um global).
+ * - respeitar timeout próprio (o pipeline também impõe um global);
+ * - declarar `capabilities` honestamente — é o que o pipeline usa para decidir
+ *   o que ainda precisa ser filtrado no cliente.
  */
 export interface JobSourceAdapter {
   readonly id: string;
+  readonly capabilities: AdapterCapabilities;
   search(params: SearchParams): Promise<AdapterResult>;
 }
 
 export interface AdapterResult {
   jobs: RawJob[];
   errors: string[];
+  /**
+   * Critério que a fonte recebeu e NÃO aplicou, dito em voz alta.
+   *
+   * Separado de `errors` de propósito: pedir um recorte que a fonte não sabe
+   * fazer não é falha da fonte, e cair em `errors` marcaria o adapter como
+   * quebrado no alerta de fonte morta. O pipeline junta isto ao `ignored` do
+   * filtro cliente em `search_runs.per_source`.
+   */
+  ignored?: string[];
 }
 
 export async function fetchJson(url: string, init?: RequestInit, timeoutMs = 15000): Promise<unknown> {

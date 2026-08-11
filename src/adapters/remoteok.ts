@@ -18,6 +18,9 @@ const JobItem = z.object({
 
 export const remoteok: JobSourceAdapter = {
   id: "remoteok",
+  // Board 100% remoto (`remoteType: "remote"` fixo). O endpoint é um dump
+  // único da API — nem query nem localização são resolvidas no servidor.
+  capabilities: { location: false, remoteOnly: false, allRemote: true },
   async search({ query, limit = 50 }: SearchParams): Promise<AdapterResult> {
     try {
       const raw = z.array(z.unknown()).parse(await fetchJson("https://remoteok.com/api"));
