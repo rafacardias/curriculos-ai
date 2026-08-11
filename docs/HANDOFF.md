@@ -12,31 +12,32 @@
 > **Teto de ~100 linhas, regra dura.** Se crescer, corte primeiro "O que mudou" pras 2-3 sessões
 > mais recentes antes de encurtar qualquer outra seção. Pointer, nunca conteúdo copiado.
 
-## Resumo da sessão de 2026-08-11
+## Resumo da sessão de 2026-08-11 (segunda rodada)
 
-Três itens, parada dura em cada, `main` verde e pushado a cada um.
+Quatro blocos, parada dura em cada, `main` verde e pushado a cada um. Suíte 444 → **479**.
 
-1. **`KNOWN-BUGS.md` BUG-007 corrigido**: a tabela dizia `source:*` "não feito"; o código já
-   exclui (escrita `preferenceKeysFor` e leitura `isLearnedKey`) desde 2026-08-07. 3 dos 4 itens
-   do escopo original estão feitos.
-2. **`UNIQUE` no `answer_bank`**: migration `008_answer_bank_dedup.sql`, 4 índices únicos parciais
-   (NULL não colide em índice único simples do SQLite — mesmo padrão da migration 007). Banco real
-   tinha 0 linhas em `answer_bank`, sem duplicata a reconciliar.
-3. **`inbox-watch` (Blocos B+C, `docs/roadmap.md` → Onda 3)**: schema `009_inbox.sql`, adapter
-   Gmail REST puro (`gmail.readonly`), comandos `inbox auth`/`inbox ingest [--commit]`. Achado no
-   meio do caminho: `companies.domain` nunca tinha sido escrito (0/518) — backfill manual via
-   WebSearch só das 23 empresas com candidatura real, antes de medir (senão o Estágio 2 mediria
-   zero por falta de dado). **Medição real: 1434 e-mails, 1/23 candidaturas casadas (4,3%) —
-   abaixo do critério de ~60%.** `KNOWN-BUGS.md` → `ACHADO-17`. Causa provável: 22/23 candidaturas
-   têm 1–5 dias, prazo de resposta de RH ainda não passou pra maioria — não é falha comprovada da
-   cascata, mas o critério é objetivo. **Feature volta pro backlog, Estágio 3 não construído.**
+1. **Doc sincronizada com a realidade** — Onda 3 (`inbox-watch`) reescrita pro estado medido;
+   itens 4, 5 e 11 do `docs/roadmap.md` marcados como feitos com a evidência de aceite.
+2. **`AdapterCapabilities` + filtro cliente único (item 4)** — `remote_only` deixou de ser
+   configuração morta. Gupy filtra no servidor (`city=`, `workplaceType=remote`), LinkedIn declara
+   que não sabe filtrar remoto, os 3 boards declaram `allRemote`. `limit` entrou no `SearchSpec` e
+   é repassado; a divergência CLI×UI do `doSearch` fechou. O que nenhuma camada resolveu vai pra
+   `search_runs.per_source.ignored` em vez de sumir. Modalidade ausente **passa** — descartá-la
+   seria inventar fato a partir de ausência de dado, e a política é parâmetro nomeado, não um `if`.
+3. **Duas variantes por termo PT (item 11)** — config de 13 → 20 entradas: BH qualquer modalidade,
+   Brasil só remoto. Medido antes de commitar (critério ≥10 vagas de BH inéditas, medido 47).
+   Corrida real: **236 vagas novas, 109 em BH/RMBH**, 132,4s contra 53,0s, zero timeout.
+4. **Alerta de fonte morta (item 5)** — `⛔` no `/status` e na UI, janela por fonte.
 
-Suíte 444/444.
+Achados novos: `ACHADO-18` (capabilities medidas + o `city=` da Gupy que falha em silêncio),
+`ACHADO-19` (o LinkedIn nunca paginou — rendia 1/5), `ACHADO-20` (a "última busca" lida é a última
+ENTRADA de config, então o `⚠` nunca mostra erro de gupy/linkedin).
 
 ## Estado agora (atualizado em 2026-08-11)
 
-- **`main`**: tudo acima mesclado e pushado. Suíte 444/444, typecheck limpo.
-- **`inbox-watch`**: schema + ingestão read-only ficam prontos e testados no `main`
+- **`main`**: tudo acima mesclado e pushado. Suíte 479/479, typecheck limpo.
+- **Busca**: 20 entradas, ~2m13s por corrida. Fila com 52 vagas.
+- **`inbox-watch`**: schema + ingestão read-only prontos e testados no `main`
   (`npx tsx src/cli/inbox.ts ingest --commit`) — só a decisão de ir pro Estágio 3 está fechada.
 - **`.env.local`** (gitignored) tem credenciais reais do operador: `GOOGLE_CLIENT_ID`,
   `GOOGLE_CLIENT_SECRET` (OAuth client "Automacao Curriculos", projeto
@@ -44,30 +45,27 @@ Suíte 444/444.
 
 ## O que mudou (mais recente primeiro — sessões anteriores a esta no `git log`)
 
-1. Sessão de hoje (acima): correção da tabela BUG-007, `UNIQUE` no `answer_bank`, `inbox-watch`
-   Bloco B (ingestão) + Bloco C (medição, `ACHADO-17`, feature volta pro backlog).
-2. Sessão de 2026-08-10 (2 rodadas): teto de "inserir tudo" (vigilância vs. busca geral,
-   `ACHADO-11`), veredito mercado-vs-calibragem, fix de `feedback.ts` `ORDER BY`, diagnóstico e
-   autocorreção do BUG-007 no mesmo dia, `ACHADO-15`/`16` (taxa da busca geral).
-3. Madrugada autônoma (2026-08-09→10): cadastro de 17 empresas GPTW/BH, `company-watch-
-   registry.ts`, `answers.ts` `ORDER BY`, `watch run --commit` real.
-4. **BUG-010 completo** — `scoreJob` desempatava trilha por ordem não-garantida do SQLite.
-5. Vigilância por empresa (Fase A) — scrape `__NEXT_DATA__` da Gupy; queue-improvements; harness
-   HTTP in-process.
+1. Sessão de hoje, 2ª rodada (acima): `AdapterCapabilities`, variantes de busca, fonte morta, doc.
+2. Sessão de hoje, 1ª rodada: correção da tabela BUG-007, `UNIQUE` no `answer_bank` (migration
+   `008`), `inbox-watch` Blocos B+C — schema `009_inbox.sql`, adapter Gmail `gmail.readonly`,
+   medição 1/23 (`ACHADO-17`) e volta pro backlog com o Estágio 3 não construído.
+3. Sessão de 2026-08-10 (2 rodadas): teto de "inserir tudo" (`ACHADO-11`), veredito
+   mercado-vs-calibragem, fix de `feedback.ts` `ORDER BY`, `ACHADO-15`/`16`.
+4. Madrugada autônoma (2026-08-09→10): 17 empresas GPTW/BH, `company-watch-registry.ts`,
+   `watch run --commit` real. Antes disso: BUG-010, vigilância por empresa (Fase A).
 
 ## Próximos passos
 
-1. `inbox-watch`: remedir daqui a 3–4 semanas, quando as candidaturas de agosto tiverem tido tempo
-   real de resposta (`scripts/measure-inbox-match.ts` já existe, não precisa reescrever). Achado
-   estrutural do `ACHADO-17` pra quem reabrir: ATS (Gupy/LinkedIn) notifica pelo domínio do ATS,
-   não da empresa — Estágio 2 é cego a isso, oposto do falso-positivo que o plano original temia.
-2. **BUG-007** (`docs/roadmap.md` #1, bloqueador): captura de motivo na UI já funciona (100% desde
-   08-07); falta é volume de decisão real de `ai-builder` com `reason_class`, hoje 16 (desbalanço
-   11:1 positivo/negativo, alvo é ~25 mais balanceado). Reativar `preference` é decisão do
-   operador — inclui escolher o peso e de onde tirá-lo (`keyword_overlap` está em 0,65 hoje).
-3. Fase B (Solides/Greenhouse) fechada até nova ordem — reabrir exige critério de busca novo, não
-   adapter novo do mesmo tipo de empresa.
-4. Backlog mais antigo, não reordenado por isto: `docs/roadmap.md` itens 2–10.
+1. **Rodar `scripts/measure-queue-composition.ts` daqui a ~1 semana**, com o acervo assentado
+   depois das variantes novas. Ele existe e nunca foi executado de propósito — medir hoje mediria
+   acervo meio-populado. Nunca lê `jobs.track_hint`; recalcula via `rescoreAll(commit: false)`.
+2. `inbox-watch`: remedir em 3–4 semanas (`scripts/measure-inbox-match.ts` já existe). Achado
+   estrutural do `ACHADO-17`: ATS notifica pelo domínio do ATS, não da empresa.
+3. **BUG-007** (`docs/roadmap.md` #1, bloqueador): a captura na UI funciona; falta volume de
+   decisão real de `ai-builder` — **16 hoje, sem mudança desde 2026-08-10**, desbalanço 11:1.
+   Com 109 vagas de BH novas na fila, é a chance de gerar decisão de localização de verdade.
+4. Fase B (Solides/Greenhouse) fechada até nova ordem.
+5. Backlog restante: `docs/roadmap.md` itens 1, 2, 3, 6–10.
 
 ## Onde olhar para mais detalhe
 
