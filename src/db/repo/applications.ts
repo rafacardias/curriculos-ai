@@ -19,6 +19,34 @@ export function getApplicationByJob(jobId: string): ApplicationRow | undefined {
     .get(jobId) as unknown as ApplicationRow | undefined;
 }
 
+/** Data (ISO) da candidatura mais antiga — janela de backfill do `inbox ingest` na primeira rodada. */
+export function getEarliestApplicationDate(): string | undefined {
+  const row = getDb().prepare("SELECT MIN(created_at) AS earliest FROM applications").get() as
+    | { earliest: string | null }
+    | undefined;
+  return row?.earliest ?? undefined;
+}
+
+export interface ApplicationJobCompanyName {
+  applicationId: string;
+  companyName: string;
+}
+
+/**
+ * `application_id` + nome bruto da empresa (`jobs.company_name`), sem tentar casar com
+ * `companies` em SQL — a normalização de nome (`core/dedup.ts:normalize`) é JS, não SQL.
+ * Quem quiser o domínio resolve por `getCompanyByName(companyName)?.domain` no chamador.
+ */
+export function listApplicationsWithCompanyName(): ApplicationJobCompanyName[] {
+  return getDb()
+    .prepare(
+      `SELECT a.id AS applicationId, j.company_name AS companyName
+       FROM applications a
+       JOIN jobs j ON j.id = a.job_id`
+    )
+    .all() as unknown as ApplicationJobCompanyName[];
+}
+
 export function createApplication(
   jobId: string,
   trackId: string | null,

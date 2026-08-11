@@ -47,6 +47,8 @@ const TABLES = [
   "candidate_facts",
   "preference_weights",
   "search_runs",
+  "inbox_messages",
+  "inbox_state",
 ] as const;
 
 /** Zera as tabelas de dados da sandbox (mantém o schema e o _migrations). */

@@ -32,6 +32,11 @@ export interface NewInboxMessage {
   matchConfidence?: number | null;
 }
 
+/** Só checa existência, sem inserir — usado pelo dry-run pra contar duplicata sem gravar nada. */
+export function inboxMessageExists(gmailMessageId: string): boolean {
+  return !!getDb().prepare("SELECT 1 FROM inbox_messages WHERE gmail_message_id = ?").get(gmailMessageId);
+}
+
 /** Dedup por `gmail_message_id` (UNIQUE). Devolve null se a mensagem já foi ingerida antes. */
 export function insertInboxMessage(msg: NewInboxMessage): InboxMessageRow | null {
   const db = getDb();
