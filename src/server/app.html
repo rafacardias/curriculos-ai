@@ -97,6 +97,8 @@
   .searchbar.urlbar input { font-size: 12px; padding: 10px 12px; }
   .searchnote { font-family: var(--mono); font-size: 11px; color: var(--bone-dim); margin: -20px 0 24px; min-height: 14px; }
   .searchnote b { color: var(--bone); }
+  .searchnote .src { display: block; margin-top: 4px; }
+  .searchnote .src.dead { color: var(--signal); }
   .searchnote.run::before { content: "▮"; color: var(--signal); animation: blink .8s infinite; margin-right: 6px; }
   @keyframes blink { 50% { opacity: .2; } }
 
@@ -404,8 +406,26 @@ async function loadSummary() {
   else if (s.lastRun) {
     note.className = "searchnote";
     const age = Math.round((Date.now() - new Date(s.lastRun.at)) / 3600000);
-    note.textContent = `última busca há ${age}h (${s.lastRun.mode})`;
+    note.innerHTML = `última busca há ${age}h (${esc(s.lastRun.mode)})` + sourceNotes(s);
   }
+}
+
+// Erro de adapter ficava só no banco. A falha isolada da última busca sai como ⚠;
+// a fonte morta (2+ buscas seguidas falhando) vem do histórico e sai marcada.
+function sourceNotes(s) {
+  const dead = s.deadSources ?? [];
+  const mortas = new Set(dead.map((d) => d.source));
+  const linhas = dead.map((d) => {
+    const desde = d.lastOkAt
+      ? `sem sucesso há ${Math.round((Date.now() - new Date(d.lastOkAt)) / 3600000)}h`
+      : "nenhum sucesso registrado";
+    return `<span class="src dead">⛔ ${esc(d.source)} morta — falhou nas ${d.consecutiveFailures} últimas buscas em que entrou · ${desde} · ${esc(d.lastError)}</span>`;
+  });
+  for (const [src, st] of Object.entries(s.lastRun?.perSource ?? {})) {
+    if (mortas.has(src) || !st?.errors?.length) continue;
+    linhas.push(`<span class="src">⚠ ${esc(src)}: ${esc(st.errors.join("; "))}</span>`);
+  }
+  return linhas.join("");
 }
 
 async function loadQueue() {
