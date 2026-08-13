@@ -7,7 +7,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT } from "../helpers/sandbox.js";
-import { truthcheck, stripCitations, validateCitations } from "../../src/core/truthcheck.js";
+import {
+  truthcheck,
+  stripCitations,
+  validateCitations,
+  extractExperienceBullets,
+} from "../../src/core/truthcheck.js";
 import { loadMasterProfile } from "../../src/core/profile.js";
 
 const profile = loadMasterProfile(); // perfil sintético da sandbox
@@ -114,6 +119,52 @@ describe("truthcheck", () => {
   it("bullets fora da seção de experiência não exigem citação", () => {
     const md = "## Skills\n- Playwright\n- SQL\n";
     assert.equal(truthcheck(md, profile).ok, true);
+  });
+});
+
+describe("extractExperienceBullets", () => {
+  // Mesma detecção de seção que o truthcheck usa — a função foi extraída de lá
+  // e passou a ser a base do gate de formato CAR. Se a detecção regredir aqui,
+  // dois guardrails caem juntos, então ela é testada isolada.
+
+  it("pega os bullets sob '### Cargo — Empresa' (o recorte do BUG-005)", () => {
+    const md = [
+      "## Experiência Profissional",
+      "### Analista de QA — ACME Software",
+      "2023-01 – 2025-06",
+      "",
+      "- Estruturei a suíte de regressão [exp:exp-acme-qa.f1]",
+      "* Automatizei 18 cenários de API [exp:exp-acme-qa.f3]",
+      "",
+    ].join("\n");
+    assert.deepEqual(extractExperienceBullets(md), [
+      "- Estruturei a suíte de regressão [exp:exp-acme-qa.f1]",
+      "* Automatizei 18 cenários de API [exp:exp-acme-qa.f3]",
+    ]);
+  });
+
+  it("para no próximo heading de nível igual ou superior", () => {
+    const md = [
+      "## Experiência Profissional",
+      "### Cargo — Empresa",
+      "- de experiência [exp:exp-acme-qa.f1]",
+      "## Skills",
+      "- Playwright",
+      "# Outro Documento",
+      "- solto",
+      "",
+    ].join("\n");
+    assert.deepEqual(extractExperienceBullets(md), ["- de experiência [exp:exp-acme-qa.f1]"]);
+  });
+
+  it("devolve lista vazia quando não há seção de experiência", () => {
+    assert.deepEqual(extractExperienceBullets("## Skills\n- Playwright\n- SQL\n"), []);
+  });
+
+  it("no currículo válido da sandbox, pega os 5 bullets citados", () => {
+    const bullets = extractExperienceBullets(fixture("resume.ok.md"));
+    assert.equal(bullets.length, 5);
+    assert.ok(bullets.every((b) => b.includes("[exp:")));
   });
 });
 
