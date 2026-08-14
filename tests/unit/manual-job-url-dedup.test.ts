@@ -156,7 +156,7 @@ describe("addJobByUrl — reenvio da mesma URL corrige, não duplica", () => {
     assert.match(segunda.error!, /já existe no banco/);
   });
 
-  it("URL já avançou além de new/queued sem candidatura (ex.: rejected): também recusa reenvio silencioso", async () => {
+  it("URL já avançou além de new/queued sem candidatura (ex.: rejected): também recusa reenvio silencioso, e aponta o Reverter", async () => {
     resetDb();
     stubLinkedinPage();
     const primeira = await addJobByUrl(loadConfig(), LINKEDIN_URL);
@@ -170,6 +170,55 @@ describe("addJobByUrl — reenvio da mesma URL corrige, não duplica", () => {
     });
     assert.equal(reenvio.ok, false);
     assert.match(reenvio.error!, new RegExp(primeira.job!.id));
+    // Achado do code review: "rejected" sem candidatura TEM recuperação real na
+    // UI ("Reverter ↩", POST /api/revert) — a mensagem tem que apontar pra lá
+    // em vez de mandar "editar pelo card" (que não existe).
+    assert.match(reenvio.error!, /Reverter/);
     assert.equal(countJobsByUrl(LINKEDIN_URL), 1);
+  });
+
+  it("URL nova cuja correção colidiria com OUTRA vaga (mesmo cargo+empresa): erro nomeado, sem crash de UNIQUE", async () => {
+    // Achado do code review: jobs.fingerprint é NOT NULL UNIQUE, e o UPDATE de
+    // updateManualJobDetails recalculava o fingerprint sem checar colisão —
+    // corrigir a 2ª vaga pro mesmo cargo+empresa da 1ª estourava a constraint
+    // crua. Agora pré-checa e devolve a vaga colidente pelo nome.
+    resetDb();
+    stubLinkedinPage();
+    const primeira = await addJobByUrl(loadConfig(), LINKEDIN_URL, {
+      title: "Analista de Inteligência Artificial Pleno",
+      companyName: "Nava",
+    });
+    assert.ok(primeira.ok, primeira.error);
+
+    const outraUrl = "https://www.linkedin.com/jobs/view/8888888888/?alternateChannel=search";
+    const stubOutraVaga = () => {
+      stub?.restore();
+      stub = installFetchStub([
+        [
+          /linkedin\.com\/jobs\/view\/8888888888/,
+          {
+            body:
+              "<html><head><title>outra vaga qualquer</title></head><body>" +
+              "descricao da vaga ".repeat(60) +
+              "</body></html>",
+            contentType: "text/html",
+          },
+        ],
+      ]);
+    };
+
+    stubOutraVaga();
+    const segunda = await addJobByUrl(loadConfig(), outraUrl); // insert cru, empresa "?"
+    assert.ok(segunda.ok, segunda.error);
+
+    stubOutraVaga();
+    const correcao = await addJobByUrl(loadConfig(), outraUrl, {
+      title: "Analista de Inteligência Artificial Pleno",
+      companyName: "Nava",
+    });
+    assert.equal(correcao.ok, false);
+    assert.match(correcao.error!, new RegExp(primeira.job!.id));
+    assert.match(correcao.error!, /bateria com outra vaga/);
+    assert.equal(countJobsByUrl(outraUrl), 1, "a linha da 2ª vaga não pode ter sido corrompida pela tentativa");
   });
 });

@@ -72,22 +72,42 @@ export async function addJobByUrl(
   let job: JobRow;
   const updated = !!already;
   if (already) {
-    if (getApplicationByJob(already.id) || !["new", "queued"].includes(already.status)) {
+    const temCandidatura = !!getApplicationByJob(already.id);
+    if (temCandidatura || !["new", "queued"].includes(already.status)) {
+      // "Reverter ↩" (POST /api/revert) só existe pra status 'rejected' sem
+      // candidatura — é a ÚNICA recuperação de verdade que a UI oferece hoje.
+      // Apontar pra ela quando ela existe evita o beco sem saída que esta
+      // mensagem tinha antes ("edite pelo próprio card" — não existe edição
+      // de cargo/empresa em lugar nenhum da UI).
+      const comoRecuperar =
+        !temCandidatura && already.status === "rejected"
+          ? ' — reverta em "vagas rejeitadas" (botão "Reverter ↩") e reenvie a URL depois'
+          : "";
       return {
         ok: false,
         error:
           `esta URL já está no funil como "${already.title}" @ ${already.company_name} ` +
-          `(job_id ${already.id}, status ${already.status}) — já passou de "nova/na fila", ` +
-          `reenviar a URL não sobrescreve; edite pelo próprio card`,
+          `(job_id ${already.id}, status ${already.status}) — reenviar a URL não sobrescreve${comoRecuperar}`,
         extractionWarnings: [],
       };
     }
-    updateManualJobDetails(already.id, {
+    const atualizado = updateManualJobDetails(already.id, {
       title: raw.title,
       companyName: raw.companyName,
       description: raw.description,
     });
-    job = getJob(already.id)!;
+    if (!atualizado || !atualizado.ok) {
+      const col = atualizado && !atualizado.ok ? atualizado.collision : undefined;
+      return {
+        ok: false,
+        error: col
+          ? `a correção bateria com outra vaga já cadastrada: "${col.title}" @ ${col.company_name} ` +
+            `(job_id ${col.id}) — cargo/empresa já usados noutra linha; ajuste o texto pra diferenciar`
+          : "não foi possível corrigir a vaga existente",
+        extractionWarnings: [],
+      };
+    }
+    job = atualizado.job;
   } else {
     const inserted = insertJob(raw);
     if (!inserted) {
