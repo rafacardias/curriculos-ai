@@ -47,11 +47,12 @@ import { getJob } from "../src/db/repo/jobs.js";
 import { loadConfig } from "../src/core/config.js";
 import { assertVariantDeclarada, VariantError } from "../src/core/variant-guard.js";
 import { loadMasterProfile } from "../src/core/profile.js";
-import { truthcheck, stripCitations } from "../src/core/truthcheck.js";
+import { truthcheck, stripCitations, extractExperienceBullets } from "../src/core/truthcheck.js";
 import { coverageReport, renderCoverageMd } from "../src/core/coverage.js";
 import {
   checkExpectedFiles,
   checkPlaceholders,
+  checkWeakBulletPhrasing,
   checkAtsHostileHtml,
   checkTextFidelity,
   checkReadingOrder,
@@ -194,6 +195,7 @@ const presentes = Object.fromEntries(
 const falhasConteudo = [
   checkExpectedFiles(EXPECTED, entregaveis),
   checkPlaceholders(presentes),
+  checkWeakBulletPhrasing(extractExperienceBullets(resumeMd)),
 ].filter((f): f is GateFailure => f != null);
 
 if (falhasConteudo.length) {
@@ -230,9 +232,14 @@ if (falhasAts.length) {
 }
 
 if (values["write-report"]) {
+  const cleanBullets = extractExperienceBullets(cleanMd);
+  const bulletMetrics = {
+    total: cleanBullets.length,
+    withoutMetric: cleanBullets.filter((b) => !/\d/.test(b)).length,
+  };
   writeFileSync(
     join(dir, "coverage-report.md"),
-    renderCoverageMd(report, { pages: pdfText.pages, extractedChars: pdfText.text.length }),
+    renderCoverageMd(report, { pages: pdfText.pages, extractedChars: pdfText.text.length }, bulletMetrics),
     "utf-8"
   );
 }
