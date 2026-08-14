@@ -14,7 +14,7 @@
  */
 import { describe, it, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { copyFileSync, readdirSync, existsSync, rmSync, readFileSync } from "node:fs";
+import { copyFileSync, readdirSync, existsSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT, SANDBOX_ROOT, resetSandboxData, runCli } from "../helpers/sandbox.js";
 import { insertJob } from "../../src/db/repo/jobs.js";
@@ -109,5 +109,43 @@ describe("kit.ts finalize — gates de ATS (exit 4)", () => {
     // Um gate que se desliga sozinho quando a ferramenta some é pior que gate
     // nenhum: cria a impressão de que foi verificado.
     await assert.rejects(() => extractPdfText(join(kitDir, "nao-existe.pdf")));
+  });
+
+  it("bullet com abertura passiva ('Responsável por') → exit 3, gate car_frase_fraca", () => {
+    useKit("resume.weak-bullet.md");
+    const r = runCli("src/cli/kit.ts", ["finalize", jobId]);
+
+    assert.equal(r.status, 3, `esperava exit 3, veio ${r.status}. stderr: ${r.stderr}`);
+    assert.match(r.stderr, /GATES DE CONTEÚDO FALHARAM/);
+    assert.match(r.stderr, /car_frase_fraca/);
+    assert.match(r.stderr, /Responsável por manter/);
+  });
+
+  it("finalize bem-sucedido: nenhum [exp:...] sobrevive em NENHUM entregável, nem no cover-letter.pdf", async () => {
+    // O bug real: stripCitations só limpava a variável usada no PDF do currículo.
+    // resume.md ficava sujo no disco e cover-letter.md nunca passava pelo strip —
+    // o cover-letter.pdf saía com a tag visível. Fixture da carta aqui inclui uma
+    // citação de propósito, para provar que ela também é removida.
+    useKit("resume.ok.md");
+    writeFileSync(
+      join(kitDir, "cover-letter.md"),
+      "# Carta de Apresentação\n\nEstruturei a suíte de regressão do checkout [exp:exp-acme-qa.f1] " +
+        "e reduzi o tempo de triagem de bug [exp:exp-acme-qa.f2].\n\nAna Teste\n",
+      "utf-8"
+    );
+
+    const r = runCli("src/cli/kit.ts", ["finalize", jobId]);
+    assert.equal(r.status, 0, `finalize falhou: ${r.stderr}`);
+
+    for (const nome of ["resume.md", "cover-letter.md", "answers.md", "outreach.md"]) {
+      const conteudo = readFileSync(join(kitDir, nome), "utf-8");
+      assert.doesNotMatch(conteudo, /\[exp:/, `${nome} ainda tem citação no disco`);
+    }
+
+    const coverPdf = await extractPdfText(join(kitDir, "cover-letter.pdf"));
+    assert.doesNotMatch(coverPdf.text, /\[exp:/, "cover-letter.pdf vazou citação");
+
+    const resumePdf = await extractPdfText(join(kitDir, "resume.pdf"));
+    assert.doesNotMatch(resumePdf.text, /\[exp:/, "resume.pdf vazou citação");
   });
 });
