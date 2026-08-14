@@ -43,6 +43,38 @@ export function checkPlaceholders(files: Record<string, string>): GateFailure | 
   return detail.length ? { gate: "placeholder", detail } : null;
 }
 
+/**
+ * Aberturas que a skill `/gerar` proíbe explicitamente — sintoma de bullet fora
+ * do formato CAR (Contexto → Ação → Resultado).
+ *
+ * Só as proibições LITERAIS da skill (.claude/skills/gerar/SKILL.md) viram
+ * bloqueio. "Abrir com verbo de ação forte" e "terminar com resultado
+ * quantificado" ficam de fora de propósito: a própria skill qualifica o segundo
+ * ("sem número no fato → resultado qualitativo, nunca inventar métrica"), e
+ * cobrar mecanicamente uma nuance produz falso positivo — que treina o operador
+ * a ignorar o gate.
+ */
+const FRASE_FRACA_RE = /\b(respons[aá]vel por|ajudei (?:a|em|no|na)|participei (?:de|do|da)|auxiliei)\b/i;
+
+/**
+ * Nenhum bullet de experiência abre de forma passiva.
+ *
+ * A metodologia CAR estava só no texto do prompt: nada no pipeline conferia, e
+ * prompt sem gate degrada em silêncio na primeira geração que sair do formato.
+ */
+export function checkWeakBulletPhrasing(bullets: string[]): GateFailure | null {
+  const detail: string[] = [];
+  for (const b of bullets) {
+    if (FRASE_FRACA_RE.test(b)) {
+      detail.push(
+        `"${b.slice(0, 90)}" — evite abertura passiva; abra com verbo de ação forte ` +
+          `(metodologia CAR, skill /gerar)`
+      );
+    }
+  }
+  return detail.length ? { gate: "car_frase_fraca", detail } : null;
+}
+
 /** Um arquivo é "vazio" se não tem nada além de espaço em branco. */
 const MIN_CHARS = 1;
 

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { REPO_ROOT } from "../helpers/sandbox.js";
 import {
   checkPlaceholders,
+  checkWeakBulletPhrasing,
   checkExpectedFiles,
   checkAtsHostileHtml,
   checkTextFidelity,
@@ -51,6 +52,52 @@ describe("checkPlaceholders — [CONFIRMAR: ...] nunca chega ao envio", () => {
 
   it("colchete que não é o marcador não dispara", () => {
     assert.equal(checkPlaceholders({ "r.md": "- Fiz X [exp:a.f1] e [nota] e [CONFIRMADO: ok]" }), null);
+  });
+});
+
+describe("checkWeakBulletPhrasing — a metodologia CAR sai do prompt e vira gate", () => {
+  it("bloqueia 'responsável por' e devolve o bullet ofensor", () => {
+    const r = checkWeakBulletPhrasing(["- Responsável por manter a suíte de regressão [exp:a.f1]"]);
+    assert.ok(r);
+    assert.equal(r.gate, "car_frase_fraca");
+    assert.equal(r.detail.length, 1);
+    assert.match(r.detail[0]!, /Respons[aá]vel por manter/);
+  });
+
+  it("é indiferente à capitalização e ao acento", () => {
+    for (const b of ["- Ajudei em migrações de banco", "- ajudei na migração", "- Responsavel por QA"]) {
+      assert.ok(checkWeakBulletPhrasing([b]), `deveria bloquear: ${b}`);
+    }
+  });
+
+  it("pega as outras aberturas que a skill proíbe, uma linha de detalhe por bullet", () => {
+    const r = checkWeakBulletPhrasing([
+      "- Participei de reuniões de refinamento",
+      "- Auxiliei o time de produto",
+      "- Estruturei a suíte de regressão do checkout [exp:a.f1]",
+    ]);
+    assert.equal(r?.detail.length, 2);
+  });
+
+  it("bullet com verbo de ação forte passa", () => {
+    const ok = [
+      "- Estruturei a suíte de regressão manual do checkout, cobrindo 42 casos [exp:a.f1]",
+      "- Reduzi o tempo de triagem de bug de 3 dias para 8 horas [exp:a.f2]",
+    ];
+    assert.equal(checkWeakBulletPhrasing(ok), null);
+  });
+
+  it("lista vazia passa — currículo sem seção de experiência não é defeito deste gate", () => {
+    assert.equal(checkWeakBulletPhrasing([]), null);
+    assert.equal(checkWeakBulletPhrasing([""]), null);
+  });
+
+  it("não dispara em palavra que só CONTÉM o termo proibido", () => {
+    // `\b` na regex: "responsabilidade" e "coparticipei" não são a abertura passiva.
+    assert.equal(
+      checkWeakBulletPhrasing(["- Assumi a responsabilidade pelo pipeline de release [exp:a.f1]"]),
+      null
+    );
   });
 });
 
