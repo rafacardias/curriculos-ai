@@ -38,7 +38,24 @@ export interface PdfFacts {
   extractedChars: number;
 }
 
-export function renderCoverageMd(report: CoverageReport, pdf?: PdfFacts): string {
+/**
+ * Quantos bullets de experiência não têm nenhum dígito — proxy barato de
+ * "resultado quantificado", a parte final da metodologia CAR. Nunca é gate:
+ * a skill `/gerar` já qualifica isso ("sem número no fato → resultado
+ * qualitativo, nunca inventar métrica"), então virar bloqueio produziria falso
+ * positivo. Fica ao lado do ATS score — mesma honestidade de "isto é sinal,
+ * não veredito".
+ */
+export interface BulletMetricFacts {
+  total: number;
+  withoutMetric: number;
+}
+
+export function renderCoverageMd(
+  report: CoverageReport,
+  pdf?: PdfFacts,
+  bulletMetrics?: BulletMetricFacts
+): string {
   return [
     "# Coverage Report",
     "",
@@ -50,6 +67,15 @@ export function renderCoverageMd(report: CoverageReport, pdf?: PdfFacts): string
           pdf.pages > 1
             ? "> 2+ páginas costuma jogar contra em vaga de entrada e é esperado em sênior — " +
               "por isso é informação, não gate."
+            : "",
+        ].filter(Boolean)
+      : []),
+    ...(bulletMetrics && bulletMetrics.total > 0
+      ? [
+          `**Bullets sem resultado numérico:** ${bulletMetrics.withoutMetric}/${bulletMetrics.total}`,
+          bulletMetrics.withoutMetric > 0
+            ? "> Pode ser esperado se o fato não tiver métrica — nunca invente número só pra " +
+              "fechar a conta. Revise se fizer sentido quantificar."
             : "",
         ].filter(Boolean)
       : []),

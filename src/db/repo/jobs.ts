@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { getDb, nowIso, PROJECT_ROOT } from "../client.js";
 import { jobFingerprint, detectAtsPlatform, detectSeniority } from "../../core/dedup.js";
 import { upsertCompany } from "./companies.js";
-import type { RawJob } from "../../core/types.js";
+import type { RawJob, JobSource } from "../../core/types.js";
 import type { AssertedModality } from "../../core/modality.js";
 
 export interface JobRow {
@@ -141,6 +141,96 @@ export function insertJob(raw: RawJob): JobRow | null {
 
 export function getJob(id: string): JobRow | undefined {
   return getDb().prepare("SELECT * FROM jobs WHERE id = ?").get(id) as JobRow | undefined;
+}
+
+/**
+ * Vaga já cadastrada com esta URL exata.
+ *
+ * `insertJob` não checa URL — só `(source, source_job_id)` e `jobFingerprint`
+ * (companyName+title+location). Para o fallback `/vaga <url>` isso é o bug: a
+ * UI instrui "reenvie a mesma URL preenchendo cargo e empresa" quando a
+ * extração erra (título vira "?", empresa vira "?"), mas sem checagem por URL
+ * cada reenvio virava uma vaga NOVA — mesmo link, N linhas em `jobs`, cada uma
+ * com fingerprint diferente porque o texto corrigido muda o hash. `getJobByUrl`
+ * é o que permite ao chamador decidir "isto é uma correção" em vez de inserir.
+ */
+export function getJobByUrl(url: string): JobRow | undefined {
+  return getDb().prepare("SELECT * FROM jobs WHERE url = ?").get(url) as JobRow | undefined;
+}
+
+export type UpdateManualJobResult = { ok: true; job: JobRow } | { ok: false; collision: JobRow };
+
+/**
+ * Corrige título/empresa/descrição de uma vaga manual já cadastrada — o caminho
+ * do reenvio de URL (ver `getJobByUrl`). Fingerprint é recalculado porque o
+ * texto mudou; a URL, que é a chave de identidade do reenvio, não.
+ *
+ * `jobs.fingerprint` é `NOT NULL UNIQUE` (001_init.sql). Duas vagas manuais de
+ * URLs diferentes, corrigidas pro MESMO cargo+empresa+localização, colidiriam
+ * no UPDATE — pré-checa com `findExistingJob` (ignorando a própria linha) e
+ * devolve a colisão nomeada em vez de deixar o `SqliteError` de constraint
+ * subir cru pro operador.
+ */
+export function updateManualJobDetails(
+  id: string,
+  fields: { title?: string; companyName?: string; description?: string }
+): UpdateManualJobResult | undefined {
+  const db = getDb();
+  const job = getJob(id);
+  if (!job) return undefined;
+  const title = fields.title ?? job.title;
+  const companyName = fields.companyName ?? job.company_name;
+  const description = fields.description ?? job.description ?? null;
+
+  const collision = findExistingJob(
+    {
+      source: job.source as JobSource,
+      sourceJobId: job.source_job_id ?? undefined,
+      companyName,
+      title,
+      location: job.location ?? undefined,
+    },
+    id
+  );
+  if (collision) return { ok: false, collision };
+
+  const company = upsertCompany(companyName);
+  const fingerprint = jobFingerprint({ companyName, title, location: job.location ?? undefined });
+  db.prepare(
+    `UPDATE jobs SET title = ?, company_id = ?, company_name = ?, description = ?, seniority = ?, fingerprint = ?
+       WHERE id = ?`
+  ).run(title, company.id, companyName, description, detectSeniority(title) ?? null, fingerprint, id);
+  return { ok: true, job: getJob(id)! };
+}
+
+/**
+ * Vaga já existente que colide com `raw` — mesma checagem de 2 camadas do
+ * `insertJob` (source_job_id, depois fingerprint), mas devolvendo a linha em
+ * vez de um booleano. `insertJob` só precisa saber "existe ou não"; quem fala
+ * com o operador (o fallback `/vaga <url>`) precisa dizer QUAL vaga é a
+ * duplicata — "já existe" sem id é um beco sem saída para quem recebe o erro.
+ *
+ * `excludeId` ignora a própria linha — necessário quando quem chama está
+ * corrigindo uma vaga já existente (`updateManualJobDetails`) e não quer que
+ * ela colida consigo mesma.
+ */
+export function findExistingJob(
+  raw: Pick<RawJob, "source" | "sourceJobId" | "companyName" | "title" | "location">,
+  excludeId?: string
+): JobRow | undefined {
+  const db = getDb();
+  if (raw.sourceJobId) {
+    const bySourceId = db
+      .prepare("SELECT * FROM jobs WHERE source = ? AND source_job_id = ?")
+      .get(raw.source, raw.sourceJobId) as JobRow | undefined;
+    if (bySourceId && bySourceId.id !== excludeId) return bySourceId;
+  }
+  const fingerprint = jobFingerprint(raw);
+  const byFingerprint = db.prepare("SELECT * FROM jobs WHERE fingerprint = ?").get(fingerprint) as
+    | JobRow
+    | undefined;
+  if (byFingerprint && byFingerprint.id !== excludeId) return byFingerprint;
+  return undefined;
 }
 
 export function updateJobScore(

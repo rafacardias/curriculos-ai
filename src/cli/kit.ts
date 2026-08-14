@@ -8,7 +8,8 @@
  * uma coisa diferente e os testes asseram isso:
  *   1  resume.md ausente
  *   2  truthcheck (citação inexistente ou bullet sem citação)
- *   3  conteúdo ([CONFIRMAR: ...] sobrevivente, entregável ausente ou vazio)
+ *   3  conteúdo ([CONFIRMAR: ...] sobrevivente, entregável ausente ou vazio,
+ *      bullet de experiência com abertura passiva — fora do formato CAR)
  *   4  ATS (HTML hostil, ou o PDF não devolve o texto que deveria)
  *
  * E dois do prepare:
@@ -30,11 +31,12 @@ import {
 import { loadMasterProfile, loadCandidateFacts } from "../core/profile.js";
 import { loadConfig } from "../core/config.js";
 import { extractKeywords } from "../core/keywords.js";
-import { truthcheck, stripCitations } from "../core/truthcheck.js";
+import { truthcheck, stripCitations, extractExperienceBullets } from "../core/truthcheck.js";
 import { coverageReport, renderCoverageMd } from "../core/coverage.js";
 import {
   checkExpectedFiles,
   checkPlaceholders,
+  checkWeakBulletPhrasing,
   checkAtsHostileHtml,
   checkTextFidelity,
   checkReadingOrder,
@@ -315,9 +317,11 @@ O finalize roda os MESMOS gates — citação inexistente reprova igual (exit 2)
     Object.entries(entregaveis).filter(([, v]) => v != null)
   ) as Record<string, string>;
 
+  const bullets = extractExperienceBullets(resumeMd);
   const falhasConteudo = [
     checkExpectedFiles(EXPECTED, entregaveis),
     checkPlaceholders(presentes),
+    checkWeakBulletPhrasing(bullets),
   ].filter((f): f is GateFailure => f != null);
 
   if (falhasConteudo.length) {
@@ -328,25 +332,46 @@ O finalize roda os MESMOS gates — citação inexistente reprova igual (exit 2)
     process.exit(3);
   }
 
-  // 3. Coverage — calculado aqui, mas GRAVADO depois do render: o relatório passou
+  // 3. Remove as citações de TODOS os entregáveis — só EM MEMÓRIA por enquanto.
+  //    A tag `[exp:...]` é o guardrail interno de veracidade (o truthcheck já
+  //    rodou acima) e nunca deveria sobreviver ao envio, mas gravar o .md limpo
+  //    no disco AGORA quebraria o re-run: se o exit 4 (gates de ATS) reprovar
+  //    mais adiante, a PRÓXIMA chamada de `finalize` — e o harness roda em
+  //    laço até passar — leria um resume.md já sem citação e o truthcheck
+  //    acusaria "bullet sem citação" num arquivo que o redator nunca escreveu
+  //    assim. A gravação em disco só acontece depois que TODOS os gates
+  //    (conteúdo E ats) já passaram — ver bloco 7.
+  for (const nome of EXPECTED) {
+    const raw = entregaveis[nome];
+    if (raw == null) continue;
+    entregaveis[nome] = stripCitations(raw);
+  }
+  const cleanMd = entregaveis["resume.md"]!;
+
+  // 4. Coverage — calculado aqui, mas GRAVADO depois do render: o relatório passou
   //    a trazer páginas e caracteres extraíveis do PDF, que só existem lá na frente.
-  const cleanMd = stripCitations(resumeMd);
   const jdText = `${job.title}\n${job.description ?? ""}`;
   const report = coverageReport(jdText, cleanMd);
+  const cleanBullets = extractExperienceBullets(cleanMd);
+  const bulletMetrics = {
+    total: cleanBullets.length,
+    withoutMetric: cleanBullets.filter((b) => !/\d/.test(b)).length,
+  };
 
-  // 4. Render PDFs
+  // 5. Render PDFs — a partir do texto já limpo EM MEMÓRIA (bloco 3), nunca
+  //    relendo o .md do disco: o disco ainda tem a versão crua até o bloco 7.
   const resumeHtml = wrapAtsHtml(cleanMd, `${profile.identity.name} — ${job.title}`);
   const resumePdf = join(kitDir, "resume.pdf");
   const { innerText } = await htmlToPdf(resumeHtml, resumePdf);
-  const coverPath = join(kitDir, "cover-letter.md");
-  if (existsSync(coverPath)) {
+  const cleanCoverMd = entregaveis["cover-letter.md"];
+  if (cleanCoverMd != null) {
     await htmlToPdf(
-      wrapAtsHtml(readFileSync(coverPath, "utf-8"), `Cover Letter — ${profile.identity.name}`),
+      wrapAtsHtml(cleanCoverMd, `Cover Letter — ${profile.identity.name}`),
       join(kitDir, "cover-letter.pdf")
     );
   }
 
-  // 5. Gates de ATS (exit 4) — o que a máquina do outro lado vai conseguir ler.
+  // 6. Gates de ATS (exit 4) — o que a máquina do outro lado vai conseguir ler.
   //    Três verificações que não se substituem: o HTML não pode ter construção
   //    hostil; o texto extraído do PDF prova o que o ATS de fato lê; e o
   //    innerText comparado ao PDF prova que a ORDEM DE LEITURA sobreviveu — é a
@@ -367,13 +392,24 @@ O finalize roda os MESMOS gates — citação inexistente reprova igual (exit 2)
     process.exit(4);
   }
 
+  // 7. Só agora, com TODOS os gates passados, sobrescreve os .md no disco com a
+  //    versão sem citação. Até aqui o resume.md e o cover-letter.md no disco
+  //    continuavam com `[exp:...]` de propósito (bloco 3) — o kit só "queima"
+  //    (perde a citação que o truthcheck precisa) quando ele de fato vai ser
+  //    entregue, nunca numa tentativa que ainda pode falhar e ser re-rodada.
+  for (const nome of EXPECTED) {
+    const limpo = entregaveis[nome];
+    if (limpo == null) continue;
+    writeFileSync(join(kitDir, nome), limpo, "utf-8");
+  }
+
   writeFileSync(
     join(kitDir, "coverage-report.md"),
-    renderCoverageMd(report, { pages: pdfText.pages, extractedChars: pdfText.text.length }),
+    renderCoverageMd(report, { pages: pdfText.pages, extractedChars: pdfText.text.length }, bulletMetrics),
     "utf-8"
   );
 
-  // 6. Registros
+  // 8. Registros
   const policy = decidePolicy(config, job, job.score ?? 0, job.track_hint);
   let app = getApplicationByJob(jobId);
   if (!app) app = createApplication(jobId, job.track_hint, kitDir, policy.submissionMode);

@@ -931,6 +931,104 @@ Corrigir o `⚠` exigiria um conceito de "invocação" que o schema não tem —
 (ou equivalente) ligando as N linhas de um mesmo `/buscar`. Migration aditiva, escopo pequeno, mas
 é decisão de modelagem, não conserto de leitura. Fica registrado, não emendado.
 
+### ACHADO-21 · citação de veracidade `[exp:...]` vazava até o PDF entregue — corrigido
+
+**Medido em 2026-08-13**, relatado pelo operador ao ver `[exp:exp-curriculos.f7]` literal num
+currículo gerado. Um kit real de output/ (removido do exemplo por conter dado pessoal — regra do
+CLAUDE.md) tinha 14 ocorrências de `[exp:` no `resume.md` entregue.
+
+`stripCitations()` (`src/core/truthcheck.ts`) sempre esteve correta e testada. O defeito era em
+quem deixava de chamá-la, em dois pontos diferentes de `src/cli/kit.ts` (`finalize`):
+
+1. `cleanMd = stripCitations(resumeMd)` virava só uma variável local usada no PDF/coverage do
+   currículo — **o `resume.md` no disco nunca era sobrescrito**. `resume_versions.resume_md_path`
+   (gravado por `insertResumeVersion`) apontava pro path sujo, então o `/painel` herdava.
+2. **Pior**: `cover-letter.md` ia direto pro `htmlToPdf` sem passar por `stripCitations`
+   nenhuma vez — o `cover-letter.pdf` final tinha `[exp:...]` visível, e nenhum gate de ATS
+   pegava isso (`checkTextFidelity` só comparava o currículo).
+
+Correção: o strip deixou de ser uma variável local pontual e passou a rodar uma vez, em memória,
+sobre os 4 entregáveis (`resume.md`, `cover-letter.md`, `answers.md`, `outreach.md`) — dois pontos
+que precisavam concordar e divergiram é exatamente o padrão que este projeto já tinha aprendido a
+evitar (`hardFilterReason`, `applyFeedback`), então a correção também vira um único caminho, não
+dois consertados em paralelo.
+
+**Revisão de código achou um blocker no fix original e ele foi corrigido antes do merge**: a
+primeira versão gravava o `.md` limpo no disco **antes** dos gates de ATS (exit 4). Se esse gate
+reprovasse (ex.: tabela markdown → HTML hostil), o `resume.md` no disco já estava sem citação — e
+como o `finalize` é reexecutado em laço pelo harness até passar (é assim que o pipeline agêntico
+funciona), a PRÓXIMA tentativa lia esse arquivo já limpo e o `truthcheck` acusava "bullet sem
+citação" num arquivo que o redator nunca escreveu assim, culpando veracidade por uma falha de ATS.
+Corrigido adiando a gravação em disco para DEPOIS que todos os gates (conteúdo E ats) passarem; o
+render do PDF da carta passou a ler o texto limpo em memória em vez de reler o `.md` do disco, que
+era o único motivo pelo qual a escrita precisava vir antes. Regressão coberta por
+`tests/e2e/kit-ats-gate.test.ts` ("IDEMPOTÊNCIA").
+
+**De brinde, um segundo bug ficou visível durante a investigação**: a metodologia CAR
+(Contexto→Ação→Resultado, `.claude/skills/gerar/SKILL.md`) nunca teve enforcement mecânico — só
+instrução de prompt. Novo gate `checkWeakBulletPhrasing` (`src/core/gates.ts`) bloqueia (exit 3,
+mesma família do gate de placeholder) as aberturas que a skill já proibia em termos absolutos
+("responsável por/pela/pelo/pelos/pelas", "ajudei em", "participei de", "auxiliei" — a lista da
+skill foi atualizada pra incluir "auxiliei", que o gate já cobria). A checagem é ANCORADA na
+abertura do bullet (depois do marcador `- `/`* `), não em qualquer posição da frase — achado da
+revisão: sem âncora, "Construí o serviço responsável por processar 2M eventos/dia" (PT-BR
+legítimo, "responsável" qualifica o sistema) reprovaria à toa. Deliberadamente não virou gate a
+exigência de "verbo de ação forte" nem "resultado quantificado" — a própria skill qualifica o
+segundo como opcional, e a primeira exigiria uma lista de verbos válidos com alto risco de falso
+positivo em PT-BR. Varredura dos 26 kits reais em `output/` (350 bullets) não achou nenhum falso
+positivo. Uma contagem informativa (não bloqueante) de bullets sem nenhum dígito entra em
+`coverage-report.md`, mesmo espírito do rótulo "ATS score é estimativa heurística" que já existia.
+
+`scripts/measure-kit.ts` — que roda os MESMOS gates do `finalize` pra comparar vias de redação
+(cli × agentic) sem contaminar o funil — não tinha o gate novo, o que divergia do próprio contrato
+que o script declara ("se divergir do finalize, o número não vale nada"); corrigido, e
+`tests/unit/kit-measure-parity.test.ts` varre os dois arquivos pra impedir a próxima divergência.
+
+Cobertura de teste: `tests/e2e/kit-ats-gate.test.ts` prova que, depois de um `finalize`
+bem-sucedido, nenhum dos 4 `.md` no disco nem o texto extraído do `cover-letter.pdf` contém
+`[exp:`; e que um bullet com abertura proibida sai com exit 3 e o gate `car_frase_fraca`.
+
+### ACHADO-22 · reenviar a mesma URL em `/vaga` duplicava a linha em vez de corrigir
+
+**Medido em 2026-08-13**, relatado pelo operador ("tenho tido problemas ao adicionar url de vagas
+manualmente"). No banco real, a mesma URL do LinkedIn virou 2 linhas em `jobs`: a primeira com
+`company_name = "?"` (extração crua falhou), a segunda já com empresa/cargo corretos — porque o
+operador seguiu a própria instrução da UI ("reenvie a mesma URL preenchendo cargo e empresa") pra
+corrigir. Numa 3ª tentativa com o mesmo texto da 2ª, o insert foi barrado com "vaga já existe no
+banco (fingerprint duplicado)" — sem dizer qual vaga colidiu.
+
+Causa: `insertJob` (`src/db/repo/jobs.ts`) dedupa por `(source, source_job_id)` — que o fallback
+manual nunca preenche — e por `jobFingerprint` (hash de empresa+cargo+localização). Corrigir o
+texto extraído MUDA o hash, então cada correção virava insert novo em vez de update.
+
+Correção: `addJobByUrl` (`src/core/manual-job.ts`) agora checa `getJobByUrl` antes de inserir.
+URL já cadastrada e ainda `new`/`queued` sem candidatura → corrige a linha existente
+(`updateManualJobDetails`) em vez de duplicar. URL já avançada no funil → recusa e cita o
+`job_id` da vaga existente, nunca sobrescreve em silêncio. Mesma lógica passou a valer quando o
+`insertJob` normal barra por fingerprint: o erro agora nomeia a vaga colidente
+(`findExistingJob`), não só "já existe". Testes: `tests/unit/manual-job-url-dedup.test.ts`.
+
+**Revisão de código (mesma sessão) achou mais dois problemas no próprio fix, os dois corrigidos
+antes do merge:**
+
+1. `updateManualJobDetails` recalculava o fingerprint no UPDATE sem checar colisão —
+   `jobs.fingerprint` é `NOT NULL UNIQUE`, então corrigir duas vagas de URLs diferentes pro mesmo
+   cargo+empresa+localização estourava a constraint crua (stack trace pro operador). Agora
+   pré-checa com `findExistingJob(..., excludeId)` e devolve a vaga colidente pelo nome, em vez de
+   deixar o `SqliteError` subir.
+2. A mensagem de recusa mandava "edite pelo próprio card" — não existe edição de cargo/empresa em
+   lugar nenhum da UI. Corrigida pra apontar a recuperação real: `status = 'rejected'` sem
+   candidatura tem o botão "Reverter ↩" (`POST /api/revert`); os outros casos (`applied_elsewhere`,
+   `expired`, ou já com candidatura) genuinamente não têm caminho de edição hoje — a mensagem para
+   de fingir que têm.
+
+**Não corrigido nesta rodada, registrado para depois:** o dedup por URL é igualdade EXATA
+(`WHERE url = ?`), sem normalização. Um link de LinkedIn/Gupy copiado de novo com `?refId=`
+diferente, `&utm_*`, ou barra final diferente não bate com a URL já cadastrada — o dedup passa reto
+e o bug original (linha duplicada) reaparece com o mesmo sintoma. Fix provável: normalizar (host
+minúsculo, remover query de tracking conhecida, sem barra final) antes de gravar e de comparar, ou
+uma coluna `url_canonical` indexada.
+
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
 Barreira de entrada por trilha, sobre as 375 vagas (2026-08-06):

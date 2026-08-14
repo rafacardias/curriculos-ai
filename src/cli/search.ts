@@ -44,7 +44,7 @@ if (values.url) {
     console.error(`erro: ${r.error}`);
     process.exit(1);
   }
-  console.log(`vaga inserida: ${r.job!.id}`);
+  console.log(`${r.updated ? "vaga corrigida (mesma URL já cadastrada)" : "vaga inserida"}: ${r.job!.id}`);
   console.log(`  ${r.job!.title} @ ${r.job!.company_name}`);
   console.log(`  score ${r.scored?.score} · trilha ${r.scored?.trackHint ?? "?"} · ${r.scored?.policyAction} · status ${r.scored?.status}`);
   for (const a of r.extractionWarnings) console.log(`  ⚠ ${a}`);

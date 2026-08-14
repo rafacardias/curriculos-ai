@@ -66,7 +66,7 @@ O bundle traz `variant` (A = metric-first, B = role-first) atribuída round-robi
 
 Keyword certa em sintaxe fraca não converte. Cada bullet segue a estrutura CAR (variante da fórmula XYZ do Google: "alcancei X, medido por Y, fazendo Z"):
 
-- **Abre com verbo de ação forte** no pretérito (PT: implementou→"Implementei"/liderou/reduziu/automatizou; EN: led/built/reduced/automated). Nunca "responsável por", "ajudei em", "participei de".
+- **Abre com verbo de ação forte** no pretérito (PT: implementou→"Implementei"/liderou/reduziu/automatizou; EN: led/built/reduced/automated). Nunca "responsável por", "ajudei em", "participei de", "auxiliei". Estas aberturas são bloqueadas mecanicamente no `finalize` (`checkWeakBulletPhrasing`, `src/core/gates.ts`) — não valem como estilo, valem como reprovação de build.
 - **Contexto curto** (onde/escala) + **ação específica** (o que fez, com as keywords do JD na sintaxe natural da frase — não em lista) + **resultado**.
 - **Resultado quantificado sempre que o fato tiver número** (%, R$, prazo, volume). Sem número no fato → resultado qualitativo do próprio fato; NUNCA inventar métrica (Regra nº 1).
 - 1 linha por bullet (máx. 2), 3–6 bullets por experiência, ordenados pela relevância para o JD (variante A/B decide metric-first vs role-first).
