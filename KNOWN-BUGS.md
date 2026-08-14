@@ -931,6 +931,62 @@ Corrigir o `⚠` exigiria um conceito de "invocação" que o schema não tem —
 (ou equivalente) ligando as N linhas de um mesmo `/buscar`. Migration aditiva, escopo pequeno, mas
 é decisão de modelagem, não conserto de leitura. Fica registrado, não emendado.
 
+### ACHADO-21 · citação de veracidade `[exp:...]` vazava até o PDF entregue — corrigido
+
+**Medido em 2026-08-13**, relatado pelo operador ao ver `[exp:exp-curriculos.f7]` literal num
+currículo gerado. Um kit real de output/ (removido do exemplo por conter dado pessoal — regra do
+CLAUDE.md) tinha 14 ocorrências de `[exp:` no `resume.md` entregue.
+
+`stripCitations()` (`src/core/truthcheck.ts`) sempre esteve correta e testada. O defeito era em
+quem deixava de chamá-la, em dois pontos diferentes de `src/cli/kit.ts` (`finalize`):
+
+1. `cleanMd = stripCitations(resumeMd)` virava só uma variável local usada no PDF/coverage do
+   currículo — **o `resume.md` no disco nunca era sobrescrito**. `resume_versions.resume_md_path`
+   (gravado por `insertResumeVersion`) apontava pro path sujo, então o `/painel` herdava.
+2. **Pior**: `cover-letter.md` ia direto pro `htmlToPdf` sem passar por `stripCitations`
+   nenhuma vez — o `cover-letter.pdf` final tinha `[exp:...]` visível, e nenhum gate de ATS
+   pegava isso (`checkTextFidelity` só comparava o currículo).
+
+Correção: o strip deixou de ser uma variável local pontual e passou a rodar uma vez, sobre os 4
+entregáveis (`resume.md`, `cover-letter.md`, `answers.md`, `outreach.md`), sobrescrevendo cada
+`.md` no disco ANTES de qualquer renderização — dois pontos que precisavam concordar e
+divergiram é exatamente o padrão que este projeto já tinha aprendido a evitar (`hardFilterReason`,
+`applyFeedback`), então a correção também vira um único caminho, não dois consertados em paralelo.
+
+**De brinde, um segundo bug ficou visível durante a investigação**: a metodologia CAR
+(Contexto→Ação→Resultado, `.claude/skills/gerar/SKILL.md`) nunca teve enforcement mecânico — só
+instrução de prompt. Novo gate `checkWeakBulletPhrasing` (`src/core/gates.ts`) bloqueia (exit 3,
+mesma família do gate de placeholder) as aberturas que a skill já proibia em termos absolutos
+("responsável por", "ajudei em", "participei de", "auxiliei"). Deliberadamente não virou gate a
+exigência de "verbo de ação forte" nem "resultado quantificado" — a própria skill qualifica o
+segundo como opcional, e a primeira exigiria uma lista de verbos válidos com alto risco de falso
+positivo em PT-BR. Uma contagem informativa (não bloqueante) de bullets sem nenhum dígito entra em
+`coverage-report.md`, mesmo espírito do rótulo "ATS score é estimativa heurística" que já existia.
+
+Cobertura de teste: `tests/e2e/kit-ats-gate.test.ts` prova que, depois de um `finalize`
+bem-sucedido, nenhum dos 4 `.md` no disco nem o texto extraído do `cover-letter.pdf` contém
+`[exp:`; e que um bullet com abertura proibida sai com exit 3 e o gate `car_frase_fraca`.
+
+### ACHADO-22 · reenviar a mesma URL em `/vaga` duplicava a linha em vez de corrigir
+
+**Medido em 2026-08-13**, relatado pelo operador ("tenho tido problemas ao adicionar url de vagas
+manualmente"). No banco real, a mesma URL do LinkedIn virou 2 linhas em `jobs`: a primeira com
+`company_name = "?"` (extração crua falhou), a segunda já com empresa/cargo corretos — porque o
+operador seguiu a própria instrução da UI ("reenvie a mesma URL preenchendo cargo e empresa") pra
+corrigir. Numa 3ª tentativa com o mesmo texto da 2ª, o insert foi barrado com "vaga já existe no
+banco (fingerprint duplicado)" — sem dizer qual vaga colidiu.
+
+Causa: `insertJob` (`src/db/repo/jobs.ts`) dedupa por `(source, source_job_id)` — que o fallback
+manual nunca preenche — e por `jobFingerprint` (hash de empresa+cargo+localização). Corrigir o
+texto extraído MUDA o hash, então cada correção virava insert novo em vez de update.
+
+Correção: `addJobByUrl` (`src/core/manual-job.ts`) agora checa `getJobByUrl` antes de inserir.
+URL já cadastrada e ainda `new`/`queued` sem candidatura → corrige a linha existente
+(`updateManualJobDetails`) em vez de duplicar. URL já avançada no funil → recusa e cita o
+`job_id` da vaga existente, nunca sobrescreve em silêncio. Mesma lógica passou a valer quando o
+`insertJob` normal barra por fingerprint: o erro agora nomeia a vaga colidente
+(`findExistingJob`), não só "já existe". Testes: `tests/unit/manual-job-url-dedup.test.ts`.
+
 ### ACHADO-01 · `ai-builder` é a trilha mais acessível do acervo
 
 Barreira de entrada por trilha, sobre as 375 vagas (2026-08-06):
