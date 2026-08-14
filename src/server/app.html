@@ -589,6 +589,7 @@ async function loadPipeline() {
       <span class="${spin ? "spin st" : "st"}">${label}</span>
       <span>${esc(p.title)} @ ${esc(p.company)}</span>
       ${p.detail ? `<span style="color:var(--bone-dim)">${esc(p.detail)}</span>` : ""}
+      ${p.stage === "erro" ? `<button class="btn" data-retry="${p.jobId}" style="padding:6px 14px;font-size:10px">tentar novamente ↻</button>` : ""}
     </div>`;
   }).join("");
   clearTimeout(pipeTimer);
@@ -596,6 +597,15 @@ async function loadPipeline() {
     pipeTimer = setTimeout(() => { loadPipeline(); loadBoard(); }, 5000);
   }
 }
+$("#pipeline").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-retry]");
+  if (!b) return;
+  b.disabled = true;
+  const r = await post("/api/apply", { jobId: b.dataset.retry });
+  if (!r.ok) { toast(r.error || "erro ao reenviar"); b.disabled = false; return; }
+  toast("reenviada ao pipeline — tentando de novo…");
+  loadPipeline();
+});
 
 /* ── rejeitadas (reversível) ───────────── */
 async function loadRejected() {
@@ -734,6 +744,7 @@ $("#goUrl").addEventListener("click", async () => {
   if (!r.ok) { note.textContent = `erro: ${r.error}`; return; }
   const avisos = (r.extractionWarnings || []).map((a) => `⚠ ${a}`).join("  ·  ");
   note.innerHTML =
+    (r.updated ? `<i>vaga já cadastrada — corrigida no lugar</i><br>` : "") +
     `<b>${esc(r.job.title)}</b> @ ${esc(r.job.company_name)} — score ${Math.round(r.scored?.score ?? 0)}` +
     ` · ${esc(r.scored?.policyAction || "")}` +
     (r.filtered ? ` · <span style="color:var(--signal)">${esc(r.filtered)}</span>` : "") +

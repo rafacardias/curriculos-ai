@@ -143,6 +143,65 @@ export function getJob(id: string): JobRow | undefined {
   return getDb().prepare("SELECT * FROM jobs WHERE id = ?").get(id) as JobRow | undefined;
 }
 
+/**
+ * Vaga já cadastrada com esta URL exata.
+ *
+ * `insertJob` não checa URL — só `(source, source_job_id)` e `jobFingerprint`
+ * (companyName+title+location). Para o fallback `/vaga <url>` isso é o bug: a
+ * UI instrui "reenvie a mesma URL preenchendo cargo e empresa" quando a
+ * extração erra (título vira "?", empresa vira "?"), mas sem checagem por URL
+ * cada reenvio virava uma vaga NOVA — mesmo link, N linhas em `jobs`, cada uma
+ * com fingerprint diferente porque o texto corrigido muda o hash. `getJobByUrl`
+ * é o que permite ao chamador decidir "isto é uma correção" em vez de inserir.
+ */
+export function getJobByUrl(url: string): JobRow | undefined {
+  return getDb().prepare("SELECT * FROM jobs WHERE url = ?").get(url) as JobRow | undefined;
+}
+
+/**
+ * Corrige título/empresa/descrição de uma vaga manual já cadastrada — o caminho
+ * do reenvio de URL (ver `getJobByUrl`). Fingerprint é recalculado porque o
+ * texto mudou; a URL, que é a chave de identidade do reenvio, não.
+ */
+export function updateManualJobDetails(
+  id: string,
+  fields: { title?: string; companyName?: string; description?: string }
+): void {
+  const db = getDb();
+  const job = getJob(id);
+  if (!job) return;
+  const title = fields.title ?? job.title;
+  const companyName = fields.companyName ?? job.company_name;
+  const description = fields.description ?? job.description ?? null;
+  const company = upsertCompany(companyName);
+  const fingerprint = jobFingerprint({ companyName, title, location: job.location ?? undefined });
+  db.prepare(
+    `UPDATE jobs SET title = ?, company_id = ?, company_name = ?, description = ?, seniority = ?, fingerprint = ?
+       WHERE id = ?`
+  ).run(title, company.id, companyName, description, detectSeniority(title) ?? null, fingerprint, id);
+}
+
+/**
+ * Vaga já existente que colide com `raw` — mesma checagem de 2 camadas do
+ * `insertJob` (source_job_id, depois fingerprint), mas devolvendo a linha em
+ * vez de um booleano. `insertJob` só precisa saber "existe ou não"; quem fala
+ * com o operador (o fallback `/vaga <url>`) precisa dizer QUAL vaga é a
+ * duplicata — "já existe" sem id é um beco sem saída para quem recebe o erro.
+ */
+export function findExistingJob(
+  raw: Pick<RawJob, "source" | "sourceJobId" | "companyName" | "title" | "location">
+): JobRow | undefined {
+  const db = getDb();
+  if (raw.sourceJobId) {
+    const bySourceId = db
+      .prepare("SELECT * FROM jobs WHERE source = ? AND source_job_id = ?")
+      .get(raw.source, raw.sourceJobId) as JobRow | undefined;
+    if (bySourceId) return bySourceId;
+  }
+  const fingerprint = jobFingerprint(raw);
+  return db.prepare("SELECT * FROM jobs WHERE fingerprint = ?").get(fingerprint) as JobRow | undefined;
+}
+
 export function updateJobScore(
   id: string,
   score: number,
