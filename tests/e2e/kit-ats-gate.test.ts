@@ -73,6 +73,33 @@ describe("kit.ts finalize — gates de ATS (exit 4)", () => {
     );
   });
 
+  it("IDEMPOTÊNCIA: exit 4 não queima o resume.md — rodar finalize de novo falha pelo MESMO motivo, não por citação sumida", () => {
+    // Achado do code review: o strip de citação passou a gravar o .md limpo no
+    // disco antes do render. Se o exit 4 (ATS) reprovasse depois disso, a
+    // PRÓXIMA chamada de finalize (o harness roda em laço até passar) leria um
+    // resume.md já sem [exp:...] e o truthcheck acusaria "bullet sem citação" —
+    // culpando veracidade por uma falha de tabela/HTML. O fix adiou a gravação
+    // pra depois de TODOS os gates passarem.
+    useKit("resume.tabela.md");
+    const primeira = runCli("src/cli/kit.ts", ["finalize", jobId]);
+    assert.equal(primeira.status, 4, `1ª rodada: esperava exit 4, veio ${primeira.status}`);
+
+    const md1 = readFileSync(join(kitDir, "resume.md"), "utf-8");
+    assert.match(md1, /\[exp:/, "resume.md não pode perder a citação numa rodada que falhou");
+
+    const segunda = runCli("src/cli/kit.ts", ["finalize", jobId]);
+    assert.equal(
+      segunda.status,
+      4,
+      `2ª rodada: esperava exit 4 de novo (mesmo motivo), veio ${segunda.status}. stderr: ${segunda.stderr}`
+    );
+    assert.doesNotMatch(segunda.stderr, /TRUTHCHECK FALHOU/, "não pode virar falha de veracidade");
+    assert.match(segunda.stderr, /<table>/);
+
+    const md2 = readFileSync(join(kitDir, "resume.md"), "utf-8");
+    assert.equal(md1, md2, "resume.md não pode mudar entre duas tentativas que falham igual");
+  });
+
   it("LIM-001 FECHADO: o PDF gerado devolve o texto do currículo quando extraído", async () => {
     useKit("resume.ok.md");
     const r = runCli("src/cli/kit.ts", ["finalize", jobId]);

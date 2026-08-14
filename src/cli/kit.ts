@@ -332,19 +332,19 @@ O finalize roda os MESMOS gates — citação inexistente reprova igual (exit 2)
     process.exit(3);
   }
 
-  // 3. Remove as citações de TODOS os entregáveis antes de renderizar/gravar. A
-  //    tag `[exp:...]` é o guardrail interno de veracidade (o truthcheck já
-  //    rodou acima) e nunca deveria sobreviver ao envio. Sobrescreve os .md no
-  //    disco: até aqui o strip era só uma variável local usada no PDF do
-  //    currículo, então o resume.md entregue saía sujo, o cover-letter.md nem
-  //    passava pelo strip (o PDF dele vazava a tag) e o `/painel` herdava o path
-  //    do markdown sujo via `resume_versions.resume_md_path`.
+  // 3. Remove as citações de TODOS os entregáveis — só EM MEMÓRIA por enquanto.
+  //    A tag `[exp:...]` é o guardrail interno de veracidade (o truthcheck já
+  //    rodou acima) e nunca deveria sobreviver ao envio, mas gravar o .md limpo
+  //    no disco AGORA quebraria o re-run: se o exit 4 (gates de ATS) reprovar
+  //    mais adiante, a PRÓXIMA chamada de `finalize` — e o harness roda em
+  //    laço até passar — leria um resume.md já sem citação e o truthcheck
+  //    acusaria "bullet sem citação" num arquivo que o redator nunca escreveu
+  //    assim. A gravação em disco só acontece depois que TODOS os gates
+  //    (conteúdo E ats) já passaram — ver bloco 7.
   for (const nome of EXPECTED) {
     const raw = entregaveis[nome];
     if (raw == null) continue;
-    const limpo = stripCitations(raw);
-    if (limpo !== raw) writeFileSync(join(kitDir, nome), limpo, "utf-8");
-    entregaveis[nome] = limpo;
+    entregaveis[nome] = stripCitations(raw);
   }
   const cleanMd = entregaveis["resume.md"]!;
 
@@ -358,14 +358,15 @@ O finalize roda os MESMOS gates — citação inexistente reprova igual (exit 2)
     withoutMetric: cleanBullets.filter((b) => !/\d/.test(b)).length,
   };
 
-  // 5. Render PDFs
+  // 5. Render PDFs — a partir do texto já limpo EM MEMÓRIA (bloco 3), nunca
+  //    relendo o .md do disco: o disco ainda tem a versão crua até o bloco 7.
   const resumeHtml = wrapAtsHtml(cleanMd, `${profile.identity.name} — ${job.title}`);
   const resumePdf = join(kitDir, "resume.pdf");
   const { innerText } = await htmlToPdf(resumeHtml, resumePdf);
-  const coverPath = join(kitDir, "cover-letter.md");
-  if (existsSync(coverPath)) {
+  const cleanCoverMd = entregaveis["cover-letter.md"];
+  if (cleanCoverMd != null) {
     await htmlToPdf(
-      wrapAtsHtml(readFileSync(coverPath, "utf-8"), `Cover Letter — ${profile.identity.name}`),
+      wrapAtsHtml(cleanCoverMd, `Cover Letter — ${profile.identity.name}`),
       join(kitDir, "cover-letter.pdf")
     );
   }
@@ -391,13 +392,24 @@ O finalize roda os MESMOS gates — citação inexistente reprova igual (exit 2)
     process.exit(4);
   }
 
+  // 7. Só agora, com TODOS os gates passados, sobrescreve os .md no disco com a
+  //    versão sem citação. Até aqui o resume.md e o cover-letter.md no disco
+  //    continuavam com `[exp:...]` de propósito (bloco 3) — o kit só "queima"
+  //    (perde a citação que o truthcheck precisa) quando ele de fato vai ser
+  //    entregue, nunca numa tentativa que ainda pode falhar e ser re-rodada.
+  for (const nome of EXPECTED) {
+    const limpo = entregaveis[nome];
+    if (limpo == null) continue;
+    writeFileSync(join(kitDir, nome), limpo, "utf-8");
+  }
+
   writeFileSync(
     join(kitDir, "coverage-report.md"),
     renderCoverageMd(report, { pages: pdfText.pages, extractedChars: pdfText.text.length }, bulletMetrics),
     "utf-8"
   );
 
-  // 7. Registros
+  // 8. Registros
   const policy = decidePolicy(config, job, job.score ?? 0, job.track_hint);
   let app = getApplicationByJob(jobId);
   if (!app) app = createApplication(jobId, job.track_hint, kitDir, policy.submissionMode);
