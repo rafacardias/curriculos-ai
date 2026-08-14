@@ -99,6 +99,29 @@ describe("checkWeakBulletPhrasing — a metodologia CAR sai do prompt e vira gat
       null
     );
   });
+
+  it("não dispara quando a frase proibida aparece no MEIO do bullet, não na abertura", () => {
+    // Achado do code review: "responsável por" sem âncora casava em qualquer
+    // posição. "Construí o serviço responsável por processar 2M eventos/dia"
+    // é PT-BR legítimo — "responsável" qualifica o SISTEMA, não abre o bullet
+    // sobre o candidato. A regra da skill é sobre como o bullet COMEÇA.
+    assert.equal(
+      checkWeakBulletPhrasing([
+        "- Construí o serviço responsável por processar 2M eventos/dia [exp:a.f1]",
+      ]),
+      null
+    );
+  });
+
+  it("bloqueia as flexões de preposição de 'responsável pel-' na abertura", () => {
+    for (const b of [
+      "- Responsável pela suíte de regressão do checkout",
+      "- Responsável pelo pipeline de CI",
+      "- Responsável pelos testes de API",
+    ]) {
+      assert.ok(checkWeakBulletPhrasing([b]), `deveria bloquear: ${b}`);
+    }
+  });
 });
 
 describe("checkExpectedFiles — o contrato do bundle passa a ser cobrado", () => {

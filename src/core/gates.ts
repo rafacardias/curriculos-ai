@@ -53,8 +53,16 @@ export function checkPlaceholders(files: Record<string, string>): GateFailure | 
  * ("sem número no fato → resultado qualitativo, nunca inventar métrica"), e
  * cobrar mecanicamente uma nuance produz falso positivo — que treina o operador
  * a ignorar o gate.
+ *
+ * ANCORADA na ABERTURA (depois de tirar o marcador `- `/`* ` do bullet), não em
+ * qualquer posição da frase: a regra da skill é sobre como o bullet COMEÇA
+ * ("Construí o serviço responsável por processar 2M eventos/dia" é PT-BR
+ * legítimo — "responsável" qualifica o sistema, não abre o bullet sobre o
+ * candidato). Cobre as flexões de preposição (pelo/pela/pelos/pelas) que
+ * "respons[aá]vel por" sozinho deixava passar por acidente de gênero/número.
  */
-const FRASE_FRACA_RE = /\b(respons[aá]vel por|ajudei (?:a|em|no|na)|participei (?:de|do|da)|auxiliei)\b/i;
+const ABERTURA_FRACA_RE =
+  /^(respons[aá]vel pel[ao]s?|respons[aá]vel por|ajudei (?:a|em|no|na)|participei (?:de|do|da)|auxiliei)\b/i;
 
 /**
  * Nenhum bullet de experiência abre de forma passiva.
@@ -65,7 +73,8 @@ const FRASE_FRACA_RE = /\b(respons[aá]vel por|ajudei (?:a|em|no|na)|participei 
 export function checkWeakBulletPhrasing(bullets: string[]): GateFailure | null {
   const detail: string[] = [];
   for (const b of bullets) {
-    if (FRASE_FRACA_RE.test(b)) {
+    const abertura = b.replace(/^\s*[-*]\s+/, "");
+    if (ABERTURA_FRACA_RE.test(abertura)) {
       detail.push(
         `"${b.slice(0, 90)}" — evite abertura passiva; abra com verbo de ação forte ` +
           `(metodologia CAR, skill /gerar)`
